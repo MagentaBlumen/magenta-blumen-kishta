@@ -29,19 +29,23 @@ ON CONFLICT (key) DO NOTHING;
 -- ---------------------------------------------------------------------
 -- 2. Tax rates
 -- ---------------------------------------------------------------------
--- TODO(Treuhaender): rate is NULL until confirmed in writing.
--- She said 8.6%, which is not a Swiss rate. The rates are 8.1% (Normalsatz)
--- and 2.6% (reduzierter Satz). Which of her categories fall where has real
--- edge cases: fertiliser and soil are probably reduced, dried and stabilised
--- flowers may not be, greeting cards almost certainly are not.
+-- Confirmed by the Treuhaender.
+--   Normalsatz         8.1%   (0.0810)
+--   Reduzierter Satz   2.6%   (0.0260)
 --
--- Nothing reads these until the storefront prices a cart (week 4).
--- When the answer arrives:  UPDATE tax_rate SET rate = 0.0260 WHERE code = 'reduced';
+-- Product-group -> rate mapping lives in docs/vat-rates.md. Read it before
+-- classifying a new product. Two open items still unresolved there:
+--   - dried / stabilised flowers (currently 8.1%, awaiting ESTV verification)
+--   - delivery fee on a MIXED-rate order (see resolveDeliveryTaxRate)
+--
+-- ON CONFLICT DO UPDATE, not DO NOTHING, so re-running the seed against a
+-- database that predates this answer overwrites the NULL rates in place.
+-- Application code must still read tax_rate.rate at runtime - never hardcode.
 
 INSERT INTO tax_rate (code, name_de, rate) VALUES
-  ('reduced',  'Reduzierter Satz', NULL),
-  ('standard', 'Normalsatz',       NULL)
-ON CONFLICT (code) DO NOTHING;
+  ('reduced',  'Reduzierter Satz', 0.0260),
+  ('standard', 'Normalsatz',       0.0810)
+ON CONFLICT (code) DO UPDATE SET rate = EXCLUDED.rate;
 
 
 -- ---------------------------------------------------------------------

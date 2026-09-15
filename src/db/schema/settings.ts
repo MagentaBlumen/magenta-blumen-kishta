@@ -26,19 +26,24 @@ export const settings = pgTable('settings', {
 /**
  * Swiss VAT rates. Referenced by product, never hardcoded in application code.
  *
- * TODO(Treuhaender): rate is deliberately NULL until the accountant confirms.
- * She said 8.6%, which is not a Swiss rate - the rates are 8.1% (Normalsatz)
- * and 2.6% (reduzierter Satz). Which of her categories fall where is an open
- * question with real edge cases: fertiliser and soil are probably reduced,
- * dried and stabilised flowers may not be, greeting cards almost certainly
- * are not.
+ * Confirmed by the Treuhaender:
+ *   Normalsatz         8.1%  (0.0810)
+ *   Reduzierter Satz   2.6%  (0.0260)
  *
- * Seed as two rows with NULL rates. Nothing reads them until the storefront
- * prices a cart, which is week 4.
+ * Product-group -> rate mapping lives in docs/vat-rates.md. Two items still
+ * open there: dried / stabilised flowers (currently 8.1%, awaiting ESTV
+ * verification) and the delivery-fee rate on a mixed-rate order (interim
+ * rule: rate of the highest-value line group, encapsulated in
+ * resolveDeliveryTaxRate() so it changes in one place).
+ *
+ * Seeded live in drizzle/seed/01-base.sql via ON CONFLICT DO UPDATE, so a
+ * re-run against a database that predates this answer overwrites the NULL
+ * rows in place. Application code must always read the rate from this table -
+ * never hardcode 0.0260 or 0.0810.
  */
 export const taxRate = pgTable('tax_rate', {
   id: serial('id').primaryKey(),
   code: text('code').notNull().unique(), // 'reduced' | 'standard'
   nameDe: text('name_de').notNull(), // 'reduzierter Satz' | 'Normalsatz'
-  rate: numeric('rate', { precision: 5, scale: 4 }), // 0.0260 | 0.0810 - NULL until confirmed
+  rate: numeric('rate', { precision: 5, scale: 4 }), // 0.0260 | 0.0810
 });

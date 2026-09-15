@@ -297,6 +297,8 @@ for code, comments and identifiers. Swiss orthography in German text: **no ß**
 - `docs/catalogue-and-date-logic.md` — category taxonomy, the seven-condition
   date availability rule, timezone notes.
 - `docs/delivery-zones.md` — the 27 zones and how they were verified.
+- `docs/vat-rates.md` — VAT classification per product group, delivery-fee
+  rule, rounding, invoice line-item requirements.
 - `docs/schema.md` — table-by-table rationale.
 - `src/db/schema/*.ts` — comments there explain *why*, not just what. Read them
   before changing a table.
@@ -384,16 +386,25 @@ reinvent them per feature**):
 
 ## Open questions — do not invent answers
 
-- VAT: which categories are 2.6% vs 8.1%. Awaiting the Treuhänder. She said
-  8.6%, which is not a Swiss rate.
+- **Delivery fee rate on a mixed-rate order.** Interim rule: rate of the
+  highest-value line group. Awaiting Treuhänder confirmation. Implement behind
+  `resolveDeliveryTaxRate()` — one place to change.
+- **Dried / stabilised flowers at 8.1%.** The Treuhänder flagged this as
+  needing ESTV verification and she does sell them.
+- **Accounting method: effektiv or Saldosteuersatz.** Affects reporting, not
+  per-order pricing.
 - Loyalty thresholds and percentages; orders or francs spent.
 - Custom bouquet tier prices (she said 40–120, exact tiers unknown).
 - Rose per-stem price, min and max quantity.
 - Impressum details beyond name, UID and registered address.
 - Business invoicing terms (deferred to Phase 2).
 
-Settled, for reference: Brugg minimum is CHF 50. Obersiggenthal has no PLZ of
-its own; its villages keep their individual prices.
+Settled, for reference:
+- Standard VAT 8.1%, reduced 2.6%. Product-group mapping in
+  `docs/vat-rates.md`. MWST number: **CHE-363.951.581 MWST**.
+- Brugg minimum is CHF 50.
+- Obersiggenthal has no PLZ of its own; its villages keep their individual
+  prices.
 
 If work requires one of these, use an obvious placeholder and flag it. A
 plausible wrong number is worse than a blank, because nobody goes looking
