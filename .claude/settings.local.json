@@ -14,7 +14,12 @@
       "Bash(MSYS_NO_PATHCONV=1 docker exec magenta-blumen-postgres psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f /tmp/01-base.sql)",
       "Bash(MSYS_NO_PATHCONV=1 docker exec magenta-blumen-postgres psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f /tmp/02-delivery-zones.sql)",
       "Bash(npx tsx *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Read(//c/Users/flutu/.claude/projects/**)",
+      "Read(//c/Users/flutu/.claude/**)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)"
     ]
   }
 }
