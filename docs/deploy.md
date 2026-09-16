@@ -30,7 +30,8 @@ Caddy issues a real Let's Encrypt cert for that hostname. When the domain
 handover happens, the cutover is:
 1. Point `magenta-blumen.ch` A/AAAA at 178.104.239.168 in DNS.
 2. Change `DOMAIN=` in `/opt/magenta-blumen/.env.production` on the server.
-3. `docker compose -f docker-compose.prod.yml up -d caddy` — Caddy re-issues.
+3. `docker compose --env-file .env.production -f docker-compose.prod.yml up -d caddy`
+   — Caddy re-issues.
 
 **Do not cut over until the client's MX records are preserved** — see the
 domain-handover memory. Flipping the A record kills `info@magenta-blumen.ch`
@@ -88,54 +89,67 @@ Should print nothing. If it lists variables, they're missing values.
 
 ### 4. Bring up the stack
 
+Set two shell shortcuts so subsequent commands stay short (avoids
+Windows PowerShell / SSH paste-wrap issues):
+
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+DC="docker compose --env-file .env.production -f docker-compose.prod.yml"
+MB=magenta-blumen-postgres
+```
+
+**`--env-file .env.production` is critical.** Without it, `docker compose`
+reads only `.env` for `${VAR}` interpolation, and every reference to
+`${POSTGRES_USER}` etc. in the compose YAML resolves to an empty string.
+Postgres then refuses to start.
+
+Bring the stack up:
+
+```bash
+$DC up -d --build
 ```
 
 First run takes 3–5 minutes: builds the app image, pulls postgres and
 caddy images, starts everything.
 
 Watch it come up:
+
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f caddy
+$DC ps
+$DC logs -f caddy
 ```
 
-You should see caddy issue a Let's Encrypt cert within ~30 seconds of
-first hitting the hostname. If not, check the caddy logs — most
-common failure is DNS not yet resolving to the box.
+Caddy should issue a Let's Encrypt cert within ~30 seconds of the first
+external hit. If not, check its logs — most common failure is DNS not
+yet resolving to this box.
 
 ### 5. Apply the database migration + seeds
 
 The empty app expects a schema. Apply it once against the running
-postgres container:
+postgres container. We `docker cp` the files into the container first,
+then `psql -f` them — this avoids the long-line paste problem that
+`< file` redirects hit in the SSH terminal.
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 \
-  < drizzle/0000_init.sql
+DB="docker exec $MB psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1"
 
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 \
-  < drizzle/seed/01-base.sql
+docker cp drizzle/0000_init.sql $MB:/tmp/init.sql
+docker cp drizzle/seed/01-base.sql $MB:/tmp/01.sql
+docker cp drizzle/seed/02-delivery-zones.sql $MB:/tmp/02.sql
 
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 \
-  < drizzle/seed/02-delivery-zones.sql
+$DB -f /tmp/init.sql
+$DB -f /tmp/01.sql
+$DB -f /tmp/02.sql
 ```
 
-**Verify seeded counts** (same as local):
+**Verify seeded counts:**
+
 ```bash
-docker compose -f docker-compose.prod.yml exec postgres \
-  psql -U magenta -d magenta_blumen -c "
-    SELECT 'settings' AS t, count(*) FROM settings
-    UNION ALL SELECT 'category', count(*) FROM category
-    UNION ALL SELECT 'delivery_zone', count(*) FROM delivery_zone
-    UNION ALL SELECT 'delivery_run', count(*) FROM delivery_run;
-    SELECT code, rate FROM tax_rate;
-  "
+$DB -c "SELECT 'settings' t, count(*) FROM settings UNION ALL SELECT 'category', count(*) FROM category UNION ALL SELECT 'delivery_zone', count(*) FROM delivery_zone UNION ALL SELECT 'delivery_run', count(*) FROM delivery_run;"
+
+$DB -c "SELECT code, rate FROM tax_rate;"
 ```
-Must show: settings 9, category 30, delivery_zone 27, delivery_run ~122,
+
+Must show: settings 9, category 30, delivery_zone 27, delivery_run 122,
 tax_rate rows with 0.0260 / 0.0810.
 
 ### 6. Visit the site
@@ -158,15 +172,16 @@ Once the stack is up, subsequent deploys are:
 ```bash
 cd /opt/magenta-blumen
 git pull
-docker compose -f docker-compose.prod.yml up -d --build
+DC="docker compose --env-file .env.production -f docker-compose.prod.yml"
+$DC up -d --build
 ```
 
 If the change includes a new migration:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 \
-  < drizzle/<NNNN>_<name>.sql
+MB=magenta-blumen-postgres
+docker cp drizzle/<NNNN>_<name>.sql $MB:/tmp/mig.sql
+docker exec $MB psql -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f /tmp/mig.sql
 ```
 
 Automate this once we have GitHub Actions deploying to the box — see
@@ -176,9 +191,12 @@ Phase 2d.
 
 ## Recovery
 
+Assumes `DC="docker compose --env-file .env.production -f docker-compose.prod.yml"`
+is set in the current shell (from Step 4).
+
 ### The app container won't start
 ```bash
-docker compose -f docker-compose.prod.yml logs app | tail -100
+$DC logs app | tail -100
 ```
 
 ### Caddy can't get a cert
@@ -191,18 +209,23 @@ usually instant) or check the domain provider.
 
 ### Postgres won't come healthy
 ```bash
-docker compose -f docker-compose.prod.yml logs postgres
+$DC logs postgres
 ```
 Common cause: wrong `POSTGRES_PASSWORD` in `.env.production` after a
 change — the volume still has the OLD password baked in. Either revert
 `.env.production` or wipe the volume (only safe if you've verified a
 recent backup restore):
 ```bash
-docker compose -f docker-compose.prod.yml down
+$DC down
 docker volume rm magenta-blumen_postgres_data
-docker compose -f docker-compose.prod.yml up -d --build
+$DC up -d --build
 # then re-apply migration + seeds from step 5
 ```
+
+### "The POSTGRES_USER variable is not set" warnings on `up`
+You forgot `--env-file .env.production`. Docker Compose only reads
+`.env` by default; our secrets live in `.env.production`. Rebuild the
+shortcut variable and try again.
 
 ### Locked out of SSH after a config change
 Hetzner Cloud → server → Rescue → Reset root password → Console tab.
