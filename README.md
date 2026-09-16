@@ -5,8 +5,8 @@ German-language storefront, local delivery to 27 postcode zones by her own
 van, plus in-store pickup.
 
 **Stack:** Next.js 15 (App Router) · TypeScript · Postgres 17 · Drizzle ·
-Auth.js v5 · Stripe (card + TWINT) · Twilio Verify · Resend · Cloudflare R2 ·
-Luxon · Tailwind + shadcn/ui · Hetzner.
+Auth.js v5 · Stripe (card + TWINT) · Resend · Cloudflare R2 · Luxon ·
+Tailwind + shadcn/ui · Hetzner.
 
 ## Getting started
 

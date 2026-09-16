@@ -5,8 +5,8 @@ storefront, local delivery to 27 postcode zones by her own van, plus in-store
 pickup. Owner is non-technical; her assistant Sandra uses the admin daily.
 
 **Stack:** Next.js 15 (App Router) · TypeScript · Postgres 17 · Drizzle ·
-Auth.js v5 · Stripe (card + TWINT) · Twilio Verify · Resend · Cloudflare R2 ·
-Luxon · Tailwind + shadcn/ui · Hetzner
+Auth.js v5 · Stripe (card + TWINT) · Resend · Cloudflare R2 · Luxon ·
+Tailwind + shadcn/ui · Hetzner
 
 ---
 
@@ -196,38 +196,6 @@ await tx.select().from(deliveryRun).where(eq(deliveryRun.id, id)).for('update')
 
 ---
 
-## Twilio setup — do all of this BEFORE the first SMS sends
-
-Rate limiting in application code cannot stop SMS pumping, because the attack
-rotates both numbers and IPs. These console settings are what actually stop it,
-and they are free.
-
-- [ ] **Geo permissions: +41 only** (add DE/AT/FR/LI only if she takes EU
-      orders). SMS pumping is profitable via premium international termination
-      fees; Swiss mobile pays out nothing, so the attack stops being worth doing.
-      **This is the single most important control.**
-- [ ] **Hard spending cap CHF 100**, usage alert at CHF 30. Expected spend is
-      CHF 10–20/month. This turns an unbounded loss into an email.
-- [ ] **Fraud Guard enabled** (included with Verify, built for exactly this).
-- [ ] **Verify send endpoint gated behind a valid order draft** — a real cart,
-      resolved zone, selected slot. Never a public endpoint that accepts any
-      phone number.
-- [ ] Rate limits enforced via `verification_attempt`: **3/hour and 5/day per
-      number, 10/hour per IP**.
-- [ ] Phone normalised to **E.164** before insert (`libphonenumber-js`).
-      `+41791234567` and `079 123 45 67` are the same person.
-- [ ] IP stored as a **salted hash**, never raw — an IP is personal data under
-      revFADP and a hash rate-limits just as well.
-- [ ] Nightly cleanup of `verification_attempt` rows older than 24h.
-- [ ] **Password reset goes by SMS**, not email — the email address is never
-      verified, so an email reset link would let a typo lock someone out
-      permanently.
-
-If abuse ever appears despite this: Cloudflare Turnstile in front of the send
-endpoint. Not on day one — it is friction on a checkout that already has some.
-
----
-
 ## Domain facts
 
 **Delivery:** two runs daily, 10:00–12:00 and 16:00–18:00, including Sunday.
@@ -248,11 +216,11 @@ to the product not the variant. **Seasonal `active_from`/`active_to` are editabl
 because Easter and Mother's Day move every year** — never compute or hardcode
 them. (Easter: 5 Apr 2026, 28 Mar 2027, 16 Apr 2028.)
 
-**Auth:** registration mandatory at checkout — email, password, phone. Phone
-verified via Twilio Verify; **email is never verified**. `order.customer_id` is
-nullable and orders snapshot buyer details regardless: registration is policy,
-not a database constraint, so moving to guest checkout later is a one-line
-change.
+**Auth:** guest checkout is the default — no account needed to order. Buyer
+name, email and phone are collected and snapshotted onto every order. The
+phone is required (it is how a failed delivery is recovered) but not verified.
+Accounts are optional and offered after payment; email is verified by link but
+nothing is gated on it. Password reset goes by email.
 
 **Admin is three screens, not a menu tree:** Heute (today's orders by run, with
 a print button per ticket), Produkte, Einstellungen. She and Sandra are not
@@ -393,6 +361,9 @@ reinvent them per feature**):
   needing ESTV verification and she does sell them.
 - **Accounting method: effektiv or Saldosteuersatz.** Affects reporting, not
   per-order pricing.
+- **Cash on delivery is available to unverified guests.** Accepted risk for
+  now. If abuse appears, escalate in this order: cap cash orders by value,
+  restrict cash to pickup only, reinstate phone verification.
 - Loyalty thresholds and percentages; orders or francs spent.
 - Custom bouquet tier prices (she said 40–120, exact tiers unknown).
 - Rose per-stem price, min and max quantity.

@@ -164,7 +164,7 @@ CREATE TABLE "customer" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"email" text NOT NULL,
 	"phone" text,
-	"phone_verified_at" timestamp with time zone,
+	"email_verified_at" timestamp with time zone,
 	"password_hash" text NOT NULL,
 	"first_name" text,
 	"last_name" text,
@@ -182,13 +182,6 @@ CREATE TABLE "customer_address" (
 	"city" text NOT NULL,
 	"phone" text,
 	"notes" text
-);
---> statement-breakpoint
-CREATE TABLE "verification_attempt" (
-	"id" bigserial PRIMARY KEY NOT NULL,
-	"phone" text NOT NULL,
-	"ip_hash" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "order" (
@@ -378,8 +371,6 @@ CREATE INDEX "plz_zone_idx" ON "delivery_zone_plz" USING btree ("zone_id");--> s
 CREATE UNIQUE INDEX "customer_email_lower_unique" ON "customer" USING btree (lower("email"));--> statement-breakpoint
 CREATE INDEX "customer_phone_idx" ON "customer" USING btree ("phone");--> statement-breakpoint
 CREATE INDEX "address_customer_idx" ON "customer_address" USING btree ("customer_id");--> statement-breakpoint
-CREATE INDEX "verification_phone_idx" ON "verification_attempt" USING btree ("phone","created_at");--> statement-breakpoint
-CREATE INDEX "verification_ip_idx" ON "verification_attempt" USING btree ("ip_hash","created_at");--> statement-breakpoint
 CREATE INDEX "order_run_idx" ON "order" USING btree ("delivery_run_id");--> statement-breakpoint
 CREATE INDEX "order_delivery_date_idx" ON "order" USING btree ("delivery_date","sort_time");--> statement-breakpoint
 CREATE INDEX "order_buyer_phone_idx" ON "order" USING btree ("buyer_phone");--> statement-breakpoint

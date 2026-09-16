@@ -19,7 +19,11 @@
       "Read(//c/Users/flutu/.claude/**)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(docker volume *)",
+      "Bash(DATABASE_URL=postgres://ci:ci@localhost:5432/ci NEXTAUTH_SECRET=x NEXTAUTH_URL=http://localhost:3000 npm run build)"
     ]
   }
 }

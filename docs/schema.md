@@ -234,20 +234,26 @@ orders in that hour against a config maximum, under the same transactional lock.
 ```sql
 CREATE TABLE customer (
   id                bigserial PRIMARY KEY,
-  email             citext NOT NULL UNIQUE,
-  phone             text,
-  phone_verified_at timestamptz,
+  email             text NOT NULL,          -- unique enforced via lower(email) functional index
+  phone             text,                   -- required at checkout, not verified
+  email_verified_at timestamptz,            -- set when the verification link is clicked
   password_hash     text NOT NULL,
   first_name        text,
   last_name         text,
-  created_at        timestamptz NOT NULL DEFAULT now()
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  anonymised_at     timestamptz             -- revFADP erasure: null personal fields, keep row
 );
--- She asked for mandatory registration with phone verification (Q103).
--- FLAG: this is a real conversion cost on a gift purchase at 22:00, and it
--- brings an SMS provider and per-message billing. Recommend revisiting:
--- guest checkout, with an optional account created AFTER payment. Same order
--- history, none of the friction. The schema supports either — customer_id on
--- the order is nullable.
+-- Guest checkout is the default. Accounts are OPTIONAL, offered after payment.
+-- Every order snapshots buyer name / email / phone regardless, so guests write
+-- order.customer_id = NULL.
+--
+-- Email is verified by link but nothing is gated on the click; the account
+-- works immediately and the click only unlocks password reset.
+-- Password reset goes by email.
+-- Phone is required at checkout (failed-delivery recovery) but NOT verified.
+--
+-- Earlier plan required Twilio Verify at checkout - dropped as a scope
+-- reduction. See CLAUDE.md open questions for cash-on-delivery risk handling.
 
 CREATE TABLE customer_address (
   id              bigserial PRIMARY KEY,

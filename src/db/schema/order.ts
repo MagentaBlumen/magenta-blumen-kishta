@@ -38,6 +38,12 @@ export const order = pgTable(
     buyerName: text('buyer_name').notNull(),
     buyerEmail: text('buyer_email').notNull(),
     buyerPhone: text('buyer_phone'),
+    /**
+     * KEPT for forward compatibility. Always NULL under the current guest-
+     * checkout / no-SMS design. If phone verification is ever reinstated
+     * (e.g. cash-on-delivery abuse escalates), the column is already there
+     * and the snapshot rule applies without a schema migration.
+     */
     buyerPhoneVerifiedAt: timestamp('buyer_phone_verified_at', { withTimezone: true }),
 
     /* ---------------- recipient (snapshot) ----------------

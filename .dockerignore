@@ -1,0 +1,30 @@
+# Keep the build context small. Anything not needed for `npm ci` and
+# `next build` should be excluded — this speeds up every `docker build`
+# because Docker copies the whole context before it can even read the
+# Dockerfile.
+
+node_modules
+.next
+.git
+.github
+.vscode
+.idea
+.env
+.env.*
+!.env.production.example
+
+# Local Docker + Postgres data
+docker-compose.yml
+postgres_data
+
+# Docs, memory, meta — not needed to run the app
+docs
+memory
+*.md
+!README.md
+
+# Test / editor scratch
+coverage
+*.log
+.DS_Store
+Thumbs.db

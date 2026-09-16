@@ -1,0 +1,81 @@
+# Production stack: three services on one internal network.
+# ONLY caddy is exposed to the internet (ports 80, 443).
+# postgres has NO public port binding - reachable only via the docker network.
+# app has NO public port binding - reached by caddy via the docker network.
+#
+# All secrets come from .env.production (gitignored). See .env.production.example
+# for the full list of variables required.
+#
+# First-time bring-up: see docs/deploy.md.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: magenta-blumen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: magenta-blumen-app:latest
+    container_name: magenta-blumen-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    environment:
+      # Overrides that must reference the compose service name, not localhost
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    networks:
+      - internal
+    # Any 2xx/3xx from the root page counts as healthy. Swap to
+    # /api/health when that endpoint exists.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--tries=1", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: magenta-blumen-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"    # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data           # LE certs + account keys (MUST persist)
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - app
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

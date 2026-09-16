@@ -4,22 +4,28 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Phase 1 requires registration at checkout: email, password, phone.
+ * Guest checkout is the default. Accounts are OPTIONAL, offered after payment
+ * on the confirmation page ("Ihre Daten für das nächste Mal speichern?"). Every
+ * order snapshots buyer name / email / phone regardless of whether an account
+ * exists, so the checkout writes an order.customer_id of NULL for guests.
  *
- * The PHONE is verified via Twilio Verify. The EMAIL is never verified -
- * it is a contact channel, not an identity check. An email round-trip at
- * 22:00 loses people who would otherwise have finished, and the phone is
- * what she actually needs: Q84 and Q85 are both "we just call them", so a
- * working number IS the failure-recovery mechanism for this business.
+ * Email is verified by link once an account is created, but NOTHING is gated
+ * on the click. The account works immediately; the click only unlocks the
+ * password-reset flow. Gating on a clicked link would strand people who
+ * mistyped their address.
  *
- * Consequence to remember: with no verified email, PASSWORD RESET MUST GO BY
- * SMS. An email reset link would let someone who mistyped their address lock
- * themselves out permanently with no recovery path. Same Twilio integration.
+ * Password reset goes by EMAIL (single-use token, short expiry, invalidated on
+ * use). If a customer requests a reset on an unverified address, tell them
+ * plainly and route them to the shop.
  *
- * NOTE: customer_id on the order table is deliberately NULLABLE, and orders
- * snapshot buyer name / email / phone regardless. Registration is mandatory
- * BY POLICY, not by database constraint. Moving to guest checkout later is
- * then a one-line change rather than a migration on live data.
+ * The phone is REQUIRED at checkout (Q84, Q85: failed deliveries are recovered
+ * by phone) but NOT verified. Format-validate client-side against a Swiss
+ * pattern and echo back for confirmation - a typo is the realistic failure,
+ * not fraud.
+ *
+ * This design is a scope reduction from an earlier plan that required Twilio
+ * Verify at checkout. See CLAUDE.md open questions for the cash-on-delivery
+ * fallback if unverified guests are ever abused.
  */
 export const customer = pgTable(
   'customer',
@@ -27,7 +33,7 @@ export const customer = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     email: text('email').notNull(),
     phone: text('phone'),
-    phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     passwordHash: text('password_hash').notNull(),
     firstName: text('first_name'),
     lastName: text('last_name'),
@@ -81,42 +87,3 @@ export const customerAddress = pgTable(
   (t) => [index('address_customer_idx').on(t.customerId)],
 );
 
-/**
- * SMS rate limiting for phone verification.
- *
- * Twilio Verify already caps CODE GUESSES (5 checks per verification, expiring
- * after ~10 minutes). This table caps SEND REQUESTS, which is the part that
- * costs money.
- *
- * Two limits, because they stop different attacks:
- *   per phone  - 3 per hour, 5 per day. Stops one number being spammed, and
- *                stops Twilio flagging the account for odd traffic.
- *   per IP     - 10 per hour. Stops the EXPENSIVE attack: a thousand different
- *                numbers, each a fresh SMS at full price, where a per-number
- *                limit never fires because no number repeats.
- *
- * NORMALISE THE PHONE TO E.164 BEFORE INSERTING. "+41791234567" and
- * "079 123 45 67" are the same person; storing both makes the limit trivially
- * bypassable by reformatting.
- *
- * The IP is HASHED, not stored raw - an IP address is personal data under the
- * revised Swiss FADP, and a salted hash rate-limits just as well.
- *
- * Cleanup: delete rows older than 24h on the nightly job. This table should
- * never grow past a few hundred rows.
- */
-export const verificationAttempt = pgTable(
-  'verification_attempt',
-  {
-    id: bigserial('id', { mode: 'number' }).primaryKey(),
-    /** E.164, normalised */
-    phone: text('phone').notNull(),
-    /** salted hash of the request IP, never the raw address */
-    ipHash: text('ip_hash').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index('verification_phone_idx').on(t.phone, t.createdAt),
-    index('verification_ip_idx').on(t.ipHash, t.createdAt),
-  ],
-);

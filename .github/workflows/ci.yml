@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel older runs on the same branch when a new push arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        # Next.js build doesn't need a live database, but it does need
+        # DATABASE_URL to exist (drizzle imports read env at module load).
+        # Use a dummy that never gets connected to.
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          NEXTAUTH_SECRET: ci-build-only-not-a-real-secret
+          NEXTAUTH_URL: http://localhost:3000
+        run: npm run build
