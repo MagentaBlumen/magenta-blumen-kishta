@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Claude Code per-user files (settings.json without .local is committable)
 .claude/*.local.json
+
+# Sentry Config File
+.env.sentry-build-plugin

@@ -14,6 +14,7 @@
     "db:hello": "tsx scripts/hello-db.ts"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.74.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.3.4",
     "postgres": "^3.4.9",

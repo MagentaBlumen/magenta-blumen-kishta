@@ -38,8 +38,13 @@ jobs:
         # Next.js build doesn't need a live database, but it does need
         # DATABASE_URL to exist (drizzle imports read env at module load).
         # Use a dummy that never gets connected to.
+        #
+        # SENTRY_AUTH_TOKEN is optional. When absent, next build skips
+        # source-map upload with a warning and still succeeds. Set it as a
+        # repository secret to enable readable stack traces in Sentry.
         env:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
           NEXTAUTH_SECRET: ci-build-only-not-a-real-secret
           NEXTAUTH_URL: http://localhost:3000
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: npm run build
