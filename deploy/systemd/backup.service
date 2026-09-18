@@ -1,0 +1,18 @@
+[Unit]
+Description=Magenta Blumen — nightly Postgres backup to R2
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/magenta-blumen
+ExecStart=/opt/magenta-blumen/scripts/backup.sh
+# Kill the job if it runs longer than 10 min - a florist DB should
+# dump in well under a minute.
+TimeoutStartSec=600
+# stdout / stderr go to the journal. See with:
+#   journalctl -u backup.service -f
+StandardOutput=journal
+StandardError=journal

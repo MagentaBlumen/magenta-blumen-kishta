@@ -1,0 +1,17 @@
+[Unit]
+Description=Nightly Postgres backup timer
+# If the box was off at the scheduled time, catch up on next boot.
+# Prevents a missed backup after a Hetzner reboot going unnoticed.
+Persistent=true
+
+[Timer]
+# 03:30 UTC daily. Deliberately 30 min after the unattended-upgrades
+# auto-reboot window (03:00 UTC) so we do not race a kernel reboot.
+OnCalendar=*-*-* 03:30:00 UTC
+# Randomise start by up to 5 min so identical fleets don't stampede.
+# Doesn't matter on one box, harmless to keep.
+RandomizedDelaySec=300
+Unit=backup.service
+
+[Install]
+WantedBy=timers.target

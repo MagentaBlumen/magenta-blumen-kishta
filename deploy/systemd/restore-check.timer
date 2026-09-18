@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly verified-restore timer
+Persistent=true
+
+[Timer]
+# Sunday 04:00 UTC. Runs 30 min after Sunday's nightly backup, so it
+# always verifies a fresh dump rather than an aging one.
+OnCalendar=Sun *-*-* 04:00:00 UTC
+RandomizedDelaySec=300
+Unit=restore-check.service
+
+[Install]
+WantedBy=timers.target

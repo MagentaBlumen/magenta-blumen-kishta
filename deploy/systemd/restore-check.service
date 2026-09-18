@@ -1,0 +1,16 @@
+[Unit]
+Description=Magenta Blumen — weekly verified restore of latest backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/magenta-blumen
+ExecStart=/opt/magenta-blumen/scripts/restore-check.sh
+# Restore is slower than dump but still very fast for this DB.
+# 15 min covers even a bad day.
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
