@@ -1,0 +1,14 @@
+[Unit]
+Description=Nightly delivery-run generation timer
+Persistent=true
+
+[Timer]
+# 03:15 UTC daily. Deliberately AFTER the unattended-upgrades auto-reboot
+# window (03:00 UTC) and BEFORE the backup at 03:30 UTC, so the newly-
+# generated runs are part of that night's backup.
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=60
+Unit=generate-runs.service
+
+[Install]
+WantedBy=timers.target

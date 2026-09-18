@@ -267,6 +267,10 @@ for code, comments and identifiers. Swiss orthography in German text: **no ß**
 - `docs/delivery-zones.md` — the 27 zones and how they were verified.
 - `docs/vat-rates.md` — VAT classification per product group, delivery-fee
   rule, rounding, invoice line-item requirements.
+- `docs/scheduled-jobs.md` — nightly generate-runs + backup, weekly
+  restore-check. Systemd timer setup and operation.
+- `docs/backups.md` — backup design, R2 setup, destructive-restore recipe.
+- `docs/deploy.md` — first-time bring-up on Hetzner, day-to-day deploys.
 - `docs/schema.md` — table-by-table rationale.
 - `src/db/schema/*.ts` — comments there explain *why*, not just what. Read them
   before changing a table.

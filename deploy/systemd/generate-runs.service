@@ -1,0 +1,16 @@
+[Unit]
+Description=Magenta Blumen — nightly delivery-run horizon generation + health check
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/magenta-blumen
+ExecStart=/opt/magenta-blumen/scripts/generate-runs.sh
+# The insert + two count queries + one health-check query is trivial
+# on this DB. 2 minutes is generous even in the worst case.
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
