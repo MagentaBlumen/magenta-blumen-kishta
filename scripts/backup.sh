@@ -45,11 +45,24 @@ RETENTION_DAYS=180
 
 echo "[$(date -u +%FT%TZ)] backup start -> r2:${R2_BUCKET}/${OBJECT}"
 
-# Dump straight from postgres inside the running container, pipe through
-# rclone to R2. If either side fails, `set -o pipefail` propagates it.
+# Dump to a temp file first, then upload with rclone copyto.
+#
+# Note: we deliberately do NOT stream `pg_dump | rclone rcat` here.
+# `rcat` uses HTTP chunked transfer encoding, and R2 rejects chunked
+# uploads with 501 NotImplemented - R2 requires Content-Length up front.
+# A local temp file gives rclone a known size, so it uses a normal
+# PutObject (or multipart, for large files) that R2 accepts.
+#
+# The temp file lives for a few seconds, mktemp defaults to mode 0600
+# and owner=deploy, and the trap cleans it up on any exit.
+TMPFILE="$(mktemp /tmp/pg_dump.XXXXXX.dump)"
+trap 'rm -f "$TMPFILE"' EXIT
+
 docker exec -i "$CONTAINER" \
   pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner --no-privileges \
-  | rclone rcat "r2:${R2_BUCKET}/${OBJECT}"
+  > "$TMPFILE"
+
+rclone copyto "$TMPFILE" "r2:${R2_BUCKET}/${OBJECT}"
 
 # Sanity check: object exists and is > 1 KiB (an empty dump would be tiny).
 SIZE=$(rclone size --json "r2:${R2_BUCKET}/${OBJECT}" | grep -oP '"bytes":\s*\K[0-9]+')
