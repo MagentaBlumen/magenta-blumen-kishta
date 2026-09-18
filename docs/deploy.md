@@ -77,6 +77,15 @@ npx tsx scripts/hash-password.ts 'the chosen password'
 Copy the printed hash. It's what goes into `ADMIN_PASSWORD_HASH` on
 the server. The raw password never touches git or the server.
 
+**IMPORTANT - Docker Compose $ escape:** Before pasting the hash into
+`.env.production`, replace every `$` with `$$`. Compose interpolates
+`$VAR` in env_file values by default; if you paste the raw hash
+`$2b$12$...` it becomes empty inside the container and login fails
+with a generic "E-Mail oder Passwort ist falsch". Compose collapses
+`$$` back to a single `$` at inject time, so the app sees the correct
+hash at runtime. Verify with `docker exec magenta-blumen-app printenv
+ADMIN_PASSWORD_HASH | wc -c` - should print `61` (60 chars + newline).
+
 ### 3. Create `.env.production`
 
 ```bash
