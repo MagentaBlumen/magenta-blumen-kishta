@@ -52,17 +52,30 @@ cd /opt/magenta-blumen
 git clone https://github.com/MagentaBlumen/magenta-blumen-kishta.git .
 ```
 
-### 2. Generate the two long secrets
+### 2. Generate the secrets
 
 ```bash
 # Postgres password
 openssl rand -base64 32 | tr -d '=+/' | cut -c1-32
 # Save the printed value to Bitwarden as: magenta-blumen prod postgres
 
-# NextAuth session secret
+# Auth.js session-signing secret
 openssl rand -base64 48
-# Save the printed value to Bitwarden as: magenta-blumen NEXTAUTH_SECRET
+# Save the printed value to Bitwarden as: magenta-blumen AUTH_SECRET
 ```
+
+### 2b. Generate the admin password hash
+
+Pick an admin password (something long; Sandra + owner share it).
+Save the **plain password** to Bitwarden as `magenta-blumen admin
+login`. Then, on your LOCAL machine (not the server), run:
+
+```bash
+npx tsx scripts/hash-password.ts 'the chosen password'
+```
+
+Copy the printed hash. It's what goes into `ADMIN_PASSWORD_HASH` on
+the server. The raw password never touches git or the server.
 
 ### 3. Create `.env.production`
 
@@ -75,8 +88,10 @@ nano .env.production
 Fill in the empty fields from Bitwarden:
 - `DOMAIN=178-104-239-168.nip.io` (or your domain when ready)
 - `POSTGRES_PASSWORD=` — the one you generated above
-- `NEXTAUTH_URL=https://178-104-239-168.nip.io`
-- `NEXTAUTH_SECRET=` — the one you generated above
+- `AUTH_URL=https://178-104-239-168.nip.io`
+- `AUTH_SECRET=` — the one you generated above
+- `ADMIN_EMAIL=` — the shared admin login email (e.g. `admin@magenta-blumen.ch`)
+- `ADMIN_PASSWORD_HASH=` — the bcrypt hash from step 2b (starts with `$2b$12$`)
 - `SENTRY_DSN=` — from `magenta-blumen Sentry`
 - `R2_ENDPOINT=`, `R2_ACCESS_KEY_ID=`, `R2_SECRET_ACCESS_KEY=` — from
   `magenta-blumen R2 backup`

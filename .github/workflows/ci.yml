@@ -44,7 +44,7 @@ jobs:
         # repository secret to enable readable stack traces in Sentry.
         env:
           DATABASE_URL: postgres://ci:ci@localhost:5432/ci
-          NEXTAUTH_SECRET: ci-build-only-not-a-real-secret
-          NEXTAUTH_URL: http://localhost:3000
+          AUTH_SECRET: ci-build-only-not-a-real-secret
+          AUTH_URL: http://localhost:3000
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: npm run build
