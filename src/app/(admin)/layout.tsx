@@ -1,5 +1,7 @@
 import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 // Every admin page re-checks auth server-side in addition to the
 // middleware gate. Belt + braces - middleware can misfire on new
@@ -13,28 +15,50 @@ export default async function AdminLayout({
   if (!session?.user) redirect("/signin");
 
   return (
-    <div className="min-h-full flex flex-col">
-      <header className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <nav className="flex items-center gap-6 text-sm">
-            <a href="/admin" className="font-semibold">Magenta Blumen — Admin</a>
-            <a href="/admin" className="text-neutral-600 hover:text-neutral-900">Heute</a>
-            <a href="/admin/produkte" className="text-neutral-600 hover:text-neutral-900">Produkte</a>
-            <a href="/admin/einstellungen" className="text-neutral-600 hover:text-neutral-900">Einstellungen</a>
-          </nav>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/signin" });
-            }}
-          >
-            <button type="submit" className="text-sm text-neutral-600 hover:text-neutral-900">
-              Abmelden
-            </button>
-          </form>
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <header className="border-b bg-card">
+        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <Link href="/admin" className="font-semibold tracking-tight">
+              Magenta Blumen
+            </Link>
+            <nav className="flex items-center gap-1 text-sm">
+              <NavLink href="/admin">Heute</NavLink>
+              <NavLink href="/admin/produkte">Produkte</NavLink>
+              <NavLink href="/admin/einstellungen">Einstellungen</NavLink>
+            </nav>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {session.user.email}
+            </span>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/signin" });
+              }}
+            >
+              <Button type="submit" variant="ghost" size="sm">
+                Abmelden
+              </Button>
+            </form>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 w-full flex-1">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-8 w-full flex-1">
+        {children}
+      </main>
     </div>
+  );
+}
+
+function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+    >
+      {children}
+    </Link>
   );
 }
