@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { product, productCategory } from "@/db/schema/catalogue";
+import { product, productCategory, productVariant } from "@/db/schema/catalogue";
 import { slugify } from "@/lib/slug";
 
 // Server Actions are public endpoints in a URL you can't see - CLAUDE.md
@@ -90,11 +90,103 @@ function numFromForm(fd: FormData, name: string, fallback: number): number {
   return n;
 }
 
+// -------- variants parsing --------
+
+type VariantInput = {
+  id: number | null;
+  sizeLabelDe: string | null;
+  priceGross: string;          // numeric(10,2) stored as string end-to-end
+  salePriceGross: string | null;
+  isAvailable: boolean;
+  minQuantity: number;
+  maxQuantity: number | null;
+  sortOrder: number;
+};
+
+function parseVariants(formData: FormData): VariantInput[] {
+  const raw = String(formData.get("variantsJson") ?? "[]");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Varianten-Daten sind kein gültiges JSON");
+  }
+  if (!Array.isArray(parsed)) throw new Error("Varianten-Daten sind kein Array");
+
+  return parsed.map((r, idx): VariantInput => {
+    if (!r || typeof r !== "object") {
+      throw new Error(`Variante ${idx + 1}: ungültig`);
+    }
+    const row = r as Record<string, unknown>;
+
+    // Price: numeric string. Validate parses to positive float, format to 2dp
+    // so the DB gets a normalised numeric-compatible string.
+    const priceRaw = String(row.priceGross ?? "").trim();
+    if (!priceRaw) throw new Error(`Variante ${idx + 1}: Preis fehlt`);
+    const priceNum = Number(priceRaw);
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      throw new Error(`Variante ${idx + 1}: Preis muss > 0 sein`);
+    }
+    const priceGross = priceNum.toFixed(2);
+
+    const saleRaw = String(row.salePriceGross ?? "").trim();
+    let salePriceGross: string | null = null;
+    if (saleRaw) {
+      const saleNum = Number(saleRaw);
+      if (!Number.isFinite(saleNum) || saleNum <= 0) {
+        throw new Error(`Variante ${idx + 1}: Aktionspreis muss > 0 sein`);
+      }
+      salePriceGross = saleNum.toFixed(2);
+    }
+
+    const minQuantity = Number(row.minQuantity ?? 1);
+    if (!Number.isInteger(minQuantity) || minQuantity < 1) {
+      throw new Error(`Variante ${idx + 1}: Min. Menge muss >= 1 sein`);
+    }
+    const maxRaw = String(row.maxQuantity ?? "").trim();
+    let maxQuantity: number | null = null;
+    if (maxRaw) {
+      const m = Number(maxRaw);
+      if (!Number.isInteger(m) || m < minQuantity) {
+        throw new Error(
+          `Variante ${idx + 1}: Max. Menge muss >= Min. Menge sein`,
+        );
+      }
+      maxQuantity = m;
+    }
+
+    const sortOrder = Number(row.sortOrder ?? 0);
+    if (!Number.isInteger(sortOrder)) {
+      throw new Error(`Variante ${idx + 1}: Sortierung muss eine Ganzzahl sein`);
+    }
+
+    const idRaw = row.id;
+    const id = idRaw === null || idRaw === undefined ? null : Number(idRaw);
+    if (id !== null && !Number.isFinite(id)) {
+      throw new Error(`Variante ${idx + 1}: ungültige ID`);
+    }
+
+    const sizeLabelRaw = String(row.sizeLabelDe ?? "").trim();
+
+    return {
+      id,
+      sizeLabelDe: sizeLabelRaw || null,
+      priceGross,
+      salePriceGross,
+      isAvailable: Boolean(row.isAvailable),
+      minQuantity,
+      maxQuantity,
+      sortOrder,
+    };
+  });
+}
+
 // -------- create --------
 
 export async function createProduct(formData: FormData) {
   await requireAdmin();
   const values = parseProductForm(formData);
+  const variants = parseVariants(formData);
 
   const inserted = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -123,6 +215,21 @@ export async function createProduct(formData: FormData) {
       );
     }
 
+    if (variants.length > 0) {
+      await tx.insert(productVariant).values(
+        variants.map((v) => ({
+          productId: row.id,
+          sizeLabelDe: v.sizeLabelDe,
+          priceGross: v.priceGross,
+          salePriceGross: v.salePriceGross,
+          isAvailable: v.isAvailable,
+          minQuantity: v.minQuantity,
+          maxQuantity: v.maxQuantity,
+          sortOrder: v.sortOrder,
+        })),
+      );
+    }
+
     return row;
   });
 
@@ -135,6 +242,7 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(id: number, formData: FormData) {
   await requireAdmin();
   const values = parseProductForm(formData);
+  const variants = parseVariants(formData);
 
   await db.transaction(async (tx) => {
     await tx
@@ -155,10 +263,8 @@ export async function updateProduct(id: number, formData: FormData) {
       })
       .where(eq(product.id, id));
 
-    // Diff categories: simplest correct approach is delete + reinsert.
-    // Product has few categories (~5 max in practice), so the delete +
-    // insert cost is trivial and the code stays obvious. If this ever
-    // becomes hot, switch to compute-diff.
+    // Categories: delete-then-reinsert. Products have ~5 categories in
+    // practice; the code stays obvious.
     await tx.delete(productCategory).where(eq(productCategory.productId, id));
     if (values.categoryIds.length > 0) {
       await tx.insert(productCategory).values(
@@ -167,6 +273,56 @@ export async function updateProduct(id: number, formData: FormData) {
           categoryId: cid,
         })),
       );
+    }
+
+    // Variants: three-way diff (insert new, update existing, delete missing).
+    // TODO(post-orders): before deleting, check for order_line rows
+    // referencing this variant. Today no orders exist so a stray delete
+    // would fail loudly on the FK. Once orders exist, refuse the delete
+    // with a helpful message ("Variante hat Bestellungen; auf 'nicht
+    // verfügbar' setzen statt löschen").
+    const existing = await tx
+      .select({ id: productVariant.id })
+      .from(productVariant)
+      .where(eq(productVariant.productId, id));
+    const existingIds = new Set(existing.map((r) => r.id));
+    const keptIds = new Set(
+      variants.filter((v) => v.id !== null).map((v) => v.id as number),
+    );
+    const toDelete = [...existingIds].filter((eid) => !keptIds.has(eid));
+
+    if (toDelete.length > 0) {
+      await tx
+        .delete(productVariant)
+        .where(inArray(productVariant.id, toDelete));
+    }
+
+    for (const v of variants) {
+      if (v.id === null) {
+        await tx.insert(productVariant).values({
+          productId: id,
+          sizeLabelDe: v.sizeLabelDe,
+          priceGross: v.priceGross,
+          salePriceGross: v.salePriceGross,
+          isAvailable: v.isAvailable,
+          minQuantity: v.minQuantity,
+          maxQuantity: v.maxQuantity,
+          sortOrder: v.sortOrder,
+        });
+      } else {
+        await tx
+          .update(productVariant)
+          .set({
+            sizeLabelDe: v.sizeLabelDe,
+            priceGross: v.priceGross,
+            salePriceGross: v.salePriceGross,
+            isAvailable: v.isAvailable,
+            minQuantity: v.minQuantity,
+            maxQuantity: v.maxQuantity,
+            sortOrder: v.sortOrder,
+          })
+          .where(eq(productVariant.id, v.id));
+      }
     }
   });
 

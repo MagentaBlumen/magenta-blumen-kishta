@@ -3,6 +3,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { VariantsEditor, type VariantRow } from "./variants-editor";
 
 type Category = {
   id: number;
@@ -37,6 +38,7 @@ type Props = {
   taxRates: TaxRate[];
   product?: ProductInitial;
   selectedCategoryIds?: number[];
+  initialVariants?: VariantRow[];
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
 };
@@ -46,6 +48,7 @@ export function ProductForm({
   taxRates,
   product,
   selectedCategoryIds = [],
+  initialVariants = [],
   action,
   submitLabel,
 }: Props) {
@@ -107,6 +110,14 @@ export function ProductForm({
             })),
           ]}
         />
+      </Section>
+
+      {/* -------- Variants -------- */}
+      <Section
+        title="Varianten"
+        description="Grössen mit eigenem Preis. Bei «Pro Stück» nur eine Variante (Preis pro Stiel). Bei «Nur Anfrage» werden Varianten ignoriert - kein Verkauf möglich."
+      >
+        <VariantsEditor initial={initialVariants} />
       </Section>
 
       {/* -------- Categories -------- */}

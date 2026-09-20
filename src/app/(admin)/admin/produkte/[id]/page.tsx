@@ -2,7 +2,12 @@ import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db/client";
-import { category, product, productCategory } from "@/db/schema/catalogue";
+import {
+  category,
+  product,
+  productCategory,
+  productVariant,
+} from "@/db/schema/catalogue";
 import { taxRate } from "@/db/schema/settings";
 import { ProductForm } from "../_components/product-form";
 import { updateProduct } from "../actions";
@@ -24,7 +29,7 @@ export default async function EditProductPage({ params }: PageProps) {
 
   if (!productRow) notFound();
 
-  const [categories, taxRates, productCats] = await Promise.all([
+  const [categories, taxRates, productCats, variantRows] = await Promise.all([
     db
       .select({
         id: category.id,
@@ -46,9 +51,24 @@ export default async function EditProductPage({ params }: PageProps) {
       .select({ categoryId: productCategory.categoryId })
       .from(productCategory)
       .where(eq(productCategory.productId, id)),
+    db
+      .select()
+      .from(productVariant)
+      .where(eq(productVariant.productId, id))
+      .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
   ]);
 
   const selectedCategoryIds = productCats.map((r) => r.categoryId);
+  const initialVariants = variantRows.map((v) => ({
+    id: v.id,
+    sizeLabelDe: v.sizeLabelDe ?? "",
+    priceGross: v.priceGross,
+    salePriceGross: v.salePriceGross ?? "",
+    isAvailable: v.isAvailable,
+    minQuantity: String(v.minQuantity),
+    maxQuantity: v.maxQuantity == null ? "" : String(v.maxQuantity),
+    sortOrder: String(v.sortOrder),
+  }));
   const updateWithId = updateProduct.bind(null, id);
 
   return (
@@ -84,6 +104,7 @@ export default async function EditProductPage({ params }: PageProps) {
           sortOrder: productRow.sortOrder,
         }}
         selectedCategoryIds={selectedCategoryIds}
+        initialVariants={initialVariants}
         action={updateWithId}
         submitLabel="Speichern"
       />
