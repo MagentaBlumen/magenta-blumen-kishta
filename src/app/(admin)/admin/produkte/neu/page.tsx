@@ -1,13 +1,17 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { db } from "@/db/client";
-import { category } from "@/db/schema/catalogue";
+import {
+  attribute,
+  attributeValue,
+  category,
+} from "@/db/schema/catalogue";
 import { taxRate } from "@/db/schema/settings";
 import { ProductForm } from "../_components/product-form";
 import { createProduct } from "../actions";
 
 export default async function NewProductPage() {
-  const [categories, taxRates] = await Promise.all([
+  const [categories, taxRates, colours] = await Promise.all([
     db
       .select({
         id: category.id,
@@ -25,6 +29,17 @@ export default async function NewProductPage() {
       })
       .from(taxRate)
       .orderBy(asc(taxRate.code)),
+    db
+      .select({
+        id: attributeValue.id,
+        value: attributeValue.value,
+        nameDe: attributeValue.nameDe,
+        hex: attributeValue.hex,
+      })
+      .from(attributeValue)
+      .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
+      .where(eq(attribute.key, "colour"))
+      .orderBy(asc(attributeValue.sortOrder)),
   ]);
 
   return (
@@ -45,6 +60,7 @@ export default async function NewProductPage() {
       <ProductForm
         categories={categories}
         taxRates={taxRates}
+        colours={colours}
         action={createProduct}
         submitLabel="Anlegen"
       />

@@ -2,10 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { product, productCategory, productVariant } from "@/db/schema/catalogue";
+import {
+  attribute,
+  attributeValue,
+  product,
+  productAttributeValue,
+  productCategory,
+  productVariant,
+} from "@/db/schema/catalogue";
 import { slugify } from "@/lib/slug";
 
 // Server Actions are public endpoints in a URL you can't see - CLAUDE.md
@@ -36,6 +43,7 @@ type ParsedProductForm = {
   leadTimeDays: number;
   sortOrder: number;
   categoryIds: number[];
+  colourIds: number[];
 };
 
 function parseProductForm(formData: FormData): ParsedProductForm {
@@ -79,7 +87,32 @@ function parseProductForm(formData: FormData): ParsedProductForm {
       .getAll("categoryIds")
       .map((v) => Number(v))
       .filter((n) => Number.isFinite(n)),
+    colourIds: formData
+      .getAll("colourIds")
+      .map((v) => Number(v))
+      .filter((n) => Number.isFinite(n)),
   };
+}
+
+// -------- colour attribute helpers --------
+//
+// Colour is currently the only attribute we edit through this form.
+// Scoping the upsert to `attribute.key = 'colour'` keeps the delete
+// safe against future attributes: when we add e.g. 'style', its
+// product_attribute_value rows won't be wiped by a colour save.
+//
+// If several attributes end up editable here, refactor to take the
+// attribute key as a parameter.
+
+async function getColourValueIds(
+  tx: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0],
+): Promise<Set<number>> {
+  const rows = await tx
+    .select({ id: attributeValue.id })
+    .from(attributeValue)
+    .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
+    .where(eq(attribute.key, "colour"));
+  return new Set(rows.map((r) => r.id));
 }
 
 function numFromForm(fd: FormData, name: string, fallback: number): number {
@@ -230,6 +263,20 @@ export async function createProduct(formData: FormData) {
       );
     }
 
+    if (values.colourIds.length > 0) {
+      const validColourIds = await getColourValueIds(tx);
+      const bad = values.colourIds.filter((id) => !validColourIds.has(id));
+      if (bad.length > 0) {
+        throw new Error(`Ungültige Farb-IDs: ${bad.join(", ")}`);
+      }
+      await tx.insert(productAttributeValue).values(
+        values.colourIds.map((avId) => ({
+          productId: row.id,
+          attributeValueId: avId,
+        })),
+      );
+    }
+
     return row;
   });
 
@@ -271,6 +318,32 @@ export async function updateProduct(id: number, formData: FormData) {
         values.categoryIds.map((cid) => ({
           productId: id,
           categoryId: cid,
+        })),
+      );
+    }
+
+    // Colours: same delete-then-reinsert, but SCOPED to only the colour
+    // attribute's values. Prevents wiping other attributes' rows when
+    // more attributes become editable here.
+    const validColourIds = await getColourValueIds(tx);
+    const validColourIdArray = [...validColourIds];
+    if (validColourIdArray.length > 0) {
+      await tx.delete(productAttributeValue).where(
+        and(
+          eq(productAttributeValue.productId, id),
+          inArray(productAttributeValue.attributeValueId, validColourIdArray),
+        ),
+      );
+    }
+    const bad = values.colourIds.filter((cid) => !validColourIds.has(cid));
+    if (bad.length > 0) {
+      throw new Error(`Ungültige Farb-IDs: ${bad.join(", ")}`);
+    }
+    if (values.colourIds.length > 0) {
+      await tx.insert(productAttributeValue).values(
+        values.colourIds.map((avId) => ({
+          productId: id,
+          attributeValueId: avId,
         })),
       );
     }

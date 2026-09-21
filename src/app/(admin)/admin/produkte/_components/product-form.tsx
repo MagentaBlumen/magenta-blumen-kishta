@@ -18,6 +18,13 @@ type TaxRate = {
   nameDe: string;
 };
 
+type ColourValue = {
+  id: number;
+  value: string;
+  nameDe: string;
+  hex: string | null;
+};
+
 type ProductInitial = {
   id: number;
   slug: string;
@@ -36,8 +43,10 @@ type ProductInitial = {
 type Props = {
   categories: Category[];
   taxRates: TaxRate[];
+  colours: ColourValue[];
   product?: ProductInitial;
   selectedCategoryIds?: number[];
+  selectedColourIds?: number[];
   initialVariants?: VariantRow[];
   action: (formData: FormData) => Promise<void>;
   submitLabel: string;
@@ -46,8 +55,10 @@ type Props = {
 export function ProductForm({
   categories,
   taxRates,
+  colours,
   product,
   selectedCategoryIds = [],
+  selectedColourIds = [],
   initialVariants = [],
   action,
   submitLabel,
@@ -55,6 +66,7 @@ export function ProductForm({
   const ranges = categories.filter((c) => c.kind === "range");
   const occasions = categories.filter((c) => c.kind === "occasion");
   const selected = new Set(selectedCategoryIds);
+  const selectedColours = new Set(selectedColourIds);
 
   return (
     <form action={action} className="space-y-10 max-w-3xl">
@@ -136,6 +148,22 @@ export function ProductForm({
             categories={occasions}
             selected={selected}
           />
+        </div>
+      </Section>
+
+      {/* -------- Colour facet -------- */}
+      <Section
+        title="Farbe"
+        description="Facette, gehört zum Produkt (nicht zur Variante). «Bunt» hat keinen Hex-Wert - wird als Farbverlauf gezeigt."
+      >
+        <div className="flex flex-wrap gap-4">
+          {colours.map((c) => (
+            <ColourSwatch
+              key={c.id}
+              colour={c}
+              defaultChecked={selectedColours.has(c.id)}
+            />
+          ))}
         </div>
       </Section>
 
@@ -356,5 +384,40 @@ function CategoryGroup({
         ))}
       </div>
     </div>
+  );
+}
+
+// Pure SSR swatch - the "peer" utility styles the swatch based on the
+// (visually hidden) checkbox's checked state. No client JS needed.
+function ColourSwatch({
+  colour,
+  defaultChecked,
+}: {
+  colour: ColourValue;
+  defaultChecked: boolean;
+}) {
+  const background =
+    colour.hex ??
+    // 'bunt' - no single hex, render a rainbow conic gradient
+    "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)";
+
+  return (
+    <label className="flex flex-col items-center gap-1.5 cursor-pointer">
+      <input
+        type="checkbox"
+        name="colourIds"
+        value={colour.id}
+        defaultChecked={defaultChecked}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden
+        className="h-12 w-12 rounded-full border border-neutral-300 ring-2 ring-transparent ring-offset-2 ring-offset-background peer-checked:ring-primary transition-shadow"
+        style={{ background }}
+      />
+      <span className="text-xs text-muted-foreground peer-checked:text-foreground peer-checked:font-medium">
+        {colour.nameDe}
+      </span>
+    </label>
   );
 }

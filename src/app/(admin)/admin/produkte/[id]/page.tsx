@@ -1,10 +1,13 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db/client";
 import {
+  attribute,
+  attributeValue,
   category,
   product,
+  productAttributeValue,
   productCategory,
   productVariant,
 } from "@/db/schema/catalogue";
@@ -29,34 +32,65 @@ export default async function EditProductPage({ params }: PageProps) {
 
   if (!productRow) notFound();
 
-  const [categories, taxRates, productCats, variantRows] = await Promise.all([
-    db
-      .select({
-        id: category.id,
-        slug: category.slug,
-        nameDe: category.nameDe,
-        kind: category.kind,
-      })
-      .from(category)
-      .orderBy(asc(category.kind), asc(category.sortOrder)),
-    db
-      .select({
-        id: taxRate.id,
-        code: taxRate.code,
-        nameDe: taxRate.nameDe,
-      })
-      .from(taxRate)
-      .orderBy(asc(taxRate.code)),
-    db
-      .select({ categoryId: productCategory.categoryId })
-      .from(productCategory)
-      .where(eq(productCategory.productId, id)),
-    db
-      .select()
-      .from(productVariant)
-      .where(eq(productVariant.productId, id))
-      .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
-  ]);
+  const [categories, taxRates, colours, productCats, variantRows] =
+    await Promise.all([
+      db
+        .select({
+          id: category.id,
+          slug: category.slug,
+          nameDe: category.nameDe,
+          kind: category.kind,
+        })
+        .from(category)
+        .orderBy(asc(category.kind), asc(category.sortOrder)),
+      db
+        .select({
+          id: taxRate.id,
+          code: taxRate.code,
+          nameDe: taxRate.nameDe,
+        })
+        .from(taxRate)
+        .orderBy(asc(taxRate.code)),
+      db
+        .select({
+          id: attributeValue.id,
+          value: attributeValue.value,
+          nameDe: attributeValue.nameDe,
+          hex: attributeValue.hex,
+        })
+        .from(attributeValue)
+        .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
+        .where(eq(attribute.key, "colour"))
+        .orderBy(asc(attributeValue.sortOrder)),
+      db
+        .select({ categoryId: productCategory.categoryId })
+        .from(productCategory)
+        .where(eq(productCategory.productId, id)),
+      db
+        .select()
+        .from(productVariant)
+        .where(eq(productVariant.productId, id))
+        .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
+    ]);
+
+  // Selected colour IDs for this product - scoped to only the colour
+  // attribute's values so future attributes don't leak into this list.
+  const colourIds = colours.map((c) => c.id);
+  const selectedColourRows =
+    colourIds.length === 0
+      ? []
+      : await db
+          .select({
+            attributeValueId: productAttributeValue.attributeValueId,
+          })
+          .from(productAttributeValue)
+          .where(
+            and(
+              eq(productAttributeValue.productId, id),
+              inArray(productAttributeValue.attributeValueId, colourIds),
+            ),
+          );
+  const selectedColourIds = selectedColourRows.map((r) => r.attributeValueId);
 
   const selectedCategoryIds = productCats.map((r) => r.categoryId);
   const initialVariants = variantRows.map((v) => ({
@@ -89,6 +123,7 @@ export default async function EditProductPage({ params }: PageProps) {
       <ProductForm
         categories={categories}
         taxRates={taxRates}
+        colours={colours}
         product={{
           id: productRow.id,
           slug: productRow.slug,
@@ -104,6 +139,7 @@ export default async function EditProductPage({ params }: PageProps) {
           sortOrder: productRow.sortOrder,
         }}
         selectedCategoryIds={selectedCategoryIds}
+        selectedColourIds={selectedColourIds}
         initialVariants={initialVariants}
         action={updateWithId}
         submitLabel="Speichern"
