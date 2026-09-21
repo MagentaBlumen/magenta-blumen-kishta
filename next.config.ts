@@ -6,6 +6,20 @@ const nextConfig: NextConfig = {
   // production Docker image can copy that instead of the full node_modules.
   // Cuts image size ~10x. See Dockerfile.
   output: "standalone",
+
+  // Sharp has native bindings (libvips). If webpack tries to bundle it,
+  // the .node binary is dropped and the runtime import fails. Marking
+  // it external forces Node to resolve it from node_modules at runtime.
+  serverExternalPackages: ["sharp"],
+
+  experimental: {
+    serverActions: {
+      // Default limit is 1 MB; product photos are commonly 2-8 MB each,
+      // and we upload up to a handful at a time. 20 MB gives comfortable
+      // headroom without letting someone abuse the endpoint to DoS us.
+      bodySizeLimit: "20mb",
+    },
+  },
 };
 
 export default withSentryConfig(nextConfig, {

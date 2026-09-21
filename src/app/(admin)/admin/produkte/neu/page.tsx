@@ -57,6 +57,10 @@ export default async function NewProductPage() {
         </h1>
       </div>
 
+      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground max-w-3xl">
+        Bilder können nach dem Anlegen hinzugefügt werden.
+      </div>
+
       <ProductForm
         categories={categories}
         taxRates={taxRates}

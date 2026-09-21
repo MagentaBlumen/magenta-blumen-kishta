@@ -9,10 +9,12 @@ import {
   product,
   productAttributeValue,
   productCategory,
+  productImage,
   productVariant,
 } from "@/db/schema/catalogue";
 import { taxRate } from "@/db/schema/settings";
 import { ProductForm } from "../_components/product-form";
+import { ImagesEditor } from "../_components/images-editor";
 import { updateProduct } from "../actions";
 
 type PageProps = {
@@ -32,7 +34,7 @@ export default async function EditProductPage({ params }: PageProps) {
 
   if (!productRow) notFound();
 
-  const [categories, taxRates, colours, productCats, variantRows] =
+  const [categories, taxRates, colours, productCats, variantRows, imageRows] =
     await Promise.all([
       db
         .select({
@@ -71,6 +73,18 @@ export default async function EditProductPage({ params }: PageProps) {
         .from(productVariant)
         .where(eq(productVariant.productId, id))
         .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
+      db
+        .select({
+          id: productImage.id,
+          url: productImage.url,
+          altDe: productImage.altDe,
+          variantId: productImage.variantId,
+          width: productImage.width,
+          height: productImage.height,
+        })
+        .from(productImage)
+        .where(eq(productImage.productId, id))
+        .orderBy(asc(productImage.sortOrder), asc(productImage.id)),
     ]);
 
   // Selected colour IDs for this product - scoped to only the colour
@@ -104,6 +118,15 @@ export default async function EditProductPage({ params }: PageProps) {
     sortOrder: String(v.sortOrder),
   }));
   const updateWithId = updateProduct.bind(null, id);
+
+  // Variant labels for the image → variant assignment dropdown.
+  // Format: "Klein — 35.00 CHF" or "— 35.00 CHF" if the variant has no label.
+  const variantOptions = variantRows.map((v) => ({
+    id: v.id,
+    label: v.sizeLabelDe
+      ? `${v.sizeLabelDe} — ${v.priceGross} CHF`
+      : `— ${v.priceGross} CHF`,
+  }));
 
   return (
     <div className="space-y-6">
@@ -144,6 +167,26 @@ export default async function EditProductPage({ params }: PageProps) {
         action={updateWithId}
         submitLabel="Speichern"
       />
+
+      {/* Images live OUTSIDE the ProductForm on purpose: uploads persist
+          immediately via their own Server Actions rather than waiting for
+          the product form's Save button. That way an interrupted session
+          doesn't lose the photos. */}
+      <section className="space-y-4 pt-4 border-t max-w-3xl">
+        <div>
+          <h2 className="text-lg font-medium">Bilder</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Reihenfolge bestimmt Anzeige im Shop. Erstes Bild ist das
+            Hauptbild. Variant-Zuweisung optional - ohne Auswahl gilt das
+            Bild fürs ganze Produkt.
+          </p>
+        </div>
+        <ImagesEditor
+          productId={id}
+          images={imageRows}
+          variants={variantOptions}
+        />
+      </section>
     </div>
   );
 }
