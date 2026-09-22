@@ -4,41 +4,77 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------
+   Design tokens - Magenta Blumen
+   ---------------------------------------------------------------------
+   Palette from the Figma design (warm florist palette with a magenta
+   brand accent - literally "Magenta" fitting the shop name).
+
+     cream    #f9f6f1   soft warm section background
+     ivory    #fdfcf9   base page background (near-white, warm tint)
+     bark     #2a1f1a   primary text (dark warm brown, not black)
+     sage     #8a9e8c   muted secondary text / eyebrow labels
+     blush    #e8d5c8   soft warm highlight
+     rose     #a0185a   brand accent - hover, badges, focus
+     charcoal #1c1c1c   near-black (rarely used)
+     mist     #ede9e3   borders, subtle grouping
+
+   Fonts:
+     Cormorant  - serif for headings, uses italic for emphasis
+     DM Sans    - body sans
+   ---------------------------------------------------------------------- */
+
 @theme inline {
+  /* Fonts (backed by next/font-injected CSS variables from layout.tsx) */
+  --font-body: var(--font-body);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-body);
+
+  /* Named palette colours - available as bg-cream, text-rose, etc. */
+  --color-cream: #f9f6f1;
+  --color-ivory: #fdfcf9;
+  --color-bark: #2a1f1a;
+  --color-sage: #8a9e8c;
+  --color-blush: #e8d5c8;
+  --color-rose: #a0185a;
+  --color-charcoal: #1c1c1c;
+  --color-mist: #ede9e3;
+
+  /* shadcn semantic aliases - existing components (Button, Input, Card,
+     Badge, Table) reference these. Mapped to the palette above. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +84,85 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ---------- Light palette (default) ---------- */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #fdfcf9;          /* ivory */
+  --foreground: #2a1f1a;          /* bark */
+  --card: #fdfcf9;                /* ivory */
+  --card-foreground: #2a1f1a;
+  --popover: #fdfcf9;
+  --popover-foreground: #2a1f1a;
+
+  /* Primary = bark. Matches Figma's black-brown "Jetzt shoppen" button. */
+  --primary: #2a1f1a;
+  --primary-foreground: #fdfcf9;
+
+  --secondary: #f9f6f1;           /* cream - subtle grouped sections */
+  --secondary-foreground: #2a1f1a;
+
+  --muted: #ede9e3;               /* mist - inputs, subtle bg */
+  --muted-foreground: #8a9e8c;    /* sage - secondary / eyebrow text */
+
+  --accent: #e8d5c8;              /* blush - hover backgrounds */
+  --accent-foreground: #2a1f1a;
+
+  /* Destructive stays a distinct warm red so it can't be confused with
+     the rose brand accent, which is used positively (badges, hover). */
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  --border: #ede9e3;              /* mist */
+  --input: #ede9e3;
+  --ring: #a0185a;                /* rose - focus outline */
+
+  --chart-1: #a0185a;             /* rose */
+  --chart-2: #8a9e8c;             /* sage */
+  --chart-3: #e8d5c8;             /* blush */
+  --chart-4: #2a1f1a;             /* bark */
+  --chart-5: #f9f6f1;             /* cream */
+
+  --radius: 0.375rem;
+
+  --sidebar: #fdfcf9;
+  --sidebar-foreground: #2a1f1a;
+  --sidebar-primary: #2a1f1a;
+  --sidebar-primary-foreground: #fdfcf9;
+  --sidebar-accent: #f9f6f1;
+  --sidebar-accent-foreground: #2a1f1a;
+  --sidebar-border: #ede9e3;
+  --sidebar-ring: #a0185a;
 }
 
+/* ---------- Dark palette (opt-in via <html class="dark">) ---------- */
+/* Not used today - no toggle, no auto-switch. Kept only so shadcn
+   components with dark: variants don't render broken if someone
+   experimentally adds the class. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #1c1c1c;
+  --foreground: #f9f6f1;
+  --card: #2a1f1a;
+  --card-foreground: #f9f6f1;
+  --popover: #2a1f1a;
+  --popover-foreground: #f9f6f1;
+  --primary: #f9f6f1;
+  --primary-foreground: #2a1f1a;
+  --secondary: #2a1f1a;
+  --secondary-foreground: #f9f6f1;
+  --muted: #2a1f1a;
+  --muted-foreground: #8a9e8c;
+  --accent: #2a1f1a;
+  --accent-foreground: #f9f6f1;
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --ring: #a0185a;
+  --sidebar: #1c1c1c;
+  --sidebar-foreground: #f9f6f1;
+  --sidebar-primary: #a0185a;
+  --sidebar-primary-foreground: #f9f6f1;
+  --sidebar-accent: #2a1f1a;
+  --sidebar-accent-foreground: #f9f6f1;
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: #a0185a;
 }
 
 @layer base {
@@ -122,9 +170,23 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-body antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
-    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+
+  /* Common serif-heading convenience class. Storefront components use
+     `font-display` directly on individual elements too. */
+  .font-display,
+  h1.font-display,
+  h2.font-display,
+  h3.font-display {
+    font-family: var(--font-display);
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
   }
 }
