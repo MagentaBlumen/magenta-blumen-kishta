@@ -1,23 +1,14 @@
 import type { Metadata } from "next";
-import { Cormorant, DM_Sans } from "next/font/google";
 import "./globals.css";
 
-// Cormorant: serif for headings. We load 300/400/500/600 + italic 300/400
-// because the Figma uses italic inside headings for emphasis
-// ("Aussergewöhnliche Blumen, geliefert." — the "Blumen" is italic).
-const cormorant = Cormorant({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  style: ["normal", "italic"],
-});
-
-// DM Sans: body font. Light/regular/medium cover everything the design uses.
-const dmSans = DM_Sans({
-  variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["300", "400", "500"],
-});
+// Fonts (Cormorant + DM Sans) loaded via CSS @import in globals.css.
+//
+// Would prefer next/font/google (self-hosted, no external request,
+// zero layout shift), but Next.js 16.3.x + Turbopack has a bug with
+// multi-weight font requests that breaks the production build:
+//   "next/font/google queries have exactly one entry"
+// Revisit when Next 17 lands or the Turbopack fix ships. Meanwhile
+// Google Fonts CDN is fine - one extra request, cached by browsers.
 
 export const metadata: Metadata = {
   title: {
@@ -34,10 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="de-CH"
-      className={`${cormorant.variable} ${dmSans.variable} h-full antialiased`}
-    >
+    <html lang="de-CH" className="h-full antialiased">
       <body className="min-h-full flex flex-col font-body bg-background text-foreground">
         {children}
       </body>

@@ -1,3 +1,11 @@
+/* Google Fonts must be the first @import - CSS spec requires @import
+   rules before all other rules. Loading:
+     Cormorant  - display serif, weights 300/400/500/600 + italic 300/400
+     DM Sans    - body sans, weights 300/400/500
+   display=swap: use fallback font first, swap when custom loads.
+   See layout.tsx for why we're using CSS @import instead of next/font. */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -25,7 +33,7 @@
    ---------------------------------------------------------------------- */
 
 @theme inline {
-  /* Fonts (backed by next/font-injected CSS variables from layout.tsx) */
+  /* Fonts (defined in :root below, loaded via Google Fonts @import above) */
   --font-body: var(--font-body);
   --font-display: var(--font-display);
   --font-sans: var(--font-body);
@@ -86,6 +94,12 @@
 
 /* ---------- Light palette (default) ---------- */
 :root {
+  /* Font families (referenced by @theme above). system-ui + serif
+     fallbacks kick in during the display=swap window before Google
+     Fonts finishes loading, and permanently if the request fails. */
+  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Cormorant', Georgia, 'Times New Roman', serif;
+
   --background: #fdfcf9;          /* ivory */
   --foreground: #2a1f1a;          /* bark */
   --card: #fdfcf9;                /* ivory */
