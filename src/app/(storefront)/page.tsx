@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
+
+// ISR: prerender at build, refresh every 5 min. Admin write actions
+// call revalidatePath('/') for immediate updates.
+export const revalidate = 300;
+
 import {
   category,
   product,

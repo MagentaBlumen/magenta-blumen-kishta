@@ -16,6 +16,10 @@ import { largeUrl, thumbUrl } from "@/lib/image-urls";
 import { formatChf } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
 
+// ISR: 5-min stale-while-revalidate. Admin edits call
+// revalidatePath('/produkt/[slug]', 'page') for immediate updates.
+export const revalidate = 300;
+
 type PageProps = {
   params: Promise<{ slug: string }>;
 };

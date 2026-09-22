@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-// Storefront pages hit the DB on every render. Marking the whole
-// route group dynamic prevents Next.js from trying to prerender them
-// at build time (which fails in CI where the DB doesn't exist).
-// If we later want caching, add `revalidate = 60` per page.
-export const dynamic = "force-dynamic";
+// Storefront caching: individual pages set `export const revalidate = 300`
+// (5-minute stale-while-revalidate). Admin write actions call
+// revalidatePath / revalidateTag so changes propagate immediately even
+// within a revalidation window. Page speed matters - organic search is
+// the acquisition channel.
 
 // Public storefront layout. No auth check - customers browse anonymously,
 // checkout is optional-account per the auth change (see CLAUDE.md).

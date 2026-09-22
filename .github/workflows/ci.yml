@@ -15,7 +15,28 @@ jobs:
   build:
     name: Typecheck + build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+
+    # Storefront pages use `export const revalidate = 300` (ISR), so the
+    # Next.js build tries to prerender them. Prerender queries the DB.
+    # Spin up postgres inside the runner, apply migration + seeds, then
+    # the build gets a real DB to render against. Fast (a few seconds)
+    # and prevents the "force-dynamic everywhere" workaround.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: magenta
+          POSTGRES_PASSWORD: magenta_dev
+          POSTGRES_DB: magenta_blumen
+        ports:
+          - 5432:5432
+        # Wait until postgres is ready before the steps run.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
@@ -34,16 +55,22 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build
-        # Next.js build doesn't need a live database, but it does need
-        # DATABASE_URL to exist (drizzle imports read env at module load).
-        # Use a dummy that never gets connected to.
-        #
-        # SENTRY_AUTH_TOKEN is optional. When absent, next build skips
-        # source-map upload with a warning and still succeeds. Set it as a
-        # repository secret to enable readable stack traces in Sentry.
+      - name: Apply schema + seeds
+        # These are the same files used in local dev + prod - a single
+        # source of truth. Order matters: migration first, then base
+        # seed (settings, categories, colours, tax rates), then zones.
         env:
-          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          PGPASSWORD: magenta_dev
+        run: |
+          psql -h localhost -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f drizzle/0000_init.sql
+          psql -h localhost -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f drizzle/seed/01-base.sql
+          psql -h localhost -U magenta -d magenta_blumen -v ON_ERROR_STOP=1 -f drizzle/seed/02-delivery-zones.sql
+
+      - name: Build
+        # DATABASE_URL now points at the live postgres service so ISR
+        # pages can prerender. AUTH_SECRET is a build-time-only dummy.
+        env:
+          DATABASE_URL: postgres://magenta:magenta_dev@localhost:5432/magenta_blumen
           AUTH_SECRET: ci-build-only-not-a-real-secret
           AUTH_URL: http://localhost:3000
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

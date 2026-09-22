@@ -9,6 +9,10 @@ import {
 import { ProductCard } from "@/components/storefront/product-card";
 import { enrich } from "../../page";
 
+// ISR: 5-min stale-while-revalidate. Admin edits call
+// revalidatePath('/kategorie/[slug]', 'page') for immediate updates.
+export const revalidate = 300;
+
 type PageProps = {
   params: Promise<{ slug: string }>;
 };

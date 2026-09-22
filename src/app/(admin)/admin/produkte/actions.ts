@@ -8,12 +8,46 @@ import { db } from "@/db/client";
 import {
   attribute,
   attributeValue,
+  category,
   product,
   productAttributeValue,
   productCategory,
   productVariant,
 } from "@/db/schema/catalogue";
 import { slugify } from "@/lib/slug";
+
+/**
+ * Storefront has ISR (5 min revalidate) - so admin writes that should
+ * appear immediately need to call this. Invalidates:
+ *   - home page (product may appear in "Neu im Shop")
+ *   - product detail page for this product
+ *   - each category page the product belongs to
+ *
+ * Uses revalidatePath, not revalidateTag, because our storefront queries
+ * don't tag their cache entries. Path-based works fine at our scale.
+ */
+async function revalidateStorefrontForProduct(
+  productId: number,
+  productSlug: string,
+  categoryIds: number[],
+) {
+  revalidatePath("/");
+  revalidatePath(`/produkt/${productSlug}`);
+
+  if (categoryIds.length > 0) {
+    const cats = await db
+      .select({ slug: category.slug })
+      .from(category)
+      .where(inArray(category.id, categoryIds));
+    for (const c of cats) {
+      revalidatePath(`/kategorie/${c.slug}`);
+    }
+  }
+
+  // Suppress unused warning (productId reserved for future
+  // tag-based invalidation once we adopt fetch cache tags).
+  void productId;
+}
 
 // Server Actions are public endpoints in a URL you can't see - CLAUDE.md
 // rule. Every action re-checks auth itself; do not rely on the middleware
@@ -280,7 +314,12 @@ export async function createProduct(formData: FormData) {
     return row;
   });
 
+  // Admin views
   revalidatePath("/admin/produkte");
+  // Storefront views: new product may appear in home ("Neu im Shop"),
+  // any of its categories, and its own detail page.
+  await revalidateStorefrontForProduct(inserted.id, values.slug, values.categoryIds);
+
   redirect(`/admin/produkte/${inserted.id}`);
 }
 
@@ -401,5 +440,6 @@ export async function updateProduct(id: number, formData: FormData) {
 
   revalidatePath("/admin/produkte");
   revalidatePath(`/admin/produkte/${id}`);
+  await revalidateStorefrontForProduct(id, values.slug, values.categoryIds);
   redirect("/admin/produkte");
 }
