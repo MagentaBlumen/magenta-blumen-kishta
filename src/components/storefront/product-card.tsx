@@ -9,20 +9,19 @@ export type ProductCardData = {
   isAvailable: boolean;
   imageUrl: string | null;
   imageAlt: string | null;
-  /** Prices of all this product's available variants (numeric strings). */
   variantPrices: string[];
+  /** Optional pill in the top-left corner. "Neu", "Bestseller", etc. */
+  tag?: string | null;
 };
 
 /**
- * Product card for grid views. Shows the thumbnail (WebP), name and
- * "ab CHF X" pricing hint.
+ * Product card matching the Figma design.
  *
- * Layout: 3:4 image, name below, price on the last line. Fixed height
- * so a grid stays aligned even with different-length names.
+ * Layout: 3:4 image with tag pill top-left (optional) + name + price.
+ * Hover: image scales gently, name colour shifts to rose.
  *
- * Availability handling (CLAUDE.md rule 7): sold-out products render
- * GREYED OUT, not hidden. So we render the card in all cases, only
- * the tint changes.
+ * Sold-out: greys the whole card + shows an "Ausverkauft" overlay pill.
+ * CLAUDE.md rule 7 (sold-out is dimmed, not hidden).
  */
 export function ProductCard({ product }: { product: ProductCardData }) {
   const price = renderPrice(product);
@@ -31,35 +30,38 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   return (
     <Link
       href={`/produkt/${product.slug}`}
-      className={`group flex flex-col rounded-lg overflow-hidden border bg-card transition-colors hover:border-primary ${
-        !product.isAvailable ? "opacity-60" : ""
-      }`}
+      className={`group block ${!product.isAvailable ? "opacity-60" : ""}`}
     >
-      <div className="relative aspect-[3/4] bg-muted overflow-hidden">
+      <div className="relative aspect-[3/4] bg-mist overflow-hidden mb-3">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={src}
             alt={product.imageAlt ?? product.nameDe}
             loading="lazy"
-            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform"
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+          <div className="w-full h-full flex items-center justify-center text-[0.7rem] text-sage uppercase tracking-wider">
             Kein Bild
           </div>
         )}
+        {product.tag && (
+          <span className="absolute top-3 left-3 bg-ivory/95 text-bark text-[0.65rem] tracking-[0.14em] uppercase font-medium px-2.5 py-1">
+            {product.tag}
+          </span>
+        )}
         {!product.isAvailable && (
-          <div className="absolute top-2 right-2 rounded-md bg-background/90 px-2 py-1 text-xs font-medium">
+          <span className="absolute top-3 right-3 bg-ivory/95 text-bark text-[0.65rem] tracking-[0.14em] uppercase font-medium px-2.5 py-1">
             Ausverkauft
-          </div>
+          </span>
         )}
       </div>
-      <div className="p-3 space-y-1">
-        <div className="font-medium text-sm line-clamp-2">
+      <div className="space-y-1 px-1">
+        <div className="text-[0.9rem] text-bark font-normal leading-snug group-hover:text-rose transition-colors line-clamp-2">
           {product.nameDe}
         </div>
-        <div className="text-sm text-muted-foreground tabular-nums">
+        <div className="text-[0.8rem] text-sage tabular-nums">
           {price}
         </div>
       </div>
@@ -70,11 +72,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
 function renderPrice(product: ProductCardData): string {
   if (product.pricingMode === "enquiry") return "Auf Anfrage";
   if (product.pricingMode === "per_unit") {
-    // Exactly one variant, price is per stem
     const p = product.variantPrices[0];
     return p ? `${formatChf(p)} / Stück` : "—";
   }
-  // variant mode: min price across variants
   const min = minPrice(product.variantPrices);
   return product.variantPrices.length > 1 ? formatChfFrom(min) : formatChf(min);
 }
