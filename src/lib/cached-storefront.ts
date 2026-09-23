@@ -203,6 +203,63 @@ export function getProductDetailBundle(productId: number, productSlug: string) {
   )();
 }
 
+// ---------- Colour facet page (/farbe/[slug]) ----------
+
+export function getColourBySlug(slug: string) {
+  return unstable_cache(
+    async () => {
+      const [row] = await db
+        .select({
+          id: attributeValue.id,
+          value: attributeValue.value,
+          nameDe: attributeValue.nameDe,
+          hex: attributeValue.hex,
+        })
+        .from(attributeValue)
+        .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
+        .where(
+          and(eq(attribute.key, "colour"), eq(attributeValue.value, slug)),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+    ["storefront:colour-by-slug", slug],
+    { revalidate: REVALIDATE_SECONDS, tags: ["categories"] },
+  )();
+}
+
+export function getProductsInColour(colourId: number) {
+  return unstable_cache(
+    async (): Promise<ProductCardData[]> => {
+      const rows = await db
+        .select({
+          id: product.id,
+          slug: product.slug,
+          nameDe: product.nameDe,
+          pricingMode: product.pricingMode,
+          isAvailable: product.isAvailable,
+        })
+        .from(product)
+        .innerJoin(
+          productAttributeValue,
+          eq(productAttributeValue.productId, product.id),
+        )
+        .where(
+          and(
+            eq(productAttributeValue.attributeValueId, colourId),
+            eq(product.isArchived, false),
+            eq(product.isOnlineOrderable, true),
+          ),
+        )
+        .orderBy(asc(product.sortOrder), asc(product.nameDe));
+
+      return enrichProducts(rows);
+    },
+    ["storefront:products-in-colour", String(colourId)],
+    { revalidate: REVALIDATE_SECONDS, tags: ["products"] },
+  )();
+}
+
 // ---------- Sitemap: all products + categories ----------
 
 export const getAllProductsForSitemap = unstable_cache(
