@@ -146,7 +146,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
           {p.pricingMode !== "enquiry" && (
             <div className="mt-8 px-4 py-3 bg-cream border border-mist text-[0.75rem] text-sage">
               Die Online-Bestellung wird in Kürze aufgeschaltet. Rufen Sie
-              uns gerne direkt an: <span className="text-bark">056 555 55 55</span>.
+              uns gerne direkt an:{" "}
+              <a
+                href="tel:+41565565609"
+                className="text-bark hover:text-rose transition-colors"
+              >
+                056 556 56 09
+              </a>
+              .
             </div>
           )}
 

@@ -28,10 +28,26 @@ export function SiteFooter() {
           <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark mb-3">
             Kontakt
           </div>
-          {/* TODO(session-8): real phone + email + address once client
-              confirms Impressum content. */}
-          <div>info@magenta-blumen.ch</div>
-          <div>Neuenhof AG</div>
+          <div>Zürcherstrasse 142</div>
+          <div>5432 Neuenhof</div>
+          <div className="pt-2">
+            <a href="tel:+41565565609" className="hover:text-bark transition-colors">
+              056 556 56 09
+            </a>
+          </div>
+          <div>
+            <a href="tel:+41763410232" className="hover:text-bark transition-colors">
+              076 341 02 32
+            </a>
+          </div>
+          <div className="pt-2">
+            <a
+              href="mailto:info@magenta-blumen.ch"
+              className="hover:text-bark transition-colors"
+            >
+              info@magenta-blumen.ch
+            </a>
+          </div>
         </div>
 
         <div className="space-y-2">

@@ -20,9 +20,11 @@ export function LocalBusinessJsonLd() {
     name: "Magenta Blumen",
     url: siteUrl,
     email: "info@magenta-blumen.ch",
-    // TODO(session-8): real phone + streetAddress from Impressum
+    telephone: "+41 56 556 56 09",
     address: {
       "@type": "PostalAddress",
+      streetAddress: "Zürcherstrasse 142",
+      postalCode: "5432",
       addressLocality: "Neuenhof",
       addressRegion: "AG",
       addressCountry: "CH",
