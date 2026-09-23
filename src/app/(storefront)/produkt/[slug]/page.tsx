@@ -150,21 +150,6 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* -------- Trust badges (real Magenta Blumen reality) -------- */}
-          <div className="grid grid-cols-2 gap-2 mt-6">
-            {TRUST_BADGES.map((b) => (
-              <div
-                key={b.text}
-                className="flex items-center gap-2.5 px-3 py-2.5 bg-cream border border-mist"
-              >
-                <span aria-hidden className="text-[1rem] leading-none">{b.icon}</span>
-                <span className="text-[0.68rem] leading-tight text-bark">
-                  {b.text}
-                </span>
-              </div>
-            ))}
-          </div>
-
           {/* -------- Accordions -------- */}
           <div className="mt-8 border-t border-mist">
             {p.descriptionDe && (
@@ -266,13 +251,6 @@ function Accordion({
 // Content that isn't in the DB. Same for every product for now.
 // If per-product overrides are ever needed, add fields to `product`.
 // ------------------------------------------------------------------
-
-const TRUST_BADGES: { icon: string; text: string }[] = [
-  { icon: "✿", text: "Von Hand gebunden" },
-  { icon: "🚐", text: "Eigener Van, 27 Aargauer PLZ" },
-  { icon: "☀️", text: "Auch am Sonntag geliefert" },
-  { icon: "🌱", text: "Frisch aus der Werkstatt" },
-];
 
 const CARE_STEPS = [
   "Stiele schräg anschneiden",
