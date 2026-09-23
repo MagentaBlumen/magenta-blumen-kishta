@@ -120,12 +120,12 @@ export default async function EditProductPage({ params }: PageProps) {
   const updateWithId = updateProduct.bind(null, id);
 
   // Variant labels for the image → variant assignment dropdown.
-  // Format: "Klein — 35.00 CHF" or "— 35.00 CHF" if the variant has no label.
+  // Format: "Klein . 35.00 CHF" or ". 35.00 CHF" if the variant has no label.
   const variantOptions = variantRows.map((v) => ({
     id: v.id,
     label: v.sizeLabelDe
-      ? `${v.sizeLabelDe} — ${v.priceGross} CHF`
-      : `— ${v.priceGross} CHF`,
+      ? `${v.sizeLabelDe} . ${v.priceGross} CHF`
+      : `. ${v.priceGross} CHF`,
   }));
 
   return (

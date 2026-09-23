@@ -82,7 +82,7 @@ export function VariantsEditor({ initial }: { initial: VariantRow[] }) {
                   id={`variant-${idx}-size`}
                   value={row.sizeLabelDe}
                   onChange={(e) => update(idx, { sizeLabelDe: e.target.value })}
-                  placeholder="z.B. Klein, Mittel, Gross — leer für per_unit"
+                  placeholder="z.B. Klein, Mittel, Gross . leer für per_unit"
                 />
               </div>
               <div className="space-y-1.5">

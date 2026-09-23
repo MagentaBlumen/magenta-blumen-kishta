@@ -112,7 +112,7 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
           <h2 className="text-lg font-medium">MWST-Sätze</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Nur zur Ansicht. Änderungen erfordern Rücksprache mit dem
-            Treuhänder — siehe <code className="text-xs">docs/vat-rates.md</code>.
+            Treuhänder . siehe <code className="text-xs">docs/vat-rates.md</code>.
           </p>
         </div>
         <div className="rounded-lg border overflow-hidden divide-y">

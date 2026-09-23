@@ -19,7 +19,7 @@ export function EditorialFeature() {
           {/* Overlay badge with a quote */}
           <div className="absolute -bottom-4 right-4 bg-cream border border-mist px-6 py-4 max-w-[220px]">
             <p className="text-[0.75rem] text-bark leading-relaxed font-display italic">
-              «Jeder Strauss von Hand — kein Sortiment, keine Massenware.»
+              «Jeder Strauss von Hand . kein Sortiment, keine Massenware.»
             </p>
           </div>
         </div>
@@ -34,7 +34,7 @@ export function EditorialFeature() {
           <div className="space-y-4 text-[0.9rem] text-bark/75 leading-[1.7] font-light">
             <p>
               Magenta Blumen ist ein kleiner Blumenladen in Neuenhof. Die
-              Inhaberin bindet jeden Strauss selbst — die Farben entstehen
+              Inhaberin bindet jeden Strauss selbst . die Farben entstehen
               nach ihrem Auge, nicht nach einem Katalog.
             </p>
             <p>

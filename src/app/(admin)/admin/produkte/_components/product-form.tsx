@@ -115,7 +115,7 @@ export function ProductForm({
           name="taxRateId"
           defaultValue={product?.taxRateId != null ? String(product.taxRateId) : ""}
           options={[
-            { value: "", label: "— nicht gesetzt —" },
+            { value: "", label: ". nicht gesetzt ." },
             ...taxRates.map((t) => ({
               value: String(t.id),
               label: `${t.nameDe} (${t.code})`,

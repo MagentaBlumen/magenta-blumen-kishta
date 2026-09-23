@@ -73,7 +73,7 @@ function renderPrice(product: ProductCardData): string {
   if (product.pricingMode === "enquiry") return "Auf Anfrage";
   if (product.pricingMode === "per_unit") {
     const p = product.variantPrices[0];
-    return p ? `${formatChf(p)} / Stück` : "—";
+    return p ? `${formatChf(p)} / Stück` : ".";
   }
   const min = minPrice(product.variantPrices);
   return product.variantPrices.length > 1 ? formatChfFrom(min) : formatChf(min);

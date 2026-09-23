@@ -15,7 +15,7 @@ type Image = {
  *
  * Layout collapses on mobile: thumbs move under the main image as a
  * horizontal scroll row. The Figma has 3/4 portrait aspect for the
- * main image — bouquets and stems photograph tall.
+ * main image . bouquets and stems photograph tall.
  */
 export function ProductGallery({
   images,

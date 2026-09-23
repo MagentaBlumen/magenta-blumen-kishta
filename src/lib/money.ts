@@ -24,14 +24,14 @@ export function parseNumeric(input: string | null | undefined): number | null {
 /** "35.00" -> "CHF 35.00". Null / invalid -> "-". */
 export function formatChf(input: string | null | undefined): string {
   const n = parseNumeric(input);
-  if (n == null) return "—";
+  if (n == null) return ".";
   return `CHF ${n.toFixed(2)}`;
 }
 
 /** For product cards where multiple variants exist: "ab CHF 35.00". */
 export function formatChfFrom(input: string | null | undefined): string {
   const n = parseNumeric(input);
-  if (n == null) return "—";
+  if (n == null) return ".";
   return `ab CHF ${n.toFixed(2)}`;
 }
 

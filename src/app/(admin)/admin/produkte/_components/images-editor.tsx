@@ -22,7 +22,7 @@ export type ExistingImage = {
 
 type VariantOption = {
   id: number;
-  label: string; // "Klein — 35.00 CHF"
+  label: string; // "Klein . 35.00 CHF"
 };
 
 type Props = {
@@ -186,7 +186,7 @@ function ImageRow({
             defaultValue={image.variantId != null ? String(image.variantId) : ""}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
           >
-            <option value="">— ganzes Produkt —</option>
+            <option value="">. ganzes Produkt .</option>
             {variants.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label}

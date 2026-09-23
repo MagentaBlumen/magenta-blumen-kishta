@@ -19,7 +19,7 @@ import { slugify } from "@/lib/slug";
 /**
  * Storefront uses unstable_cache with tags (see src/lib/cached-storefront.ts).
  * Admin writes bust exactly the right cache entries via updateTag (Next 16
- * server-action API — immediate, read-your-own-writes semantics).
+ * server-action API . immediate, read-your-own-writes semantics).
  *
  * Tags in play:
  *   'products'          - drops ALL product-derived cache entries

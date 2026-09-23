@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const kind = cat.kind === "occasion" ? "Anlass" : "Sortiment";
   return {
     title: cat.nameDe,
-    description: `${cat.nameDe} — ${kind} bei Magenta Blumen. Blumen aus Neuenhof, Lieferung im Aargau.`,
+    description: `${cat.nameDe} . ${kind} bei Magenta Blumen. Blumen aus Neuenhof, Lieferung im Aargau.`,
     alternates: { canonical: `/kategorie/${slug}` },
   };
 }

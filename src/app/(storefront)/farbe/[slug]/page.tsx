@@ -14,7 +14,7 @@ type PageProps = {
 };
 
 /**
- * Fallback for the "bunt" swatch — attribute_value.hex is NULL for
+ * Fallback for the "bunt" swatch . attribute_value.hex is NULL for
  * that value so we render a conic gradient covering the rainbow.
  * Matches the fallback used on the product detail page.
  */
@@ -129,7 +129,7 @@ export default async function ColourPage({ params }: PageProps) {
 
 /**
  * Rough dark-swatch check: pure JS relative luminance of the hex.
- * NULL hex ("bunt") — treat as light-ish since the gradient has cream
+ * NULL hex ("bunt") . treat as light-ish since the gradient has cream
  * regions bookending it.
  */
 function isDarkSwatch(hex: string | null): boolean {
@@ -139,7 +139,7 @@ function isDarkSwatch(hex: string | null): boolean {
   const r = parseInt(m[1], 16);
   const g = parseInt(m[2], 16);
   const b = parseInt(m[3], 16);
-  // Rec. 601 luma. < 140 counts as dark — tuned to flip on the
+  // Rec. 601 luma. < 140 counts as dark . tuned to flip on the
   // Magenta rose (#a0185a) and other saturated brand hues.
   const luma = 0.299 * r + 0.587 * g + 0.114 * b;
   return luma < 140;

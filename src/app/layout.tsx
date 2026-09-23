@@ -16,11 +16,11 @@ const SITE_URL =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Magenta Blumen — Blumen aus Neuenhof",
+    default: "Magenta Blumen . Blumen aus Neuenhof",
     template: "%s · Magenta Blumen",
   },
   description:
-    "Frische Blumen aus Neuenhof AG. Lieferung im Aargau — zwei Touren täglich, auch am Sonntag.",
+    "Frische Blumen aus Neuenhof AG. Lieferung im Aargau . zwei Touren täglich, auch am Sonntag.",
   applicationName: "Magenta Blumen",
   keywords: [
     "Blumen Neuenhof",
@@ -36,15 +36,15 @@ export const metadata: Metadata = {
     type: "website",
     locale: "de_CH",
     siteName: "Magenta Blumen",
-    title: "Magenta Blumen — Blumen aus Neuenhof",
+    title: "Magenta Blumen . Blumen aus Neuenhof",
     description:
-      "Frische Blumen aus Neuenhof AG. Lieferung im Aargau — zwei Touren täglich, auch am Sonntag.",
+      "Frische Blumen aus Neuenhof AG. Lieferung im Aargau . zwei Touren täglich, auch am Sonntag.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Magenta Blumen — Blumen aus Neuenhof",
+    title: "Magenta Blumen . Blumen aus Neuenhof",
     description:
-      "Frische Blumen aus Neuenhof AG. Lieferung im Aargau — zwei Touren täglich, auch am Sonntag.",
+      "Frische Blumen aus Neuenhof AG. Lieferung im Aargau . zwei Touren täglich, auch am Sonntag.",
   },
   robots: {
     index: true,

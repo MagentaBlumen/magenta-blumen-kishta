@@ -15,10 +15,10 @@ type Variant = {
  * Size-pill variant selector + prominent price display.
  *
  * Selected variant drives the big price shown above the pills.
- * Sold-out variants render greyed and non-clickable (rule 7 — no
+ * Sold-out variants render greyed and non-clickable (rule 7 . no
  * integer stock, availability is boolean; sold-out never hidden).
  *
- * Note: no add-to-cart wiring — that lands in Session 5. This
+ * Note: no add-to-cart wiring . that lands in Session 5. This
  * component's role today is visual + preparing the shape the cart
  * action will consume.
  */
@@ -64,7 +64,7 @@ export function ProductVariantPicker({ variants }: { variants: Variant[] }) {
             Grösse
             {selected.sizeLabelDe && (
               <span className="text-sage font-normal tracking-normal normal-case ml-2">
-                — {selected.sizeLabelDe}
+                . {selected.sizeLabelDe}
               </span>
             )}
           </p>

@@ -49,7 +49,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
   );
 
   // Prefer a range category ("Sträusse", "Rosen") as the eyebrow line
-  // above the title — matches Figma's use of the variety label. Fall
+  // above the title . matches Figma's use of the variety label. Fall
   // back to the first category, or nothing.
   const eyebrow =
     categories.find((c) => c.kind === "range")?.nameDe ??
@@ -142,7 +142,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
           )}
 
           {/* Placeholder where add-to-cart lands in Session 5. Kept as a
-              plain notice — no fake button, no wishlist. */}
+              plain notice . no fake button, no wishlist. */}
           {p.pricingMode !== "enquiry" && (
             <div className="mt-8 px-4 py-3 bg-cream border border-mist text-[0.75rem] text-sage">
               Die Online-Bestellung wird in Kürze aufgeschaltet. Rufen Sie
@@ -209,7 +209,7 @@ function EnquiryBlock() {
         Nur auf Anfrage
       </p>
       <p className="text-[0.78rem] text-sage mt-1.5">
-        Hochzeit, Trauer, Event, Gärtnerservice — bitte kontaktieren Sie uns direkt.
+        Hochzeit, Trauer, Event, Gärtnerservice . bitte kontaktieren Sie uns direkt.
       </p>
     </div>
   );

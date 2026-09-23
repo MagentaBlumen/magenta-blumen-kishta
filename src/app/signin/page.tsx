@@ -34,7 +34,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Magenta Blumen — Admin</CardTitle>
+          <CardTitle>Magenta Blumen . Admin</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={handleSignIn} className="space-y-4">
