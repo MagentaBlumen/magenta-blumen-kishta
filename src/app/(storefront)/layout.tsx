@@ -1,6 +1,7 @@
 import { AnnouncementBar } from "@/components/storefront/announcement-bar";
 import { SiteHeader } from "@/components/storefront/site-header";
 import { SiteFooter } from "@/components/storefront/site-footer";
+import { LocalBusinessJsonLd } from "@/components/storefront/local-business-jsonld";
 
 // Storefront caching: individual pages set `export const revalidate = 300`
 // (5-minute stale-while-revalidate). Admin write actions call
@@ -17,6 +18,7 @@ export default function StorefrontLayout({
 }) {
   return (
     <div className="min-h-screen flex flex-col bg-ivory text-bark">
+      <LocalBusinessJsonLd />
       <AnnouncementBar />
       <SiteHeader />
       <main className="flex-1">{children}</main>

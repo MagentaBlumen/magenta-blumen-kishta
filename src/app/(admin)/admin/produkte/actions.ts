@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/auth";
@@ -17,20 +17,30 @@ import {
 import { slugify } from "@/lib/slug";
 
 /**
- * Storefront has ISR (5 min revalidate) - so admin writes that should
- * appear immediately need to call this. Invalidates:
- *   - home page (product may appear in "Neu im Shop")
- *   - product detail page for this product
- *   - each category page the product belongs to
+ * Storefront uses unstable_cache with tags (see src/lib/cached-storefront.ts).
+ * Admin writes bust exactly the right cache entries via updateTag (Next 16
+ * server-action API — immediate, read-your-own-writes semantics).
  *
- * Uses revalidatePath, not revalidateTag, because our storefront queries
- * don't tag their cache entries. Path-based works fine at our scale.
+ * Tags in play:
+ *   'products'          - drops ALL product-derived cache entries
+ *                         (featured, category grids, product detail bundles)
+ *   `product:<slug>`    - drops just this product's detail entries
+ *   `category:<slug>`   - drops just one category grid + its metadata
+ *   'categories'        - drops the categories-list cache
+ *
+ * We also call revalidatePath for good measure - path-based invalidation
+ * catches anything not covered by tags (e.g. sitemap, admin views).
  */
 async function revalidateStorefrontForProduct(
   productId: number,
   productSlug: string,
   categoryIds: number[],
 ) {
+  // Tag-based (fine-grained, drops unstable_cache entries)
+  updateTag("products");
+  updateTag(`product:${productSlug}`);
+
+  // Path-based (backup - forces re-render of these specific URLs)
   revalidatePath("/");
   revalidatePath(`/produkt/${productSlug}`);
 
@@ -40,6 +50,7 @@ async function revalidateStorefrontForProduct(
       .from(category)
       .where(inArray(category.id, categoryIds));
     for (const c of cats) {
+      updateTag(`category:${c.slug}`);
       revalidatePath(`/kategorie/${c.slug}`);
     }
   }

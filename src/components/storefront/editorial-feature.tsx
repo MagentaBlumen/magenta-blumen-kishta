@@ -12,7 +12,7 @@ export function EditorialFeature() {
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="https://images.unsplash.com/photo-1632839846357-9d9bb6681038?w=800&h=1000&fit=crop&auto=format"
+            src="/images/uber uns.jpg"
             alt="Person hält einen Blumenstrauss"
             className="w-full block bg-mist aspect-[4/5] object-cover"
           />

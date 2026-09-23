@@ -1,76 +1,50 @@
-export const dynamic = 'force-dynamic';
-
 import Link from "next/link";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { db } from "@/db/client";
-import {
-  category,
-  product,
-  productImage,
-  productVariant,
-} from "@/db/schema/catalogue";
-import { ProductCard, type ProductCardData } from "@/components/storefront/product-card";
+import type { Metadata } from "next";
 import { Hero } from "@/components/storefront/hero";
 import { TrustStrip } from "@/components/storefront/trust-strip";
 import { OccasionTile } from "@/components/storefront/occasion-tile";
 import { EditorialFeature } from "@/components/storefront/editorial-feature";
+import { ProductCard } from "@/components/storefront/product-card";
+import {
+  getFeaturedProducts,
+  getHomeOccasionCategories,
+} from "@/lib/cached-storefront";
 
-// ISR: prerender at build, refresh every 5 min. Admin write actions
-// call revalidatePath('/') for immediate updates.
-export const revalidate = 300;
+// Page renders dynamically per request (so Docker build works without a
+// live DB), but the DB queries below live in unstable_cache with a 5-min
+// TTL + tag-based invalidation. Effect: functionally equivalent to ISR
+// - first request per window hits Postgres, subsequent renders in that
+// window are cache hits. Admin edits call revalidateTag('products') to
+// bust the cache immediately. See src/lib/cached-storefront.ts.
+export const dynamic = "force-dynamic";
 
-/**
- * Home page - full Figma layout, wired to our real DB.
- *
- * Sections top-to-bottom:
- *   Hero (image + serif heading with italic emphasis + CTA)
- *   TrustStrip (4 icons - real delivery model, not "next-day nationwide")
- *   Featured products grid ("Die schönsten Blüten dieser Woche") with
- *     a small filter row that maps to real range categories
- *   Occasion tiles ("Nach Anlass shoppen")
- *   Editorial feature (about the shop)
- */
+export const metadata: Metadata = {
+  // Root layout has a default title / description; the home page can
+  // stay with those (they describe the shop itself). No override.
+  alternates: {
+    canonical: "/",
+  },
+};
 
 // Hardcoded imagery for occasion tiles. When the category schema grows
 // an image_url column we swap this for a DB read. Skipping the schema
 // change until the design settles.
+// Images for occasion tiles from /public/images.
 const OCCASION_TILE_IMAGES: Record<string, string> = {
-  geburtstag:
-    "https://images.unsplash.com/photo-1667010723263-8ad9a8f5f6c6?w=600&h=750&fit=crop&auto=format",
-  liebe:
-    "https://images.unsplash.com/photo-1561826336-37bdb1339994?w=600&h=750&fit=crop&auto=format",
-  danke:
-    "https://images.unsplash.com/photo-1589243853654-393fcf7c870b?w=600&h=750&fit=crop&auto=format",
-  trauer:
-    "https://images.unsplash.com/photo-1615488913817-095134dfeb54?w=600&h=750&fit=crop&auto=format",
+  geburtstag: "/images/birthday.jpg",
+  liebe: "/images/valentines.jpeg",
+  danke: "/images/danke.jpg",
+  trauer: "/images/funeral.jpg",
 };
 
-// Occasions the home tile grid highlights. Keep to 4 - matches Figma
-// visual weight. We deliberately don't show ALL occasion categories
-// here (would be too dense); the header nav dropdown covers the full
-// list.
 const HOME_OCCASION_SLUGS = ["geburtstag", "liebe", "danke", "trauer"];
 
 export default async function HomePage() {
   const [occasionRows, featured] = await Promise.all([
-    db
-      .select({
-        id: category.id,
-        slug: category.slug,
-        nameDe: category.nameDe,
-      })
-      .from(category)
-      .where(
-        and(
-          eq(category.kind, "occasion"),
-          inArray(category.slug, HOME_OCCASION_SLUGS),
-        ),
-      ),
-    loadFeaturedProducts(),
+    getHomeOccasionCategories(HOME_OCCASION_SLUGS),
+    getFeaturedProducts(),
   ]);
 
-  // Preserve HOME_OCCASION_SLUGS ordering (query returns in arbitrary
-  // order via inArray).
   const occasionsInOrder = HOME_OCCASION_SLUGS.flatMap((slug) => {
     const row = occasionRows.find((r) => r.slug === slug);
     if (!row) return [];
@@ -162,90 +136,4 @@ export default async function HomePage() {
       <EditorialFeature />
     </>
   );
-}
-
-async function loadFeaturedProducts(): Promise<ProductCardData[]> {
-  const rows = await db
-    .select({
-      id: product.id,
-      slug: product.slug,
-      nameDe: product.nameDe,
-      pricingMode: product.pricingMode,
-      isAvailable: product.isAvailable,
-    })
-    .from(product)
-    .where(
-      and(
-        eq(product.isArchived, false),
-        eq(product.isOnlineOrderable, true),
-      ),
-    )
-    .orderBy(desc(product.createdAt))
-    .limit(8);
-
-  return enrich(rows);
-}
-
-/**
- * Load the first image + available-variant prices for a set of products
- * in bulk (one query per join, not N+1).
- */
-export async function enrich(
-  products: Array<{
-    id: number;
-    slug: string;
-    nameDe: string;
-    pricingMode: "variant" | "per_unit" | "enquiry";
-    isAvailable: boolean;
-  }>,
-): Promise<ProductCardData[]> {
-  if (products.length === 0) return [];
-  const ids = products.map((p) => p.id);
-
-  const [images, variants] = await Promise.all([
-    db
-      .select({
-        productId: productImage.productId,
-        url: productImage.url,
-        altDe: productImage.altDe,
-        sortOrder: productImage.sortOrder,
-      })
-      .from(productImage)
-      .where(inArray(productImage.productId, ids))
-      .orderBy(asc(productImage.sortOrder), asc(productImage.id)),
-    db
-      .select({
-        productId: productVariant.productId,
-        priceGross: productVariant.priceGross,
-        isAvailable: productVariant.isAvailable,
-      })
-      .from(productVariant)
-      .where(inArray(productVariant.productId, ids))
-      .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
-  ]);
-
-  const firstImageFor = new Map<number, (typeof images)[number]>();
-  for (const img of images) {
-    if (!firstImageFor.has(img.productId)) firstImageFor.set(img.productId, img);
-  }
-  const variantsFor = new Map<number, string[]>();
-  for (const v of variants) {
-    if (!v.isAvailable) continue;
-    const arr = variantsFor.get(v.productId) ?? [];
-    arr.push(v.priceGross);
-    variantsFor.set(v.productId, arr);
-  }
-
-  return products.map((p) => {
-    const img = firstImageFor.get(p.id);
-    return {
-      slug: p.slug,
-      nameDe: p.nameDe,
-      pricingMode: p.pricingMode,
-      isAvailable: p.isAvailable,
-      imageUrl: img?.url ?? null,
-      imageAlt: img?.altDe ?? null,
-      variantPrices: variantsFor.get(p.id) ?? [],
-    };
-  });
 }

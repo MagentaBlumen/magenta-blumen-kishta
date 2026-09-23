@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { asc, eq, max } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
@@ -88,6 +88,9 @@ export async function uploadProductImage(
   });
 
   revalidatePath(`/admin/produkte/${productId}`);
+  // Image affects the product's storefront card + detail. Broad
+  // invalidation is fine at admin-write frequency.
+  updateTag("products");
 }
 
 /**
@@ -140,6 +143,7 @@ export async function updateProductImageMeta(
     .where(eq(productImage.id, imageId));
 
   revalidatePath(`/admin/produkte/${img.productId}`);
+  updateTag("products");
 }
 
 /**
@@ -179,6 +183,7 @@ export async function deleteProductImage(imageId: number): Promise<void> {
   }
 
   revalidatePath(`/admin/produkte/${img.productId}`);
+  updateTag("products");
 }
 
 /**
@@ -240,5 +245,6 @@ export async function moveProductImage(
 
   if (productIdForRevalidate !== null) {
     revalidatePath(`/admin/produkte/${productIdForRevalidate}`);
+    updateTag("products");
   }
 }

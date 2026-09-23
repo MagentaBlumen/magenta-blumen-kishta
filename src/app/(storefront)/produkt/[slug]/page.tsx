@@ -1,125 +1,103 @@
-import { and, asc, eq } from "drizzle-orm";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { db } from "@/db/client";
-import {
-  attribute,
-  attributeValue,
-  category,
-  product,
-  productAttributeValue,
-  productCategory,
-  productImage,
-  productVariant,
-} from "@/db/schema/catalogue";
-import { largeUrl, thumbUrl } from "@/lib/image-urls";
-import { formatChf } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
+import { largeUrl, thumbUrl } from "@/lib/image-urls";
+import { formatChf, minPrice } from "@/lib/money";
+import {
+  getProductBySlug,
+  getProductDetailBundle,
+} from "@/lib/cached-storefront";
 
-// ISR: 5-min stale-while-revalidate. Admin edits call
-// revalidatePath('/produkt/[slug]', 'page') for immediate updates.
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const p = await getProductBySlug(slug);
+  if (!p) return { title: "Produkt nicht gefunden" };
+
+  // Description: prefer meta_description_de if the admin filled it in,
+  // else fall back to the first ~160 chars of the product description,
+  // else a generic sentence.
+  const rawDesc =
+    p.metaDescriptionDe?.trim() ||
+    p.descriptionDe?.trim().slice(0, 160) ||
+    `${p.nameDe} bei Magenta Blumen. Blumen aus Neuenhof, Lieferung im Aargau.`;
+
+  return {
+    title: p.metaTitleDe?.trim() || p.nameDe,
+    description: rawDesc,
+    alternates: { canonical: `/produkt/${slug}` },
+    openGraph: {
+      title: p.metaTitleDe?.trim() || p.nameDe,
+      description: rawDesc,
+      type: "website",
+    },
+  };
+}
+
 export default async function ProductDetailPage({ params }: PageProps) {
   const { slug } = await params;
+  const p = await getProductBySlug(slug);
+  if (!p) notFound();
 
-  const [productRow] = await db
-    .select()
-    .from(product)
-    .where(
-      and(eq(product.slug, slug), eq(product.isArchived, false)),
-    )
-    .limit(1);
-
-  if (!productRow) notFound();
-
-  const [variants, images, colours, categories] = await Promise.all([
-    db
-      .select()
-      .from(productVariant)
-      .where(eq(productVariant.productId, productRow.id))
-      .orderBy(asc(productVariant.sortOrder), asc(productVariant.id)),
-    db
-      .select()
-      .from(productImage)
-      .where(eq(productImage.productId, productRow.id))
-      .orderBy(asc(productImage.sortOrder), asc(productImage.id)),
-    db
-      .select({
-        value: attributeValue.value,
-        nameDe: attributeValue.nameDe,
-        hex: attributeValue.hex,
-      })
-      .from(productAttributeValue)
-      .innerJoin(
-        attributeValue,
-        eq(attributeValue.id, productAttributeValue.attributeValueId),
-      )
-      .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
-      .where(
-        and(
-          eq(productAttributeValue.productId, productRow.id),
-          eq(attribute.key, "colour"),
-        ),
-      ),
-    db
-      .select({
-        slug: category.slug,
-        nameDe: category.nameDe,
-        kind: category.kind,
-      })
-      .from(category)
-      .innerJoin(productCategory, eq(productCategory.categoryId, category.id))
-      .where(eq(productCategory.productId, productRow.id)),
-  ]);
+  const { variants, images, colours, categories } = await getProductDetailBundle(
+    p.id,
+    p.slug,
+  );
 
   const heroImage = images[0] ?? null;
   const galleryImages = images.slice(1);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <nav className="text-sm text-muted-foreground mb-6">
-        <Link href="/" className="hover:text-foreground">
+    <div className="max-w-7xl mx-auto px-4 lg:px-6 py-10 lg:py-14">
+      {/* -------- Structured data: Product schema.org -------- */}
+      <ProductJsonLd
+        product={p}
+        variants={variants}
+        image={heroImage}
+        colours={colours}
+      />
+
+      <nav className="text-[0.75rem] text-sage mb-6">
+        <Link href="/" className="hover:text-bark">
           Startseite
         </Link>
         {" / "}
-        <span>{productRow.nameDe}</span>
+        <span>{p.nameDe}</span>
       </nav>
 
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid gap-10 md:grid-cols-2">
         {/* -------- Image column -------- */}
         <div className="space-y-3">
-          <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+          <div className="relative aspect-square overflow-hidden bg-mist">
             {heroImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={largeUrl(heroImage.url)}
-                alt={heroImage.altDe ?? productRow.nameDe}
+                alt={heroImage.altDe ?? p.nameDe}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
+              <div className="w-full h-full flex items-center justify-center text-[0.75rem] text-sage uppercase tracking-wider">
                 Kein Bild
               </div>
             )}
-            {!productRow.isAvailable && (
-              <div className="absolute top-3 right-3 rounded-md bg-background/90 px-3 py-1 text-sm font-medium">
+            {!p.isAvailable && (
+              <span className="absolute top-4 right-4 bg-ivory/95 text-bark text-[0.68rem] tracking-[0.14em] uppercase font-medium px-3 py-1.5">
                 Ausverkauft
-              </div>
+              </span>
             )}
           </div>
 
           {galleryImages.length > 0 && (
             <div className="grid grid-cols-5 gap-2">
               {galleryImages.map((img) => (
-                <div
-                  key={img.id}
-                  className="aspect-square rounded-md overflow-hidden bg-muted"
-                >
+                <div key={img.id} className="aspect-square overflow-hidden bg-mist">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={thumbUrl(img.url)}
@@ -136,17 +114,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
         {/* -------- Info column -------- */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-              {productRow.nameDe}
+            <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
+              {p.nameDe}
             </h1>
             {categories.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="flex flex-wrap gap-1.5 mt-4">
                 {categories.map((c) => (
-                  <Link
-                    key={c.slug}
-                    href={`/kategorie/${c.slug}`}
-                  >
-                    <Badge variant="outline">{c.nameDe}</Badge>
+                  <Link key={c.slug} href={`/kategorie/${c.slug}`}>
+                    <Badge variant="outline" className="border-mist text-sage hover:text-bark hover:border-bark">
+                      {c.nameDe}
+                    </Badge>
                   </Link>
                 ))}
               </div>
@@ -155,15 +132,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
           {colours.length > 0 && (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Farbe</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark">
+                Farbe
+              </div>
+              <div className="flex flex-wrap gap-3">
                 {colours.map((c) => (
-                  <div
-                    key={c.value}
-                    className="flex items-center gap-2 text-sm"
-                  >
+                  <div key={c.value} className="flex items-center gap-2 text-[0.85rem] text-bark">
                     <span
-                      className="inline-block h-4 w-4 rounded-full border border-neutral-300"
+                      className="inline-block h-5 w-5 rounded-full border border-mist"
                       style={{
                         background:
                           c.hex ??
@@ -178,22 +154,20 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Pricing block */}
-          <PricingBlock
-            pricingMode={productRow.pricingMode}
-            variants={variants}
-          />
+          <PricingBlock pricingMode={p.pricingMode} variants={variants} />
 
-          {productRow.descriptionDe && (
-            <div className="pt-4 border-t space-y-2">
-              <div className="text-sm font-medium">Beschreibung</div>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
-                {productRow.descriptionDe}
+          {p.descriptionDe && (
+            <div className="pt-4 border-t border-mist space-y-2">
+              <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark">
+                Beschreibung
+              </div>
+              <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light whitespace-pre-line">
+                {p.descriptionDe}
               </p>
             </div>
           )}
 
-          <div className="pt-4 border-t text-xs text-muted-foreground">
+          <div className="pt-4 border-t border-mist text-[0.75rem] text-sage">
             Bestellfunktion wird bald verfügbar sein.
           </div>
         </div>
@@ -217,9 +191,9 @@ function PricingBlock({
 }) {
   if (pricingMode === "enquiry") {
     return (
-      <div className="rounded-lg border p-4 bg-muted/40">
-        <div className="text-sm font-medium">Nur auf Anfrage</div>
-        <div className="text-xs text-muted-foreground mt-1">
+      <div className="border border-mist p-4 bg-cream space-y-1">
+        <div className="text-[0.85rem] font-medium text-bark">Nur auf Anfrage</div>
+        <div className="text-[0.75rem] text-sage">
           Hochzeit, Trauer, Event, Gärtnerservice — bitte kontaktieren Sie
           uns direkt.
         </div>
@@ -229,7 +203,7 @@ function PricingBlock({
 
   if (variants.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <div className="text-[0.85rem] text-sage">
         Zurzeit keine Varianten verfügbar.
       </div>
     );
@@ -238,20 +212,21 @@ function PricingBlock({
   if (pricingMode === "per_unit") {
     const v = variants[0];
     return (
-      <div className="text-2xl font-semibold tabular-nums">
+      <div className="text-2xl font-display text-bark tabular-nums">
         {formatChf(v.priceGross)}
-        <span className="text-sm text-muted-foreground font-normal ml-2">
+        <span className="text-[0.85rem] text-sage font-body font-normal ml-2">
           / Stück
         </span>
       </div>
     );
   }
 
-  // variant mode - table of options
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium">Varianten</div>
-      <div className="rounded-lg border divide-y">
+      <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark">
+        Varianten
+      </div>
+      <div className="border border-mist divide-y divide-mist">
         {variants.map((v) => (
           <div
             key={v.id}
@@ -259,20 +234,74 @@ function PricingBlock({
               !v.isAvailable ? "opacity-50" : ""
             }`}
           >
-            <div className="text-sm">
+            <div className="text-[0.85rem] text-bark">
               {v.sizeLabelDe || "Standard"}
               {!v.isAvailable && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  (ausverkauft)
-                </span>
+                <span className="ml-2 text-[0.7rem] text-sage">(ausverkauft)</span>
               )}
             </div>
-            <div className="tabular-nums font-medium">
+            <div className="tabular-nums font-medium text-bark">
               {formatChf(v.priceGross)}
             </div>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+function ProductJsonLd({
+  product: p,
+  variants,
+  image,
+  colours,
+}: {
+  product: {
+    slug: string;
+    nameDe: string;
+    descriptionDe: string | null;
+    isAvailable: boolean;
+    pricingMode: "variant" | "per_unit" | "enquiry";
+  };
+  variants: Array<{ priceGross: string; isAvailable: boolean }>;
+  image: { url: string } | null;
+  colours: Array<{ nameDe: string }>;
+}) {
+  // schema.org Product. Uses aggregate price (lowest across available
+  // variants) so search results can show a price. Skip entirely for
+  // enquiry-only products - there's no meaningful offer.
+  if (p.pricingMode === "enquiry") return null;
+
+  const availablePrices = variants.filter((v) => v.isAvailable).map((v) => v.priceGross);
+  const lowestPrice = minPrice(availablePrices);
+  const availability = p.isAvailable && availablePrices.length > 0
+    ? "https://schema.org/InStock"
+    : "https://schema.org/OutOfStock";
+
+  const data: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: p.nameDe,
+    description: p.descriptionDe ?? undefined,
+    image: image ? largeUrl(image.url) : undefined,
+    brand: { "@type": "Brand", name: "Magenta Blumen" },
+    ...(colours.length > 0 && { color: colours.map((c) => c.nameDe).join(", ") }),
+    offers: lowestPrice
+      ? {
+          "@type": "Offer",
+          priceCurrency: "CHF",
+          price: lowestPrice,
+          availability,
+          url: `/produkt/${p.slug}`,
+        }
+      : undefined,
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      // eslint-disable-next-line react/no-danger
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+    />
   );
 }

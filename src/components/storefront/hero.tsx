@@ -13,9 +13,9 @@ export function Hero() {
     <section className="relative min-h-[min(92vh,700px)] overflow-hidden bg-mist flex items-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="https://images.unsplash.com/photo-1782038522759-d4e76b087a8f?w=1800&h=1100&fit=crop&auto=format"
-        alt="Frische Blumen in einem Blumenladen"
-        className="absolute inset-0 w-full h-full object-cover object-[center_top]"
+          src="/images/FrontCoverPageImage.jpg"
+          alt="Frische Blumen in einem Blumenladen"
+          className="absolute inset-0 w-full h-full object-cover object-[center_top]"
       />
       {/* Left-to-right ivory gradient so text on the left stays readable */}
       <div
@@ -34,9 +34,9 @@ export function Hero() {
           von Hand gebunden.
         </h1>
         <p className="text-[0.9rem] text-bark/70 leading-[1.7] mb-8 font-light">
-          Kleine Blumen-Werkstatt in Neuenhof AG.
+          Blumen-Werkstatt in Neuenhof AG.
           <br />
-          Lieferung in 27 Aargauer Postleitzahlen — mit unserem eigenen Van, auch am Sonntag.
+          Lieferung in 27 Aargauer Postleitzahlen mit unserem eigenen Van, auch am Sonntag.
         </p>
         <Link
           href="/kategorie/alle-anlaesse"
