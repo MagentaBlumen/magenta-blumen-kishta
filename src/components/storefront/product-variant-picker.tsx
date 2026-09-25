@@ -150,21 +150,23 @@ export function ProductVariantPicker({
         </div>
       )}
 
-      {/* -------- Qty + Add -------- */}
+      {/* -------- Qty + Add --------
+          Mobile: stepper stretches full width (thirds), Add stacked full width below.
+          sm+   : stepper at intrinsic width, Add fills remaining space. */}
       <div className="pt-6 flex flex-col sm:flex-row gap-3">
-        <div className="flex items-center border border-mist h-[50px] flex-shrink-0">
+        <div className="flex items-center border border-mist h-[50px] w-full sm:w-auto sm:flex-shrink-0">
           <button
             type="button"
             onClick={() => handleQty(-1)}
             disabled={qty <= 1}
             aria-label="Menge verringern"
-            className="w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-1/3 sm:w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             −
           </button>
           <span
             aria-live="polite"
-            className="w-9 text-center text-[0.88rem] font-medium text-bark tabular-nums"
+            className="w-1/3 sm:w-9 text-center text-[0.88rem] font-medium text-bark tabular-nums"
           >
             {qty}
           </span>
@@ -173,7 +175,7 @@ export function ProductVariantPicker({
             onClick={() => handleQty(1)}
             disabled={qty >= 99}
             aria-label="Menge erhöhen"
-            className="w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-1/3 sm:w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             +
           </button>
@@ -183,7 +185,7 @@ export function ProductVariantPicker({
           type="button"
           onClick={handleAdd}
           disabled={!canBuy}
-          className={`flex-1 h-[50px] px-6 text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-colors ${
+          className={`w-full sm:flex-1 h-[50px] px-6 text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-colors ${
             feedback === "added"
               ? "bg-bark text-ivory"
               : "bg-rose text-ivory hover:bg-[#831249]"
