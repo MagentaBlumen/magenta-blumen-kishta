@@ -3,20 +3,19 @@
 import { useMemo, useState, useTransition } from "react";
 import { selectRunAction } from "@/lib/checkout/actions";
 import type { RunSlotDay } from "@/lib/checkout/slots";
+import { CheckoutDateCalendar } from "./checkout-date-calendar";
 
 /**
- * Two-dropdown run picker: Datum then Zeitfenster.
+ * Calendar + window buttons run picker.
  *
- * Only dates that have at least one AVAILABLE window appear in the
- * first dropdown. When a date is chosen, the second dropdown lists
- * only that day's available windows. Selecting a window auto-submits
- * (calls selectRunAction) - the server re-validates so the round-trip
- * is safe against a stale UI.
+ * Left column: month-view calendar. Only dates with >=1 available
+ * window are clickable; the rest are greyed with the German reason
+ * as tooltip. Right column: two segmented buttons for the day's
+ * windows (Vormittag / Nachmittag) - up to two, so buttons look
+ * better than a dropdown.
  *
- * A collapsed "Warum sind manche Tage nicht wählbar?" block lists the
- * days the classifier ruled out and their German reason, so the "no
- * unexplained greys" rule from the doc is preserved without the wall
- * of chips.
+ * Selecting a window auto-submits selectRunAction. Server re-validates
+ * so a stale UI is still safe.
  */
 export function RunSlotPicker({
   days,
@@ -28,40 +27,39 @@ export function RunSlotPicker({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Split available vs unavailable so the dropdown only offers real
-  // choices, and the "why not" block can explain the rest.
-  const availableDays = useMemo(
+  // Server dropped days with permanently-disabled slots already, but
+  // we still want to keep cutoff/capacity/lead-time disabled rows so
+  // the customer sees WHY their preferred date isn't clickable.
+  const availableDates = useMemo(
     () =>
       days
-        .map((d) => ({
-          ...d,
-          slots: d.slots.filter((s) => s.status.kind === "available"),
-        }))
-        .filter((d) => d.slots.length > 0),
+        .filter((d) => d.slots.some((s) => s.status.kind === "available"))
+        .map((d) => d.runDate),
     [days],
   );
 
-  const unavailableEntries = useMemo(() => {
-    const rows: { dateLabel: string; window: string; reason: string }[] = [];
+  const disabledReasons = useMemo(() => {
+    // One reason per disabled date, taking the first disabled slot's
+    // reason. If both windows are disabled, blackout/cutoff/capacity
+    // usually apply to both anyway; when they differ the tooltip is
+    // a hint, not a spec.
+    const availableSet = new Set(availableDates);
+    const rows: { isoDate: string; reasonDe: string }[] = [];
     for (const d of days) {
-      for (const s of d.slots) {
-        if (s.status.kind === "disabled") {
-          rows.push({
-            dateLabel: d.weekdayLabelDe,
-            window: s.windowLabelDe,
-            reason: s.status.reasonDe,
-          });
-        }
+      if (availableSet.has(d.runDate)) continue;
+      const firstDisabled = d.slots.find((s) => s.status.kind === "disabled");
+      if (firstDisabled && firstDisabled.status.kind === "disabled") {
+        rows.push({ isoDate: d.runDate, reasonDe: firstDisabled.status.reasonDe });
+      } else {
+        rows.push({ isoDate: d.runDate, reasonDe: "Nicht verfügbar" });
       }
     }
     return rows;
-  }, [days]);
+  }, [availableDates, days]);
 
-  // Initialise local selection state from the runId already in the
-  // cookie (server prop). Falls back to nothing.
   const initial = useMemo(() => {
     if (selectedRunId === undefined) return { date: "", runId: undefined };
-    for (const d of availableDays) {
+    for (const d of days) {
       for (const s of d.slots) {
         if (s.runId === selectedRunId) {
           return { date: d.runDate, runId: s.runId };
@@ -69,17 +67,21 @@ export function RunSlotPicker({
       }
     }
     return { date: "", runId: undefined };
-  }, [availableDays, selectedRunId]);
+  }, [days, selectedRunId]);
 
   const [pickedDate, setPickedDate] = useState<string>(initial.date);
   const [pickedRunId, setPickedRunId] = useState<number | undefined>(initial.runId);
 
   const windowsForDate = useMemo(() => {
     if (!pickedDate) return [];
-    return availableDays.find((d) => d.runDate === pickedDate)?.slots ?? [];
-  }, [availableDays, pickedDate]);
+    const day = days.find((d) => d.runDate === pickedDate);
+    if (!day) return [];
+    return day.slots.filter((s) => s.status.kind === "available");
+  }, [days, pickedDate]);
 
-  if (availableDays.length === 0) {
+  const horizonEndIso = days[days.length - 1]?.runDate;
+
+  if (availableDates.length === 0) {
     return (
       <div className="p-6 border border-mist text-[0.85rem] text-sage">
         Zurzeit sind keine Termine verfügbar. Bitte kontaktieren Sie uns
@@ -88,15 +90,13 @@ export function RunSlotPicker({
     );
   }
 
-  function handleDateChange(next: string) {
-    setPickedDate(next);
-    setPickedRunId(undefined); // reset window whenever date changes
+  function handleDatePick(iso: string) {
+    setPickedDate(iso);
+    setPickedRunId(undefined);
     setError(null);
   }
 
-  function handleWindowChange(nextRunIdStr: string) {
-    const runId = Number(nextRunIdStr);
-    if (!Number.isInteger(runId) || runId <= 0) return;
+  function handleWindowPick(runId: number) {
     setPickedRunId(runId);
     setError(null);
     startTransition(async () => {
@@ -116,67 +116,65 @@ export function RunSlotPicker({
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">
+        <div>
           <span className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark block mb-1.5">
             Datum
           </span>
-          <select
+          <CheckoutDateCalendar
+            availableDates={availableDates}
+            disabledReasons={disabledReasons}
             value={pickedDate}
-            onChange={(e) => handleDateChange(e.target.value)}
-            disabled={isPending}
-            className="w-full h-[46px] px-3 border border-mist bg-ivory text-bark text-[0.9rem] focus:outline-none focus:border-bark disabled:opacity-50"
-          >
-            <option value="">Bitte wählen</option>
-            {availableDays.map((d) => (
-              <option key={d.runDate} value={d.runDate}>
-                {d.weekdayLabelDe}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={handleDatePick}
+            horizonEndIso={horizonEndIso}
+          />
+        </div>
 
-        <label className="block">
+        <div>
           <span className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark block mb-1.5">
             Zeitfenster
           </span>
-          <select
-            value={pickedRunId ?? ""}
-            onChange={(e) => handleWindowChange(e.target.value)}
-            disabled={isPending || !pickedDate}
-            className="w-full h-[46px] px-3 border border-mist bg-ivory text-bark text-[0.9rem] focus:outline-none focus:border-bark disabled:opacity-50"
-          >
-            <option value="">{pickedDate ? "Bitte wählen" : "Zuerst Datum wählen"}</option>
-            {windowsForDate.map((s) => (
-              <option key={s.runId} value={s.runId}>
-                {s.windowLabelDe}
-              </option>
-            ))}
-          </select>
-        </label>
+          {pickedDate ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {windowsForDate.length === 0 ? (
+                <div className="col-span-2 p-3 border border-mist bg-cream text-[0.8rem] text-sage">
+                  Für dieses Datum sind keine Fenster verfügbar.
+                </div>
+              ) : (
+                windowsForDate.map((s) => {
+                  const isSelected = s.runId === pickedRunId;
+                  return (
+                    <button
+                      key={s.runId}
+                      type="button"
+                      onClick={() => handleWindowPick(s.runId)}
+                      disabled={isPending}
+                      aria-pressed={isSelected}
+                      className={`px-4 py-3 text-[0.78rem] tracking-[0.06em] font-medium border transition-colors ${
+                        isSelected
+                          ? "border-rose bg-rose text-ivory"
+                          : "border-mist text-bark hover:border-bark hover:bg-cream"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {s.windowLabelDe}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+            <div className="p-3 border border-dashed border-mist text-[0.8rem] text-sage">
+              Wählen Sie zuerst ein Datum.
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="text-[0.7rem] text-sage leading-[1.55]">
         Zwei Touren täglich mit unserem eigenen Van. Cutoff 3 Stunden vor
-        Beginn der Tour (Dienstag 24 Stunden).
+        Beginn der Tour (Dienstag 24 Stunden). Fahren Sie mit dem Cursor
+        über einen gesperrten Tag, um den Grund zu sehen.
       </p>
-
-      {unavailableEntries.length > 0 && (
-        <details className="text-[0.78rem] text-sage">
-          <summary className="cursor-pointer hover:text-bark">
-            Warum sind manche Tage nicht wählbar?
-          </summary>
-          <ul className="mt-2 space-y-1 pl-4 max-h-56 overflow-y-auto">
-            {unavailableEntries.map((r, i) => (
-              <li key={i} className="grid grid-cols-[110px_1fr_auto] gap-3 py-0.5">
-                <span className="tabular-nums text-bark">{r.dateLabel}</span>
-                <span className="text-sage">{r.window}</span>
-                <span className="text-sage text-right">{r.reason}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </div>
   );
 }
