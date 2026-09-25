@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { clearCheckoutCookie, patchCheckoutCookie } from "./cookie";
+import { clearCartCookie, readCartCookie } from "@/lib/cart/cookie";
+import { clearCheckoutCookie, patchCheckoutCookie, readCheckoutCookie } from "./cookie";
+import { reserveOrder, ReserveError } from "./reserve";
 import {
   getAvailableRunSlots,
   getAvailableTimedSlots,
@@ -299,4 +301,43 @@ function str(v: FormDataEntryValue | null): string {
 export async function resetCheckoutAction(): Promise<void> {
   await clearCheckoutCookie();
   revalidatePath("/kasse/lieferung");
+}
+
+// -------- Step 3: reserve the order --------
+//
+// Thin wrapper around reserveOrder that reads cookies, runs the
+// transaction, and on success clears cart + checkout cookies then
+// redirects to /kasse/erfolg?bestellnummer=<order_number>.
+//
+// ReserveError bubbles as a normal Error to the client's useTransition,
+// so its German message shows up in the review page's error banner.
+// Anything else is a real bug and we let it 500.
+
+export async function reserveOrderAction(
+  paymentMethodRaw: string,
+): Promise<void> {
+  const paymentMethod =
+    paymentMethodRaw === "cash" || paymentMethodRaw === "invoice"
+      ? paymentMethodRaw
+      : null;
+  if (!paymentMethod) throw new Error("Ungültige Zahlungsart.");
+
+  const [cart, checkout] = await Promise.all([
+    readCartCookie(),
+    readCheckoutCookie(),
+  ]);
+
+  let result;
+  try {
+    result = await reserveOrder({ cart, checkout, paymentMethod });
+  } catch (err) {
+    // Business errors surface with their German message; anything else
+    // is a real fault we want the error boundary + Sentry to see.
+    if (err instanceof ReserveError) throw new Error(err.message);
+    throw err;
+  }
+
+  await Promise.all([clearCartCookie(), clearCheckoutCookie()]);
+  revalidatePath("/", "layout");
+  redirect(`/kasse/erfolg?bestellnummer=${encodeURIComponent(result.orderNumber)}`);
 }
