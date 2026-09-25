@@ -27,7 +27,6 @@ const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
 if (!adminEmail || !adminPasswordHash) {
   // Warn but don't throw - CI builds without these should still succeed.
   // The Credentials.authorize below re-checks and returns null if unset.
-  // eslint-disable-next-line no-console
   console.warn(
     "[auth] ADMIN_EMAIL or ADMIN_PASSWORD_HASH is not set. Admin login is disabled.",
   );

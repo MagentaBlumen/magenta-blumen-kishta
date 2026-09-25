@@ -57,20 +57,16 @@ export function RunSlotPicker({
     return rows;
   }, [availableDates, days]);
 
-  const initial = useMemo(() => {
-    if (selectedRunId === undefined) return { date: "", runId: undefined };
-    for (const d of days) {
-      for (const s of d.slots) {
-        if (s.runId === selectedRunId) {
-          return { date: d.runDate, runId: s.runId };
-        }
-      }
-    }
-    return { date: "", runId: undefined };
-  }, [days, selectedRunId]);
-
-  const [pickedDate, setPickedDate] = useState<string>(initial.date);
-  const [pickedRunId, setPickedRunId] = useState<number | undefined>(initial.runId);
+  // Seed state from the cookie's current selection. Only used on the
+  // first render (useState initialiser), so a lazy call - not a memo -
+  // is the right tool. Using useMemo here made the React Compiler
+  // refuse to optimise the component (preserve-manual-memoization).
+  const [pickedDate, setPickedDate] = useState<string>(() =>
+    findInitialDate(days, selectedRunId),
+  );
+  const [pickedRunId, setPickedRunId] = useState<number | undefined>(
+    () => selectedRunId,
+  );
 
   const windowsForDate = useMemo(() => {
     if (!pickedDate) return [];
@@ -177,4 +173,17 @@ export function RunSlotPicker({
       </p>
     </div>
   );
+}
+
+function findInitialDate(
+  days: RunSlotDay[],
+  selectedRunId: number | undefined,
+): string {
+  if (selectedRunId === undefined) return "";
+  for (const d of days) {
+    for (const s of d.slots) {
+      if (s.runId === selectedRunId) return d.runDate;
+    }
+  }
+  return "";
 }

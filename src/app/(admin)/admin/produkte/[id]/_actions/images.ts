@@ -177,7 +177,6 @@ export async function deleteProductImage(imageId: number): Promise<void> {
     try {
       await deleteObjects([largeKey, thumbKey]);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn(`[image delete] R2 delete failed for ${largeKey}`, err);
     }
   }
