@@ -1,21 +1,19 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { selectRunAction } from "@/lib/checkout/actions";
 import type { RunSlotDay } from "@/lib/checkout/slots";
 import { CheckoutDateCalendar } from "./checkout-date-calendar";
 
 /**
- * Calendar + window buttons run picker.
+ * Datum popover + window buttons run picker.
  *
- * Left column: month-view calendar. Only dates with >=1 available
- * window are clickable; the rest are greyed with the German reason
- * as tooltip. Right column: two segmented buttons for the day's
- * windows (Vormittag / Nachmittag) - up to two, so buttons look
- * better than a dropdown.
+ * Compact trigger button opens the month-view calendar as a popover;
+ * picking a date auto-closes. Windows appear as segmented buttons on
+ * the right once a date is chosen. Selecting a window auto-submits
+ * selectRunAction. Server re-validates so a stale UI is still safe.
  *
- * Selecting a window auto-submits selectRunAction. Server re-validates
- * so a stale UI is still safe.
+ * Outside-click and Escape close the popover.
  */
 export function RunSlotPicker({
   days,
@@ -26,6 +24,8 @@ export function RunSlotPicker({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
 
   // Server dropped days with permanently-disabled slots already, but
   // we still want to keep cutoff/capacity/lead-time disabled rows so
@@ -57,6 +57,14 @@ export function RunSlotPicker({
     return rows;
   }, [availableDates, days]);
 
+  // Look up display labels by ISO date without shipping Luxon to the
+  // client - server already computed weekdayLabelDe on each RunSlotDay.
+  const labelForDate = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of days) m.set(d.runDate, d.weekdayLabelDe);
+    return m;
+  }, [days]);
+
   // Seed state from the cookie's current selection. Only used on the
   // first render (useState initialiser), so a lazy call - not a memo -
   // is the right tool. Using useMemo here made the React Compiler
@@ -77,6 +85,24 @@ export function RunSlotPicker({
 
   const horizonEndIso = days[days.length - 1]?.runDate;
 
+  // Outside-click + Escape close the popover.
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function onDown(e: MouseEvent) {
+      if (!popoverRef.current) return;
+      if (!popoverRef.current.contains(e.target as Node)) setCalendarOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setCalendarOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [calendarOpen]);
+
   if (availableDates.length === 0) {
     return (
       <div className="p-6 border border-mist text-[0.85rem] text-sage">
@@ -90,6 +116,7 @@ export function RunSlotPicker({
     setPickedDate(iso);
     setPickedRunId(undefined);
     setError(null);
+    setCalendarOpen(false);
   }
 
   function handleWindowPick(runId: number) {
@@ -104,6 +131,10 @@ export function RunSlotPicker({
     });
   }
 
+  const datumButtonLabel = pickedDate
+    ? labelForDate.get(pickedDate) ?? pickedDate
+    : "Bitte Datum wählen";
+
   return (
     <div className="space-y-3">
       {error && (
@@ -112,20 +143,43 @@ export function RunSlotPicker({
         </p>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_1fr]">
-        <div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* -------- Datum popover -------- */}
+        <div ref={popoverRef} className="relative">
           <span className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark block mb-1.5">
             Datum
           </span>
-          <CheckoutDateCalendar
-            availableDates={availableDates}
-            disabledReasons={disabledReasons}
-            value={pickedDate}
-            onChange={handleDatePick}
-            horizonEndIso={horizonEndIso}
-          />
+          <button
+            type="button"
+            aria-expanded={calendarOpen}
+            aria-haspopup="dialog"
+            onClick={() => setCalendarOpen((o) => !o)}
+            className={`w-full h-[46px] px-3 border bg-ivory text-[0.9rem] text-left flex items-center justify-between transition-colors ${
+              calendarOpen ? "border-bark" : "border-mist hover:border-bark"
+            } ${pickedDate ? "text-bark" : "text-sage"}`}
+          >
+            <span className="truncate">{datumButtonLabel}</span>
+            <span aria-hidden className="text-sage ml-2">▾</span>
+          </button>
+
+          {calendarOpen && (
+            <div
+              role="dialog"
+              aria-label="Datum wählen"
+              className="absolute z-30 top-full left-0 mt-2 w-[320px] max-w-[calc(100vw-2rem)] shadow-lg"
+            >
+              <CheckoutDateCalendar
+                availableDates={availableDates}
+                disabledReasons={disabledReasons}
+                value={pickedDate}
+                onChange={handleDatePick}
+                horizonEndIso={horizonEndIso}
+              />
+            </div>
+          )}
         </div>
 
+        {/* -------- Zeitfenster -------- */}
         <div>
           <span className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark block mb-1.5">
             Zeitfenster
@@ -146,7 +200,7 @@ export function RunSlotPicker({
                       onClick={() => handleWindowPick(s.runId)}
                       disabled={isPending}
                       aria-pressed={isSelected}
-                      className={`px-4 py-3 text-[0.78rem] tracking-[0.06em] font-medium border transition-colors ${
+                      className={`h-[46px] px-4 text-[0.78rem] tracking-[0.06em] font-medium border transition-colors ${
                         isSelected
                           ? "border-rose bg-rose text-ivory"
                           : "border-mist text-bark hover:border-bark hover:bg-cream"
@@ -159,8 +213,8 @@ export function RunSlotPicker({
               )}
             </div>
           ) : (
-            <div className="p-3 border border-dashed border-mist text-[0.8rem] text-sage">
-              Wählen Sie zuerst ein Datum.
+            <div className="h-[46px] flex items-center px-3 border border-dashed border-mist text-[0.8rem] text-sage">
+              Zuerst Datum wählen.
             </div>
           )}
         </div>
@@ -169,7 +223,7 @@ export function RunSlotPicker({
       <p className="text-[0.7rem] text-sage leading-[1.55]">
         Zwei Touren täglich mit unserem eigenen Van. Cutoff 3 Stunden vor
         Beginn der Tour (Dienstag 24 Stunden). Fahren Sie mit dem Cursor
-        über einen gesperrten Tag, um den Grund zu sehen.
+        über einen gesperrten Tag im Kalender, um den Grund zu sehen.
       </p>
     </div>
   );
