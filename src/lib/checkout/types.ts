@@ -15,7 +15,10 @@
 // Field names abbreviated for cookie size + so the shape is stable if
 // the customer's cookie survives a schema-adjacent rename.
 
+export type DeliveryContextCookie = "residential" | "business" | "hospital" | "funeral";
+
 export type CheckoutCookie = {
+  // -------- Step 1: PLZ + slot --------
   /** delivery_zone_plz.plz - always 4 chars once set */
   plz?: string;
   /** delivery_zone_plz.ortschaft - required to disambiguate PLZ 5415 case */
@@ -36,6 +39,31 @@ export type CheckoutCookie = {
   /** ISO date (YYYY-MM-DD) for fulfilment='pickup'. Pickup happens at
    *  the shop, no run, no timed slot needed. */
   pd?: string;
+
+  // -------- Step 2: buyer + recipient + context --------
+  // Field names are short so the cookie stays comfortably under 4 KB
+  // even with a long card message + delivery instructions. Comments
+  // below map each to its order.* column so the reserve step in 5f is
+  // a mechanical translation.
+
+  /** buyer.name */                bn?: string;
+  /** buyer.email */               be?: string;
+  /** buyer.phone (required, not verified) */ bp?: string;
+
+  /** recipient.name */            rn?: string;
+  /** recipient.phone */           rp?: string;
+  /** delivery_street */           st?: string;
+
+  /** delivery_context enum */     dc?: DeliveryContextCookie;
+  /** hospital ward */             dw?: string;
+  /** hospital room */             dm?: string;
+  /** funeral deceased name */     dn?: string;
+  /** funeral family contact */    fc?: string;
+
+  /** delivery_instructions (free text) */    di?: string;
+  /** card_message */                          cm?: string;
+  /** card_is_anonymous */                     ca?: boolean;
+  /** ribbon_text (Trauerband) */              rt?: string;
 };
 
 export const EMPTY_CHECKOUT_COOKIE: CheckoutCookie = {};

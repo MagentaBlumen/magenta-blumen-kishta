@@ -81,8 +81,42 @@ export function parseCheckoutCookie(raw: string): CheckoutCookie {
     if (typeof r.pd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.pd)) {
       out.pd = r.pd;
     }
+
+    // -------- Step 2 fields --------
+    // Length caps here are the CLIENT ceiling; the reserve step in 5f
+    // has its own validation for DB constraints. Everything is trimmed
+    // to prevent leading/trailing whitespace surprises.
+    if (isStr(r.bn, 1, 120)) out.bn = r.bn.trim();
+    if (isStr(r.be, 3, 254)) out.be = r.be.trim();
+    if (isStr(r.bp, 3, 40)) out.bp = r.bp.trim();
+    if (isStr(r.rn, 1, 120)) out.rn = r.rn.trim();
+    if (isStr(r.rp, 3, 40)) out.rp = r.rp.trim();
+    if (isStr(r.st, 1, 200)) out.st = r.st.trim();
+
+    if (
+      r.dc === "residential" ||
+      r.dc === "business" ||
+      r.dc === "hospital" ||
+      r.dc === "funeral"
+    ) {
+      out.dc = r.dc;
+    }
+    if (isStr(r.dw, 1, 80)) out.dw = r.dw.trim();
+    if (isStr(r.dm, 1, 80)) out.dm = r.dm.trim();
+    if (isStr(r.dn, 1, 120)) out.dn = r.dn.trim();
+    if (isStr(r.fc, 3, 40)) out.fc = r.fc.trim();
+
+    if (isStr(r.di, 1, 500)) out.di = r.di.trim();
+    if (isStr(r.cm, 1, 500)) out.cm = r.cm.trim();
+    if (isStr(r.rt, 1, 100)) out.rt = r.rt.trim();
+    if (typeof r.ca === "boolean") out.ca = r.ca;
+
     return out;
   } catch {
     return { ...EMPTY_CHECKOUT_COOKIE };
   }
+}
+
+function isStr(v: unknown, min: number, max: number): v is string {
+  return typeof v === "string" && v.trim().length >= min && v.length <= max;
 }

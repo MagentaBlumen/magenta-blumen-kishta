@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { clearCheckoutCookie, patchCheckoutCookie } from "./cookie";
 import {
   getAvailableRunSlots,
   getAvailableTimedSlots,
 } from "./slots";
+import type { DeliveryContextCookie } from "./types";
 import { lookupPlz, resolveZoneByPlzOrtschaft } from "./zones";
 
 /**
@@ -191,6 +193,105 @@ export async function selectTimedAction(isoStartRaw: string): Promise<void> {
     pd: undefined,
   });
   revalidatePath("/kasse/lieferung");
+}
+
+// -------- Step 2: buyer + recipient + delivery-context form ----------
+//
+// Called from /kasse/lieferdaten. Validates every field, patches the
+// mb_checkout cookie, redirects to /kasse/bestaetigen (5f). Every value
+// gets re-validated at reserve time against the actual DB constraints;
+// this action is the FIRST line of defence, not the last.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function mustFill(field: string, value: string): string {
+  const v = value.trim();
+  if (!v) throw new Error(`${field} ist erforderlich`);
+  return v;
+}
+function optional(value: string, cap: number): string | undefined {
+  const v = value.trim();
+  if (!v) return undefined;
+  if (v.length > cap) return v.slice(0, cap);
+  return v;
+}
+
+export async function submitDetailsAction(formData: FormData): Promise<void> {
+  const buyerName = mustFill("Name", str(formData.get("bn")));
+  if (buyerName.length > 120) throw new Error("Name zu lang");
+
+  const buyerEmail = mustFill("E-Mail", str(formData.get("be"))).toLowerCase();
+  if (!EMAIL_RE.test(buyerEmail)) throw new Error("Ungültige E-Mail-Adresse");
+  if (buyerEmail.length > 254) throw new Error("E-Mail zu lang");
+
+  const buyerPhone = mustFill("Telefon", str(formData.get("bp")));
+  if (buyerPhone.length > 40) throw new Error("Telefon zu lang");
+
+  const recipientName = mustFill("Empfängername", str(formData.get("rn")));
+  if (recipientName.length > 120) throw new Error("Empfängername zu lang");
+
+  const recipientPhone = optional(str(formData.get("rp")), 40);
+  const street = mustFill("Strasse und Hausnummer", str(formData.get("st")));
+  if (street.length > 200) throw new Error("Adresse zu lang");
+
+  const dcRaw = str(formData.get("dc"));
+  if (
+    dcRaw !== "residential" &&
+    dcRaw !== "business" &&
+    dcRaw !== "hospital" &&
+    dcRaw !== "funeral"
+  ) {
+    throw new Error("Ungültiger Lieferkontext");
+  }
+  const deliveryContext = dcRaw as DeliveryContextCookie;
+
+  // Conditional required fields per context.
+  let ward: string | undefined;
+  let room: string | undefined;
+  let deceased: string | undefined;
+  let familyContact: string | undefined;
+  if (deliveryContext === "hospital") {
+    ward = mustFill("Abteilung / Station", str(formData.get("dw")));
+    room = optional(str(formData.get("dm")), 80);
+  } else if (deliveryContext === "funeral") {
+    deceased = mustFill("Name der verstorbenen Person", str(formData.get("dn")));
+    familyContact = mustFill(
+      "Telefon Familienkontakt",
+      str(formData.get("fc")),
+    );
+  }
+
+  const instructions = optional(str(formData.get("di")), 500);
+  const cardMessage = optional(str(formData.get("cm")), 500);
+  const cardAnonymous = str(formData.get("ca")) === "on";
+  const ribbonText =
+    deliveryContext === "funeral"
+      ? optional(str(formData.get("rt")), 100)
+      : undefined;
+
+  await patchCheckoutCookie({
+    bn: buyerName,
+    be: buyerEmail,
+    bp: buyerPhone,
+    rn: recipientName,
+    rp: recipientPhone,
+    st: street,
+    dc: deliveryContext,
+    dw: ward,
+    dm: room,
+    dn: deceased,
+    fc: familyContact,
+    di: instructions,
+    cm: cardMessage,
+    ca: cardAnonymous || undefined,
+    rt: ribbonText,
+  });
+
+  redirect("/kasse/bestaetigen");
+}
+
+function str(v: FormDataEntryValue | null): string {
+  return typeof v === "string" ? v : "";
 }
 
 // -------- Reset the whole checkout state --------
