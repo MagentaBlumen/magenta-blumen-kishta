@@ -37,8 +37,14 @@ export default async function KasseErfolgPage({
       </h1>
       <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light">
         Wir haben Ihre Bestellung erhalten und den Liefertermin für Sie
-        reserviert. Sie bekommen in Kürze eine Bestätigung per E-Mail.
+        reserviert.
       </p>
+      <div className="px-4 py-3 bg-cream border border-mist text-[0.85rem] text-bark leading-[1.7] max-w-md mx-auto">
+        <strong className="font-medium">Hinweis:</strong> Automatische
+        Bestätigungen per E-Mail und die Übersicht für unsere Floristin
+        werden zurzeit noch aufgeschaltet. Bitte rufen Sie kurz an, damit
+        wir Ihre Bestellung bestätigen können.
+      </div>
 
       {orderNumber && (
         <div className="mt-4 inline-block border border-mist px-6 py-4 text-left">

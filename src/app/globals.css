@@ -43,7 +43,9 @@
   --color-cream: #f9f6f1;
   --color-ivory: #fdfcf9;
   --color-bark: #2a1f1a;
-  --color-sage: #8a9e8c;
+  /* Sage is used for eyebrows, hints, muted labels. Deeper hue for
+     better legibility on ivory (WCAG-safe against the background). */
+  --color-sage: #4f6752;
   --color-blush: #e8d5c8;
   --color-rose: #a0185a;
   --color-charcoal: #1c1c1c;
@@ -115,7 +117,7 @@
   --secondary-foreground: #2a1f1a;
 
   --muted: #ede9e3;               /* mist - inputs, subtle bg */
-  --muted-foreground: #8a9e8c;    /* sage - secondary / eyebrow text */
+  --muted-foreground: #4f6752;    /* sage - secondary / eyebrow text */
 
   --accent: #e8d5c8;              /* blush - hover backgrounds */
   --accent-foreground: #2a1f1a;
@@ -129,7 +131,7 @@
   --ring: #a0185a;                /* rose - focus outline */
 
   --chart-1: #a0185a;             /* rose */
-  --chart-2: #8a9e8c;             /* sage */
+  --chart-2: #4f6752;             /* sage */
   --chart-3: #e8d5c8;             /* blush */
   --chart-4: #2a1f1a;             /* bark */
   --chart-5: #f9f6f1;             /* cream */
@@ -190,6 +192,11 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Base font size bumped from the browser default 16px to 17.5px so
+       every rem-based size, spacing, button height, and text scale
+       lifts ~9% in one place. Fixed-pixel widths (media queries,
+       explicit w-[320px]) don't scale. */
+    font-size: 17.5px;
   }
 
   /* Common serif-heading convenience class. Storefront components use
