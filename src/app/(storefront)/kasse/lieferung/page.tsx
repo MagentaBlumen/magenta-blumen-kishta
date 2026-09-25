@@ -121,8 +121,11 @@ export default async function KasseLieferungPage() {
         )}
       </div>
 
-      <div className="mt-10 flex items-center justify-between text-[0.72rem] tracking-[0.08em] uppercase">
-        <Link href="/warenkorb" className="text-sage hover:text-rose transition-colors">
+      <div className="mt-10 flex items-center justify-between">
+        <Link
+          href="/warenkorb"
+          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
+        >
           ← Zurück zum Warenkorb
         </Link>
       </div>

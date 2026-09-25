@@ -194,10 +194,10 @@ export default async function KasseBestaetigenPage() {
         </aside>
       </div>
 
-      <div className="mt-10 text-[0.72rem] tracking-[0.08em] uppercase">
+      <div className="mt-10">
         <Link
           href="/kasse/lieferdaten"
-          className="text-sage hover:text-rose transition-colors"
+          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
         >
           ← Zurück zu Ihren Daten
         </Link>
@@ -264,7 +264,7 @@ function SummarySection({
         </h3>
         <Link
           href={editHref}
-          className="text-[0.7rem] tracking-[0.08em] uppercase text-sage hover:text-rose transition-colors"
+          className="inline-block px-3 py-1 border border-rose text-rose text-[0.65rem] tracking-[0.1em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
         >
           Ändern
         </Link>

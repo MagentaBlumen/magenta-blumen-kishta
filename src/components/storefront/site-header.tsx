@@ -104,11 +104,13 @@ export function SiteHeader({
     <header className="sticky top-0 z-50 border-b border-mist bg-ivory">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link
-          href="/"
-          className="font-display text-[1.6rem] font-normal tracking-tight text-bark leading-none"
-        >
-          Magenta Blumen
+        <Link href="/" aria-label="Magenta Blumen . Startseite" className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/magenta-blumen-logo.png"
+            alt="Magenta Blumen"
+            className="h-11 lg:h-12 w-auto object-contain"
+          />
         </Link>
 
         {/* Nav */}

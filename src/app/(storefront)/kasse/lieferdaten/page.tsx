@@ -57,7 +57,7 @@ export default async function KasseLieferdatenPage() {
           </div>
           <Link
             href="/kasse/lieferung"
-            className="text-[0.7rem] tracking-[0.08em] uppercase text-sage hover:text-rose transition-colors flex-shrink-0"
+            className="inline-block px-3 py-1 border border-rose text-rose text-[0.65rem] tracking-[0.1em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors flex-shrink-0"
           >
             Ändern
           </Link>
@@ -68,10 +68,10 @@ export default async function KasseLieferdatenPage() {
         <LieferdatenForm defaults={checkout} />
       </div>
 
-      <div className="mt-10 text-[0.72rem] tracking-[0.08em] uppercase">
+      <div className="mt-10">
         <Link
           href="/kasse/lieferung"
-          className="text-sage hover:text-rose transition-colors"
+          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
         >
           ← Zurück zur Lieferung
         </Link>

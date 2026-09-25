@@ -173,7 +173,7 @@ export default async function CartPage() {
       <div className="mt-10">
         <Link
           href="/kategorie/alle-anlaesse"
-          className="text-[0.72rem] tracking-[0.12em] uppercase text-sage hover:text-rose transition-colors"
+          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
         >
           ← Weiter einkaufen
         </Link>

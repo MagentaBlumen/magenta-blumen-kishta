@@ -14,7 +14,7 @@ export function ResetCheckoutButton({ label = "Ändern" }: { label?: string }) {
       type="button"
       disabled={isPending}
       onClick={() => startTransition(() => resetCheckoutAction())}
-      className="text-[0.7rem] tracking-[0.08em] uppercase text-sage hover:text-rose transition-colors disabled:opacity-30"
+      className="inline-block px-3 py-1 border border-rose text-rose text-[0.65rem] tracking-[0.1em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {label}
     </button>
