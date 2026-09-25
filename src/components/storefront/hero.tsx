@@ -25,25 +25,27 @@ export function Hero() {
             "linear-gradient(to right, rgba(253,252,249,0.88) 0%, rgba(253,252,249,0.55) 50%, rgba(253,252,249,0.1) 100%)",
         }}
       />
-      <div className="relative max-w-[560px] px-5 sm:px-10 lg:px-20 py-16 sm:py-20">
-        <h1 className="font-display font-light leading-[1.05] text-bark mb-5 text-[clamp(2.6rem,7vw,5.5rem)] tracking-[-0.01em]">
-          Frische Blumen aus
-          <br />
-          <em>Neuenhof,</em>
-          <br />
-          von Hand gebunden.
-        </h1>
-        <p className="text-[0.9rem] text-bark/70 leading-[1.7] mb-8 font-light">
-          Blumen-Werkstatt in Neuenhof AG.
-          <br />
-          Lieferung in 27 Aargauer Postleitzahlen mit unserem eigenen Van, auch am Sonntag.
-        </p>
-        <Link
-          href="/kategorie/alle-anlaesse"
-          className="inline-block bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
-        >
-          Jetzt bestellen
-        </Link>
+      <div className="relative w-full max-w-7xl mx-auto px-4 lg:px-6 py-16 sm:py-20">
+        <div className="max-w-[560px]">
+          <h1 className="font-display font-light leading-[1.05] text-bark mb-5 text-[clamp(2.6rem,7vw,5.5rem)] tracking-[-0.01em]">
+            Frische Blumen aus
+            <br />
+            <em>Neuenhof,</em>
+            <br />
+            von Hand gebunden.
+          </h1>
+          <p className="text-[0.9rem] text-bark/70 leading-[1.7] mb-8 font-light">
+            Blumen-Werkstatt in Neuenhof AG.
+            <br />
+            Lieferung in 27 Aargauer Postleitzahlen mit unserem eigenen Van, auch am Sonntag.
+          </p>
+          <Link
+            href="/kategorie/alle-anlaesse"
+            className="inline-block bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
+          >
+            Jetzt bestellen
+          </Link>
+        </div>
       </div>
     </section>
   );

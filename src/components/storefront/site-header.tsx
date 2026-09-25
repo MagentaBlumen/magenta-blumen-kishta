@@ -76,13 +76,15 @@ export function SiteHeader({
   initialCartCount?: number;
 }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   // Server passes down the count from the cookie on each render.
   // After add/remove actions, revalidatePath("/", "layout") re-runs
   // the layout, which recomputes this prop.
   const cartCount = initialCartCount;
 
-  // Close dropdown on outside click or Escape.
+  // Close desktop dropdown on outside click or Escape.
   useEffect(() => {
     if (!openLabel) return;
     function onDown(e: MouseEvent) {
@@ -99,6 +101,22 @@ export function SiteHeader({
       document.removeEventListener("keydown", onKey);
     };
   }, [openLabel]);
+
+  // Close mobile menu on Escape. Outside-click doesn't apply - the
+  // panel takes the full width below the header.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
+  function closeMobile() {
+    setMobileOpen(false);
+    setMobileExpanded(null);
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-mist bg-ivory">
@@ -156,7 +174,7 @@ export function SiteHeader({
         </nav>
 
         {/* Icons */}
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-4 sm:gap-5">
           <Link
             href="/warenkorb"
             className="relative text-bark hover:text-rose transition-colors"
@@ -180,8 +198,76 @@ export function SiteHeader({
               </span>
             )}
           </Link>
+
+          {/* Hamburger - mobile only */}
+          <button
+            type="button"
+            className="lg:hidden text-bark hover:text-rose transition-colors"
+            aria-label={mobileOpen ? "Menü schliessen" : "Menü öffnen"}
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((o) => !o)}
+          >
+            {mobileOpen ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile menu panel - accordion style */}
+      {mobileOpen && (
+        <div className="lg:hidden border-t border-mist bg-ivory max-h-[calc(100vh-4rem)] overflow-y-auto">
+          <nav className="py-2">
+            {NAV.map((item) => {
+              const isExpanded = mobileExpanded === item.label;
+              return (
+                <div key={item.label} className="border-b border-mist last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMobileExpanded((prev) => (prev === item.label ? null : item.label))
+                    }
+                    aria-expanded={isExpanded}
+                    className="w-full flex items-center justify-between px-5 py-4 text-[0.85rem] tracking-[0.12em] uppercase font-medium text-bark hover:text-rose transition-colors"
+                  >
+                    <span>{item.label}</span>
+                    <span
+                      aria-hidden
+                      className={`text-[1rem] leading-none transition-transform ${isExpanded ? "rotate-45" : ""}`}
+                    >
+                      +
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <ul className="pb-3 bg-cream">
+                      {item.items.map((sub) => (
+                        <li key={sub.href + sub.label}>
+                          <Link
+                            href={sub.href}
+                            onClick={closeMobile}
+                            className="block px-8 py-2.5 text-[0.85rem] text-bark hover:text-rose transition-colors"
+                          >
+                            {sub.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+      )}
     </header>
   );
 }
