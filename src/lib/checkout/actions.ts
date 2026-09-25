@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { clearCheckoutCookie, patchCheckoutCookie } from "./cookie";
+import {
+  getAvailableRunSlots,
+  getAvailableTimedSlots,
+} from "./slots";
 import { lookupPlz, resolveZoneByPlzOrtschaft } from "./zones";
 
 /**
@@ -114,6 +118,76 @@ export async function submitOrtschaftAction(
     zid: zone.zoneId,
     rid: undefined,
     rda: undefined,
+    pd: undefined,
+  });
+  revalidatePath("/kasse/lieferung");
+}
+
+// -------- Step 1c: pick a fulfilment type ---------------------------
+
+export async function selectFulfilmentAction(
+  kind: "run" | "timed",
+): Promise<void> {
+  if (kind !== "run" && kind !== "timed") {
+    throw new Error("Ungültige Liefermethode");
+  }
+  await patchCheckoutCookie({
+    ful: kind,
+    // Changing the fulfilment kind invalidates any previous slot pick.
+    rid: undefined,
+    rda: undefined,
+    pd: undefined,
+  });
+  revalidatePath("/kasse/lieferung");
+}
+
+// -------- Step 1d: pick a run slot ---------------------------------
+//
+// Server-side re-validation: caller may have a stale UI. Re-fetch
+// available runs and reject anything the current classification
+// disables. The actual FOR UPDATE lock happens at reserve time (5f).
+
+export async function selectRunAction(runIdRaw: number): Promise<void> {
+  const runId = Number(runIdRaw);
+  if (!Number.isInteger(runId) || runId <= 0) {
+    throw new Error("Ungültige Slot-ID");
+  }
+  const days = await getAvailableRunSlots();
+  const found = days
+    .flatMap((d) => d.slots)
+    .find((s) => s.runId === runId && s.status.kind === "available");
+  if (!found) {
+    throw new Error(
+      "Dieser Termin ist zwischenzeitlich nicht mehr verfügbar. Bitte wählen Sie einen anderen.",
+    );
+  }
+  await patchCheckoutCookie({
+    ful: "run",
+    rid: runId,
+    rda: undefined,
+    pd: undefined,
+  });
+  revalidatePath("/kasse/lieferung");
+}
+
+// -------- Step 1e: pick a timed datetime ---------------------------
+
+export async function selectTimedAction(isoStartRaw: string): Promise<void> {
+  const iso = String(isoStartRaw ?? "").trim();
+  if (!iso) throw new Error("Ungültiger Zeitpunkt");
+  const days = await getAvailableTimedSlots();
+  const found = days
+    .flatMap((d) => d.hours)
+    .find((h) => h.isoStart === iso && h.status.kind === "available");
+  if (!found) {
+    throw new Error(
+      "Dieser Zeitpunkt ist zwischenzeitlich nicht mehr verfügbar. Bitte wählen Sie einen anderen.",
+    );
+  }
+  await patchCheckoutCookie({
+    ful: "timed",
+    rda: iso,
+    rid: undefined,
     pd: undefined,
   });
   revalidatePath("/kasse/lieferung");

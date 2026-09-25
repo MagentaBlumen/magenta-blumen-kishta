@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FulfilmentPicker } from "@/components/storefront/fulfilment-picker";
 import { PlzForm } from "@/components/storefront/plz-form";
 import { ResetCheckoutButton } from "@/components/storefront/reset-checkout-button";
+import { RunSlotPicker } from "@/components/storefront/run-slot-picker";
+import { TimedSlotPicker } from "@/components/storefront/timed-slot-picker";
 import { readCheckoutCookie } from "@/lib/checkout/cookie";
+import {
+  getAvailableRunSlots,
+  getAvailableTimedSlots,
+} from "@/lib/checkout/slots";
 import { lookupPlz, resolveZoneByPlzOrtschaft } from "@/lib/checkout/zones";
 import { hydrateCart } from "@/lib/cart/hydrate";
 import { formatChf } from "@/lib/money";
@@ -91,13 +98,25 @@ export default async function KasseLieferungPage() {
               cartSubtotalGross={cart.subtotalGross}
             />
 
-            {/* Slot picker + fulfilment type land in 5d-part-2 once
-                Luxon is installed. The seven-condition rule and the
-                3-per-hour timed cap both need Europe/Zurich arithmetic. */}
-            <div className="p-6 border border-dashed border-mist bg-cream text-[0.85rem] text-sage leading-[1.7]">
-              Der Termin-Picker folgt in Kürze. Bis dahin können Sie uns
-              gerne direkt anrufen: 056 556 56 09.
-            </div>
+            <FulfilmentPicker value={checkout.ful === "pickup" ? undefined : checkout.ful} />
+
+            {checkout.ful === "run" && <RunSlotSection selectedRunId={checkout.rid} />}
+            {checkout.ful === "timed" && (
+              <TimedSlotSection selectedIso={checkout.rda} />
+            )}
+
+            {/* Continue button appears once a slot is chosen. /kasse/lieferdaten
+                lands in 5e (buyer + recipient form). */}
+            {isSlotChosen(checkout) && (
+              <div className="pt-2">
+                <Link
+                  href="/kasse/lieferdaten"
+                  className="block text-center h-[52px] leading-[52px] bg-rose text-ivory text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-[#831249] transition-colors"
+                >
+                  Weiter zu Ihren Daten
+                </Link>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -108,6 +127,36 @@ export default async function KasseLieferungPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+function isSlotChosen(c: Awaited<ReturnType<typeof readCheckoutCookie>>): boolean {
+  if (c.ful === "run") return c.rid !== undefined;
+  if (c.ful === "timed") return c.rda !== undefined;
+  return false;
+}
+
+async function RunSlotSection({ selectedRunId }: { selectedRunId: number | undefined }) {
+  const days = await getAvailableRunSlots();
+  return (
+    <section className="space-y-3">
+      <p className="text-[0.68rem] tracking-[0.16em] uppercase text-bark font-medium">
+        Verfügbare Termine
+      </p>
+      <RunSlotPicker days={days} selectedRunId={selectedRunId} />
+    </section>
+  );
+}
+
+async function TimedSlotSection({ selectedIso }: { selectedIso: string | undefined }) {
+  const days = await getAvailableTimedSlots();
+  return (
+    <section className="space-y-3">
+      <p className="text-[0.68rem] tracking-[0.16em] uppercase text-bark font-medium">
+        Zeitpunkt wählen
+      </p>
+      <TimedSlotPicker days={days} selectedIso={selectedIso} />
+    </section>
   );
 }
 
