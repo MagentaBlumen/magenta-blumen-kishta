@@ -70,10 +70,17 @@ const NAV: NavItem[] = [
   },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({
+  initialCartCount = 0,
+}: {
+  initialCartCount?: number;
+}) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
-  const cartCount = 0; // wired up in Session 5
+  // Server passes down the count from the cookie on each render.
+  // After add/remove actions, revalidatePath("/", "layout") re-runs
+  // the layout, which recomputes this prop.
+  const cartCount = initialCartCount;
 
   // Close dropdown on outside click or Escape.
   useEffect(() => {

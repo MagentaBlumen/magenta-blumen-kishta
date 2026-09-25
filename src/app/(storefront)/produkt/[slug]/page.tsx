@@ -111,7 +111,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
           {p.pricingMode === "enquiry" ? (
             <EnquiryBlock />
           ) : (
-            <ProductVariantPicker variants={variants} />
+            <ProductVariantPicker productId={p.id} variants={variants} />
           )}
 
           {colours.length > 0 && p.pricingMode !== "enquiry" && (
@@ -141,12 +141,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Placeholder where add-to-cart lands in Session 5. Kept as a
-              plain notice . no fake button, no wishlist. */}
-          {p.pricingMode !== "enquiry" && (
+          {/* Enquiry-only products keep the "call us" pointer since there
+              is no checkout for them by design. */}
+          {p.pricingMode === "enquiry" && (
             <div className="mt-8 px-4 py-3 bg-cream border border-mist text-[0.75rem] text-sage">
-              Die Online-Bestellung wird in Kürze aufgeschaltet. Rufen Sie
-              uns gerne direkt an:{" "}
+              Für Hochzeit, Trauer oder Event rufen Sie uns bitte direkt an:{" "}
               <a
                 href="tel:+41565565609"
                 className="text-bark hover:text-rose transition-colors"
