@@ -126,7 +126,7 @@ export function ProductVariantPicker({
               </span>
             )}
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             {variants.map((v, i) => {
               const isSelected = i === selectedIdx;
               const isDisabled = !v.isAvailable;
@@ -136,7 +136,7 @@ export function ProductVariantPicker({
                   type="button"
                   disabled={isDisabled}
                   onClick={() => handleSelect(i)}
-                  className={`px-4 py-2.5 text-[0.72rem] tracking-[0.08em] uppercase font-medium border transition-colors ${
+                  className={`flex-1 min-w-0 px-2 py-2.5 text-[0.72rem] tracking-[0.08em] uppercase font-medium border transition-colors ${
                     isSelected
                       ? "border-rose bg-rose text-ivory"
                       : "border-mist text-bark hover:border-bark"
