@@ -70,6 +70,13 @@ let zoneId: number;
 let runId: number;
 
 async function insertTestFixtures(): Promise<void> {
+  // Pre-clean anything a previous crashed run may have left behind.
+  // Our test IDs are fixed strings (TEST_PLZ, TEST_PRODUCT_SLUG,
+  // TEST_ZONE_NAME) so a re-insert would collide on unique indexes
+  // otherwise. Order matches the cleanup path: orders + lines + payments
+  // -> zone plz + zone -> variant + product.
+  await cleanupByLookup();
+
   // Standard tax rate row is assumed to exist (seeded in
   // drizzle/seed/01-base.sql). Try to find one; if missing, insert.
   let [stdRate] = await admin
@@ -131,8 +138,11 @@ async function insertTestFixtures(): Promise<void> {
     zoneId,
   });
 
-  // A run tomorrow at 10:00-12:00 in Europe/Zurich with capacity = 1.
-  // Tomorrow so the 3-hour cutoff doesn't reject the reservation.
+  // Run tomorrow at an UNUSUAL time (04:15-05:15) that generate-runs
+  // never creates. The seeded generator only ever inserts 10:00 and
+  // 16:00 windows, so the (run_date, window_start) unique index is
+  // free at 04:15. Reserve doesn't cutoff-check inside the tx (that
+  // happens in the slot picker upstream) so the odd time is harmless.
   const tomorrow = DateTime.now()
     .setZone("Europe/Zurich")
     .plus({ days: 1 })
@@ -143,13 +153,58 @@ async function insertTestFixtures(): Promise<void> {
     .insert(deliveryRun)
     .values({
       runDate: tomorrow,
-      windowStart: "10:00:00",
-      windowEnd: "12:00:00",
+      windowStart: "04:15:00",
+      windowEnd: "05:15:00",
       capacity: 1,
       isClosed: false,
     })
     .returning({ id: deliveryRun.id });
   runId = insertedRun.id;
+}
+
+/**
+ * Delete any test rows a previous crashed run may have left behind.
+ * Idempotent - safe to run when nothing exists.
+ */
+async function cleanupByLookup(): Promise<void> {
+  // Find and drop any orders on runs at the test's unusual time (matches
+  // our fixture time only). Any such row must be ours.
+  const staleRuns = await admin
+    .select({ id: deliveryRun.id })
+    .from(deliveryRun)
+    .where(eq(deliveryRun.windowStart, "04:15:00"));
+  for (const r of staleRuns) {
+    const orders = await admin
+      .select({ id: order.id })
+      .from(order)
+      .where(eq(order.deliveryRunId, r.id));
+    for (const o of orders) {
+      await admin.delete(orderLine).where(eq(orderLine.orderId, o.id));
+      await admin.delete(payment).where(eq(payment.orderId, o.id));
+      await admin.delete(order).where(eq(order.id, o.id));
+    }
+    await admin.delete(deliveryRun).where(eq(deliveryRun.id, r.id));
+  }
+
+  // Drop the test PLZ mapping + zone if present.
+  await admin
+    .delete(deliveryZonePlz)
+    .where(eq(deliveryZonePlz.plz, TEST_PLZ));
+  await admin
+    .delete(deliveryZone)
+    .where(eq(deliveryZone.nameDe, TEST_ZONE_NAME));
+
+  // Drop test product + its variants.
+  const staleProducts = await admin
+    .select({ id: product.id })
+    .from(product)
+    .where(eq(product.slug, TEST_PRODUCT_SLUG));
+  for (const p of staleProducts) {
+    await admin
+      .delete(productVariant)
+      .where(eq(productVariant.productId, p.id));
+    await admin.delete(product).where(eq(product.id, p.id));
+  }
 }
 
 async function cleanupTestFixtures(): Promise<void> {
