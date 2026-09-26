@@ -13,6 +13,7 @@ import { settings, taxRate as taxRateTable } from "@/db/schema/settings";
 import type { CartCookie } from "@/lib/cart/types";
 import type { CheckoutCookie, DeliveryContextCookie } from "./types";
 import { generateOrderNumber } from "./order-number";
+import { chfToRappen, requireStripe } from "./stripe";
 import { resolveDeliveryTaxRate } from "./tax";
 import { ZONE } from "./time";
 
@@ -38,10 +39,12 @@ type DbClient = typeof defaultDb;
 // Public shapes
 // ------------------------------------------------------------------
 
+export type ReservePaymentMethod = "cash" | "invoice" | "card" | "twint";
+
 export type ReserveInput = {
   cart: CartCookie;
   checkout: CheckoutCookie;
-  paymentMethod: "cash" | "invoice";
+  paymentMethod: ReservePaymentMethod;
 };
 
 export type ReserveResult = {
@@ -49,6 +52,12 @@ export type ReserveResult = {
   orderNumber: string;
   totalGross: string;      // numeric string
   amountDueGross: string;  // numeric string
+  /**
+   * Set for card/twint reservations. The Payment Element on the client
+   * uses this to confirm the payment against Stripe. Absent for
+   * cash/invoice (no Stripe intent) and for zero-due orders.
+   */
+  clientSecret?: string;
 };
 
 /**
@@ -105,7 +114,12 @@ export async function reserveOrder(
       "Bitte geben Sie den Namen der verstorbenen Person und den Familienkontakt an.",
     );
   }
-  if (paymentMethod !== "cash" && paymentMethod !== "invoice") {
+  if (
+    paymentMethod !== "cash" &&
+    paymentMethod !== "invoice" &&
+    paymentMethod !== "card" &&
+    paymentMethod !== "twint"
+  ) {
     throw new ReserveError("Ungültige Zahlungsart.");
   }
 
@@ -436,21 +450,76 @@ export async function reserveOrder(
       );
     }
 
-    // -------- 9. Insert payment row --------
+    // -------- 9. Insert payment row + (for card/twint) Stripe intent --
     //
-    // amount_due = 0 short circuit: skip the payment row entirely.
-    // Phase 3 gift-card path. Nothing produces a zero in Phase 1 but
-    // the schema + code both handle it so the escape hatch works
-    // without touching the reserve core when gift cards land.
+    // amount_due = 0 short circuit: skip the payment row AND the Stripe
+    // call entirely. Phase 3 gift-card path. Nothing produces a zero
+    // in Phase 1 but the schema + code both handle it so the escape
+    // hatch works without touching the reserve core when gift cards
+    // land.
+    //
+    // Cash / invoice: payment row goes in with status='pending' and no
+    // Stripe intent. Actionable-on-Heute reads method IN ('cash','invoice')
+    // regardless of status; admin flips status -> 'succeeded' + fills
+    // markedPaidBy when the money actually arrives.
+    //
+    // Card / TWINT: create the Stripe intent INSIDE this tx (before the
+    // payment insert). The intent ties back to the order via metadata;
+    // the webhook (Session 6c) matches on providerPaymentIntentId to
+    // flip status. Intent creation is a 200-500ms network call inside a
+    // held row lock - acceptable at florist scale and simpler than the
+    // two-phase alternative (commit tx, then call Stripe, then update
+    // payment) which leaves an orphan window if the process dies
+    // between the two.
+    //
+    // Idempotency key = order_number. Stripe SDK auto-retries transient
+    // failures; the key means those retries yield the SAME intent, not
+    // duplicates. Double-submit at the reserve level generates a new
+    // order_number and a new intent - that's a business decision, not
+    // an idempotency one, and the FOR UPDATE lock upstream handles
+    // capacity.
+
+    let clientSecret: string | undefined;
+
     if (amountDueNum > 0) {
+      const usesStripe = paymentMethod === "card" || paymentMethod === "twint";
+
+      let providerPaymentIntentId: string | null = null;
+
+      if (usesStripe) {
+        const stripe = requireStripe();
+        const intent = await stripe.paymentIntents.create(
+          {
+            amount: chfToRappen(amountDueNum),
+            currency: "chf",
+            // TWINT is a redirect-based method; card is inline. Payment
+            // Element picks the right UI. Restricting the allowed
+            // methods here is a safety net so a customer can't select
+            // e.g. sofort by editing the client.
+            payment_method_types:
+              paymentMethod === "twint" ? ["twint"] : ["card"],
+            metadata: {
+              order_id: String(inserted.id),
+              order_number: orderNumber,
+            },
+            // Statement descriptor is bank-line text; keep short + ASCII.
+            description: `Magenta Blumen - Bestellung ${orderNumber}`,
+          },
+          { idempotencyKey: orderNumber },
+        );
+        providerPaymentIntentId = intent.id;
+        clientSecret = intent.client_secret ?? undefined;
+      }
+
       await tx.insert(payment).values({
         orderId: inserted.id,
         method: paymentMethod,
-        providerPaymentIntentId: null, // cash / invoice have no intent
+        providerPaymentIntentId,
         amountGross: amountDueNum.toFixed(2),
-        // Actionable-on-Heute uses payment.method IN ('cash','invoice')
-        // AND status is anything. status STAYS 'pending' until someone
-        // in admin marks it paid (which fills marked_paid_by).
+        // Card/twint status STAYS 'pending' until the webhook flips it
+        // to 'succeeded'. Cash/invoice status STAYS 'pending' until
+        // admin marks paid (fills marked_paid_by). Same field, two
+        // different lifecycles.
         status: "pending",
         markedPaidBy: null,
       });
@@ -461,6 +530,7 @@ export async function reserveOrder(
       orderNumber,
       totalGross: totalNum.toFixed(2),
       amountDueGross: amountDueNum.toFixed(2),
+      clientSecret,
     };
   });
 }

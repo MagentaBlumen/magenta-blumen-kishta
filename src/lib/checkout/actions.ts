@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearCartCookie, readCartCookie } from "@/lib/cart/cookie";
 import { clearCheckoutCookie, patchCheckoutCookie, readCheckoutCookie } from "./cookie";
-import { reserveOrder, ReserveError } from "./reserve";
+import { reserveOrder, ReserveError, type ReservePaymentMethod } from "./reserve";
 import {
   getAvailableRunSlots,
   getAvailableTimedSlots,
@@ -306,19 +306,40 @@ export async function resetCheckoutAction(): Promise<void> {
 // -------- Step 3: reserve the order --------
 //
 // Thin wrapper around reserveOrder that reads cookies, runs the
-// transaction, and on success clears cart + checkout cookies then
-// redirects to /kasse/erfolg?bestellnummer=<order_number>.
+// transaction, and on success clears cart + checkout cookies.
+//
+// Two return shapes depending on payment method:
+//
+//   cash / invoice: no Stripe intent, order is actionable at creation.
+//     Action clears the cookies + redirect()s to /kasse/erfolg. Never
+//     returns to the caller (redirect throws NEXT_REDIRECT).
+//
+//   card / twint: Stripe intent created inside the reserve tx. Action
+//     clears the cookies and RETURNS { orderNumber, clientSecret }. The
+//     client-side Payment Element (Session 6b) uses the clientSecret to
+//     call stripe.confirmPayment({ return_url: /kasse/erfolg?... }).
+//     Stripe (not us) redirects the browser to the success URL on
+//     successful confirmation.
 //
 // ReserveError bubbles as a normal Error to the client's useTransition,
 // so its German message shows up in the review page's error banner.
 // Anything else is a real bug and we let it 500.
 
+export type ReserveOrderActionResult = {
+  orderNumber: string;
+  /** Present for card/twint. Absent for cash/invoice (action redirects). */
+  clientSecret?: string;
+};
+
 export async function reserveOrderAction(
   paymentMethodRaw: string,
-): Promise<void> {
-  const paymentMethod =
-    paymentMethodRaw === "cash" || paymentMethodRaw === "invoice"
-      ? paymentMethodRaw
+): Promise<ReserveOrderActionResult> {
+  const paymentMethod: ReservePaymentMethod | null =
+    paymentMethodRaw === "cash" ||
+    paymentMethodRaw === "invoice" ||
+    paymentMethodRaw === "card" ||
+    paymentMethodRaw === "twint"
+      ? (paymentMethodRaw as ReservePaymentMethod)
       : null;
   if (!paymentMethod) throw new Error("Ungültige Zahlungsart.");
 
@@ -339,5 +360,25 @@ export async function reserveOrderAction(
 
   await Promise.all([clearCartCookie(), clearCheckoutCookie()]);
   revalidatePath("/", "layout");
-  redirect(`/kasse/erfolg?bestellnummer=${encodeURIComponent(result.orderNumber)}`);
+
+  if (paymentMethod === "cash" || paymentMethod === "invoice") {
+    // No Stripe round-trip needed. Straight to the confirmation page.
+    redirect(
+      `/kasse/erfolg?bestellnummer=${encodeURIComponent(result.orderNumber)}`,
+    );
+  }
+
+  // card / twint: return the client secret so the browser Payment
+  // Element can confirm. If Stripe never gave us a client_secret
+  // (misconfigured intent?) surface a clear error rather than sending
+  // the client to a confirm call it can't complete.
+  if (!result.clientSecret) {
+    throw new Error(
+      "Zahlung konnte nicht initialisiert werden. Bitte kontaktieren Sie uns.",
+    );
+  }
+  return {
+    orderNumber: result.orderNumber,
+    clientSecret: result.clientSecret,
+  };
 }
