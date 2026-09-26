@@ -1,0 +1,18 @@
+[Unit]
+Description=Reaper timer — cancel abandoned checkouts every 5 min
+# Persistent=true so a missed run (box off, Hetzner outage) still fires
+# on next boot rather than waiting for the next scheduled tick. The
+# reaper is idempotent so a catch-up run is safe.
+Persistent=true
+
+[Timer]
+# Every 5 minutes, starting 5 min after boot so we don't race the app
+# container coming up. RandomisedDelay keeps two identically-configured
+# boxes from firing at the exact same second if we ever add HA.
+OnBootSec=5min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+Unit=reap-abandoned-orders.service
+
+[Install]
+WantedBy=timers.target

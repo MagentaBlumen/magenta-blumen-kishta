@@ -1,0 +1,16 @@
+[Unit]
+Description=Magenta Blumen — cancel abandoned checkouts (status='new' > 30 min, no successful payment)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/magenta-blumen
+ExecStart=/opt/magenta-blumen/scripts/reap-abandoned-orders.sh
+# Single UPDATE + two counts against a small table; well under a second
+# in practice. 60s is generous even if the box is under load.
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal

@@ -1,17 +1,21 @@
 # Scheduled jobs on the Hetzner box
 
-Three systemd timers, all running as `deploy` from
+Four systemd timers, all running as `deploy` from
 `/opt/magenta-blumen/scripts/`. All units live in
 `/opt/magenta-blumen/deploy/systemd/` (symlinked into
 `/etc/systemd/system/`), so `git pull` updates them without re-copying.
 
-| When (UTC)       | Timer                    | What                                   |
-|------------------|--------------------------|----------------------------------------|
-| Daily 03:15      | `generate-runs.timer`    | Extend delivery-run horizon, alert if it drops below 30d |
-| Daily 03:30      | `backup.timer`           | `pg_dump` → Cloudflare R2, 180-day retention |
-| Sunday 04:00     | `restore-check.timer`    | Restore latest backup into scratch DB and verify seed counts |
+| When (UTC)       | Timer                          | What                                   |
+|------------------|--------------------------------|----------------------------------------|
+| Every 5 min      | `reap-abandoned-orders.timer`  | Cancel `status='new'` orders older than `settings.abandoned_order_minutes` that have no successful payment. Frees the held slot back into capacity. |
+| Daily 03:15      | `generate-runs.timer`          | Extend delivery-run horizon, alert if it drops below 30d |
+| Daily 03:30      | `backup.timer`                 | `pg_dump` → Cloudflare R2, 180-day retention |
+| Sunday 04:00     | `restore-check.timer`          | Restore latest backup into scratch DB and verify seed counts |
 
 Ordering is deliberate:
+- **Every 5 min reaper** — see `docs/checkout-transaction.md §6`. Cheap
+  query on a small table; safe to run over the top of the nightly jobs
+  if the timers align (independent tables).
 - **03:15 generate-runs** runs BEFORE the backup so tonight's dump includes
   any newly-generated runs.
 - **03:30 backup** runs 30 min after the unattended-upgrades auto-reboot
@@ -26,22 +30,24 @@ Ordering is deliberate:
 ### See timer status
 
 ```bash
-systemctl list-timers | grep -E 'backup|restore-check|generate-runs'
+systemctl list-timers | grep -E 'backup|restore-check|generate-runs|reap-abandoned-orders'
 ```
 
-All three should show a `NEXT` timestamp in the near future.
+All four should show a `NEXT` timestamp in the near future.
 
 ### See the last run's output
 
 ```bash
-journalctl -u generate-runs.service -n 100 --no-pager
-journalctl -u backup.service         -n 100 --no-pager
-journalctl -u restore-check.service  -n 100 --no-pager
+journalctl -u reap-abandoned-orders.service -n 100 --no-pager
+journalctl -u generate-runs.service         -n 100 --no-pager
+journalctl -u backup.service                -n 100 --no-pager
+journalctl -u restore-check.service         -n 100 --no-pager
 ```
 
 ### Force a run right now (test)
 
 ```bash
+sudo systemctl start reap-abandoned-orders.service
 sudo systemctl start generate-runs.service
 sudo systemctl start backup.service
 sudo systemctl start restore-check.service
@@ -63,12 +69,14 @@ sudo apt update && sudo apt install -y rclone
 ### 2. Symlink units and reload systemd
 
 ```bash
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/generate-runs.service /etc/systemd/system/generate-runs.service
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/generate-runs.timer   /etc/systemd/system/generate-runs.timer
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/backup.service        /etc/systemd/system/backup.service
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/backup.timer          /etc/systemd/system/backup.timer
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/restore-check.service /etc/systemd/system/restore-check.service
-sudo ln -sf /opt/magenta-blumen/deploy/systemd/restore-check.timer   /etc/systemd/system/restore-check.timer
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/reap-abandoned-orders.service /etc/systemd/system/reap-abandoned-orders.service
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/reap-abandoned-orders.timer   /etc/systemd/system/reap-abandoned-orders.timer
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/generate-runs.service         /etc/systemd/system/generate-runs.service
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/generate-runs.timer           /etc/systemd/system/generate-runs.timer
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/backup.service                /etc/systemd/system/backup.service
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/backup.timer                  /etc/systemd/system/backup.timer
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/restore-check.service         /etc/systemd/system/restore-check.service
+sudo ln -sf /opt/magenta-blumen/deploy/systemd/restore-check.timer           /etc/systemd/system/restore-check.timer
 sudo systemctl daemon-reload
 ```
 
@@ -77,9 +85,10 @@ sudo systemctl daemon-reload
 Never enable a timer without first proving the service works. Order:
 
 ```bash
-sudo systemctl start generate-runs.service && journalctl -u generate-runs.service -n 30 --no-pager
-sudo systemctl start backup.service        && journalctl -u backup.service        -n 30 --no-pager
-sudo systemctl start restore-check.service && journalctl -u restore-check.service -n 40 --no-pager
+sudo systemctl start reap-abandoned-orders.service && journalctl -u reap-abandoned-orders.service -n 30 --no-pager
+sudo systemctl start generate-runs.service         && journalctl -u generate-runs.service         -n 30 --no-pager
+sudo systemctl start backup.service                && journalctl -u backup.service                -n 30 --no-pager
+sudo systemctl start restore-check.service         && journalctl -u restore-check.service         -n 40 --no-pager
 ```
 
 Look for a `... done` (or `PASSED`) line at the end of each.
@@ -89,10 +98,11 @@ Look for a `... done` (or `PASSED`) line at the end of each.
 Only after the manual runs pass:
 
 ```bash
+sudo systemctl enable --now reap-abandoned-orders.timer
 sudo systemctl enable --now generate-runs.timer
 sudo systemctl enable --now backup.timer
 sudo systemctl enable --now restore-check.timer
-systemctl list-timers | grep -E 'backup|restore-check|generate-runs'
+systemctl list-timers | grep -E 'backup|restore-check|generate-runs|reap-abandoned-orders'
 ```
 
 ---
@@ -100,18 +110,28 @@ systemctl list-timers | grep -E 'backup|restore-check|generate-runs'
 ## Known limits / TODO
 
 - **Failure notification** is currently just `journalctl`. There is no
-  paging / email / Sentry cron monitor yet. Check the three
+  paging / email / Sentry cron monitor yet. Check the four
   `journalctl -u <name>.service` outputs weekly. When Sentry Cron
   Monitors are wired, each of these should check-in on start + success.
-- **Skipping a night** (box off, Hetzner outage) is fine for
-  backup/restore-check (Persistent=true catches up on next boot) and
-  irrelevant for generate-runs (idempotent; missing days get filled
-  on the next successful run).
+- **Skipping a run** (box off, Hetzner outage) is fine for
+  backup/restore-check/reaper (Persistent=true catches up on next boot)
+  and irrelevant for generate-runs (idempotent; missing days get filled
+  on the next successful run). Note that a late reaper catch-up may
+  cancel a large batch of orders in one hit — expected, not a bug.
 - **The generate-runs capacity is hardcoded 5**. When Sandra raises
   it in Einstellungen post-launch, edit `scripts/generate-runs.sql`
   and redeploy. Existing runs keep their original capacity — that's
   deliberate (existing bookings must not have the ground shift under
   them).
+- **Reaper vs late-arriving payment webhook** (Session 6, once Stripe
+  is wired): docs/checkout-transaction.md §6 describes the race — a
+  webhook that lands 30 seconds after the reaper cancelled the order.
+  The webhook (not this cron) is responsible for detecting the
+  cancelled-but-paid state and either restoring the order (if capacity
+  is still free) or flagging for manual refund. In Phase 1 with only
+  cash + invoice the race is impossible: those orders always have a
+  payment row that satisfies the reaper's NOT EXISTS clause, so the
+  reaper never touches them.
 
 See also `docs/backups.md` for the destructive-restore procedure and
 R2 credential notes.
