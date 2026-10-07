@@ -1,4 +1,7 @@
-import "server-only";
+// NOT server-only: this file is pure constants + pure functions and
+// is intentionally imported by both the server action and the client
+// StatusButtons component so they share one source of truth for the
+// state machine.
 
 /**
  * Order status transition rules, from docs/checkout-transaction.md §1:
