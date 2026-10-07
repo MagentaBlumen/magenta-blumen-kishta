@@ -2,6 +2,7 @@ import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SearchBox } from "@/components/admin/search-box";
 
 // Every admin page re-checks auth server-side in addition to the
 // middleware gate. Belt + braces - middleware can misfire on new
@@ -17,9 +18,9 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <header className="border-b bg-card">
-        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-6">
-            <Link href="/admin" className="font-semibold tracking-tight">
+        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-6 min-w-0">
+            <Link href="/admin" className="font-semibold tracking-tight whitespace-nowrap">
               Magenta Blumen
             </Link>
             <nav className="flex items-center gap-1 text-sm">
@@ -28,7 +29,8 @@ export default async function AdminLayout({
               <NavLink href="/admin/einstellungen">Einstellungen</NavLink>
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <SearchBox />
             <span className="text-xs text-muted-foreground hidden sm:inline">
               {session.user.email}
             </span>
