@@ -2,11 +2,15 @@
 // own DB clients. All application callers go through the route handler
 // under src/app/api/webhooks/stripe/, which is server-only by nature.
 
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
+import { DateTime } from "luxon";
 import type Stripe from "stripe";
 import { db as defaultDb } from "@/db/client";
+import { deliveryRun } from "@/db/schema/delivery";
 import { order } from "@/db/schema/order";
 import { payment, stripeEvent } from "@/db/schema/payment";
+import { settings } from "@/db/schema/settings";
+import { ZONE } from "./time";
 
 /**
  * The Stripe webhook handler, split out from the HTTP route so tests
@@ -157,29 +161,56 @@ async function processPaymentIntentEvent(
       .where(eq(order.id, freshPayment.orderId))
       .limit(1);
 
-    // -------- The reaper race hint --------
+    // -------- The reaper race (docs/checkout-transaction.md §6) ----
     //
-    // Full handler lands in 6d. For now we detect and log; the payment
-    // still gets processed so the money isn't lost - the ORDER just
-    // stays cancelled. A human running `journalctl -u ...` sees the
-    // 'flagged' status and can restore or refund manually.
-    if (ord?.status === "cancelled") {
-      // Update payment status the same as any other, but flag the
-      // event and return so the route can log loudly.
-      const action = await applyPaymentTransition(
+    // Reaper cancelled at t=30:00, Stripe success webhook arrives at
+    // t=30:05. The payment just succeeded on Stripe's side so the
+    // money is already captured; we can't un-charge from here.
+    //
+    // Only applies to the SUCCEEDED event. If the race was a payment
+    // that failed/cancelled after the reaper killed the order, the
+    // order stays cancelled, the payment flips to failed, nothing to
+    // restore - treat as a normal processed event.
+    if (
+      ord?.status === "cancelled" &&
+      event.type === "payment_intent.succeeded"
+    ) {
+      // Flip the payment status first (money is on Stripe either way).
+      const paymentAction = await applyPaymentTransition(
         tx,
         freshPayment.id,
         freshPayment.status,
         event.type,
       );
+
+      // Then try to restore the order under the same lock pattern the
+      // reserve transaction uses. Returns one of three outcomes.
+      const outcome = await tryRestoreCancelledOrder(tx, ord.id);
+
+      if (outcome.kind === "restored") {
+        await markProcessed(
+          tx,
+          event.id,
+          `RESTORED: payment ${paymentAction} on cancelled order ${ord.id}; capacity was free, order flipped new -> cancelled -> new`,
+        );
+        return {
+          kind: "flagged",
+          reason: `restored order ${ord.id} after reaper race`,
+        };
+      }
+
+      // Capacity full or unavailable - order stays cancelled, payment
+      // succeeded, Stripe holds the money. This is the LOUD case: a
+      // human needs to issue a refund via the Stripe dashboard and
+      // tell the customer. 6f will email the shop automatically.
       await markProcessed(
         tx,
         event.id,
-        `WARNING: payment ${action} for CANCELLED order ${ord.id} (reaper race)`,
+        `MANUAL REFUND REQUIRED: payment ${paymentAction} on cancelled order ${ord.id}; ${outcome.reason}. Refund via Stripe dashboard and notify customer.`,
       );
       return {
         kind: "flagged",
-        reason: `payment ${action} on cancelled order ${ord.id}`,
+        reason: `manual refund needed for order ${ord.id} - ${outcome.reason}`,
       };
     }
 
@@ -251,6 +282,130 @@ async function markProcessed(
     .update(stripeEvent)
     .set({ processedAt: new Date(), error: errorText })
     .where(eq(stripeEvent.stripeEventId, eventId));
+}
+
+// ------------------------------------------------------------------
+// Reaper race: try to restore the order
+// ------------------------------------------------------------------
+
+type RestoreOutcome =
+  | { kind: "restored" }
+  | { kind: "cannot_restore"; reason: string };
+
+/**
+ * Re-check capacity for a cancelled order's slot. If there's room,
+ * flip status back to 'new'. If not, return a reason the caller can
+ * put in the audit log so the shop knows which refund to issue.
+ *
+ * Uses the SAME lock pattern as reserveOrder (docs/checkout-transaction.md §2):
+ *   - fulfilment='run':   SELECT ... FOR UPDATE on delivery_run
+ *   - fulfilment='timed': pg_advisory_xact_lock on the epoch-hour
+ *   - fulfilment='pickup': no capacity concept, restore unconditionally
+ *     (pickup orders not implemented in Phase 1 but defensive is cheap)
+ *
+ * Our order (currently 'cancelled') does NOT count toward the capacity
+ * since we only count status <> 'cancelled'. After we flip it to 'new'
+ * it starts counting; the capacity check runs BEFORE the flip to avoid
+ * self-counting.
+ */
+async function tryRestoreCancelledOrder(
+  tx: Parameters<Parameters<DbClient["transaction"]>[0]>[0],
+  orderId: number,
+): Promise<RestoreOutcome> {
+  // Read fulfilment type + slot info without lock first.
+  const [ord] = await tx
+    .select({
+      id: order.id,
+      fulfilment: order.fulfilment,
+      deliveryRunId: order.deliveryRunId,
+      requestedDeliveryAt: order.requestedDeliveryAt,
+    })
+    .from(order)
+    .where(eq(order.id, orderId))
+    .limit(1);
+  if (!ord) {
+    return { kind: "cannot_restore", reason: "order row not found" };
+  }
+
+  if (ord.fulfilment === "run") {
+    if (ord.deliveryRunId == null) {
+      return { kind: "cannot_restore", reason: "run order has no run id" };
+    }
+    const [run] = await tx
+      .select({
+        id: deliveryRun.id,
+        capacity: deliveryRun.capacity,
+        isClosed: deliveryRun.isClosed,
+      })
+      .from(deliveryRun)
+      .where(eq(deliveryRun.id, ord.deliveryRunId))
+      .for("update");
+    if (!run) {
+      return { kind: "cannot_restore", reason: "delivery_run no longer exists" };
+    }
+    if (run.isClosed) {
+      return { kind: "cannot_restore", reason: "delivery_run was closed" };
+    }
+    const [countRow] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(order)
+      .where(and(eq(order.deliveryRunId, ord.deliveryRunId), ne(order.status, "cancelled")));
+    const booked = countRow?.c ?? 0;
+    if (booked >= run.capacity) {
+      return {
+        kind: "cannot_restore",
+        reason: `run full (${booked}/${run.capacity} booked)`,
+      };
+    }
+  } else if (ord.fulfilment === "timed") {
+    if (!ord.requestedDeliveryAt) {
+      return { kind: "cannot_restore", reason: "timed order has no datetime" };
+    }
+    const dt = DateTime.fromJSDate(ord.requestedDeliveryAt, { zone: ZONE });
+    if (!dt.isValid) {
+      return { kind: "cannot_restore", reason: "timed datetime is invalid" };
+    }
+    const hourStart = dt.startOf("hour");
+    const hourEnd = hourStart.plus({ hours: 1 });
+    const hourEpoch = Math.floor(hourStart.toSeconds());
+
+    await tx.execute(sql`select pg_advisory_xact_lock(${hourEpoch}::bigint)`);
+
+    // Read the per-hour cap from settings (same as reserve).
+    const [capRow] = await tx
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, "timed_deliveries_per_hour"))
+      .limit(1);
+    const cap = capRow ? Number(capRow.value) || 3 : 3;
+
+    const [countRow] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(order)
+      .where(
+        and(
+          eq(order.fulfilment, "timed"),
+          ne(order.status, "cancelled"),
+          sql`${order.requestedDeliveryAt} >= ${hourStart.toISO()}::timestamptz`,
+          sql`${order.requestedDeliveryAt} <  ${hourEnd.toISO()}::timestamptz`,
+        ),
+      );
+    const booked = countRow?.c ?? 0;
+    if (booked >= cap) {
+      return {
+        kind: "cannot_restore",
+        reason: `timed hour full (${booked}/${cap} booked)`,
+      };
+    }
+  }
+  // Pickup falls through - no capacity to check.
+
+  // Capacity available - restore.
+  await tx
+    .update(order)
+    .set({ status: "new", updatedAt: new Date() })
+    .where(eq(order.id, orderId));
+  return { kind: "restored" };
 }
 
 /**

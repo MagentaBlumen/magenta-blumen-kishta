@@ -421,4 +421,178 @@ describe("webhook handler state machine", () => {
     const p = await readPayment();
     expect(p.status).toBe("succeeded");
   });
+
+  it("reaper race: cancelled order + late succeeded webhook + capacity free -> order restored", async () => {
+    // Set up: cancelled order with a pending payment on a run that
+    // has plenty of capacity (test runId has capacity=5). Payment
+    // succeeds late (post-reaper). We expect the handler to flip
+    // payment to succeeded AND flip order back to 'new'.
+    const [ord3] = await admin
+      .insert(order)
+      .values({
+        orderNumber: "MB-99999999-WHTEST03",
+        status: "cancelled",
+        buyerName: "Test Reaper Race A",
+        buyerEmail: "race-a@example.invalid",
+        buyerPhone: "+41 79 000 00 00",
+        recipientName: "Test Recipient",
+        deliveryStreet: "Teststrasse 3",
+        deliveryPlz: TEST_PLZ,
+        deliveryCity: TEST_ORT,
+        deliveryZoneName: TEST_ZONE_NAME,
+        deliveryContext: "residential",
+        fulfilment: "run",
+        deliveryRunId: runId,
+        deliveryDate: new Date().toISOString().slice(0, 10),
+        sortTime: TEST_WINDOW_START,
+        subtotalGross: "50.00",
+        deliveryFeeGross: "10.00",
+        totalGross: "60.00",
+        amountDueGross: "60.00",
+      })
+      .returning({ id: order.id });
+
+    const raceIntentId = "pi_test_reaper_race_restore";
+    await admin.insert(payment).values({
+      orderId: ord3.id,
+      method: "card",
+      providerPaymentIntentId: raceIntentId,
+      amountGross: "60.00",
+      status: "pending",
+    });
+
+    const ev = fakeEvent(
+      "evt_test_webhook_race_restore_006",
+      "payment_intent.succeeded",
+      raceIntentId,
+    );
+    const result = await processStripeEvent(ev);
+
+    expect(result.kind).toBe("flagged");
+    if (result.kind === "flagged") {
+      expect(result.reason).toMatch(/restored/);
+    }
+
+    // Order should be back to 'new'.
+    const [restored] = await admin
+      .select({ status: order.status })
+      .from(order)
+      .where(eq(order.id, ord3.id))
+      .limit(1);
+    expect(restored.status).toBe("new");
+
+    // Audit row should carry the RESTORED message.
+    const [auditRow] = await admin
+      .select({ error: stripeEvent.error })
+      .from(stripeEvent)
+      .where(eq(stripeEvent.stripeEventId, "evt_test_webhook_race_restore_006"))
+      .limit(1);
+    expect(auditRow.error).toMatch(/RESTORED/);
+  });
+
+  it("reaper race: cancelled order + late succeeded + run full -> order stays cancelled, MANUAL REFUND flag", async () => {
+    // Fill the test run to capacity (5) so a restore attempt fails.
+    // The run already has one order from the previous test ('new'),
+    // so insert four more to reach 5.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < 4; i += 1) {
+      await admin.insert(order).values({
+        orderNumber: `MB-99999999-FILLER${i.toString().padStart(2, "0")}`,
+        status: "new",
+        buyerName: `Filler ${i}`,
+        buyerEmail: `filler${i}@example.invalid`,
+        buyerPhone: "+41 79 000 00 00",
+        recipientName: "Filler",
+        deliveryStreet: `Teststrasse ${i}`,
+        deliveryPlz: TEST_PLZ,
+        deliveryCity: TEST_ORT,
+        deliveryZoneName: TEST_ZONE_NAME,
+        deliveryContext: "residential",
+        fulfilment: "run",
+        deliveryRunId: runId,
+        deliveryDate: todayIso,
+        sortTime: TEST_WINDOW_START,
+        subtotalGross: "50.00",
+        deliveryFeeGross: "10.00",
+        totalGross: "60.00",
+        amountDueGross: "60.00",
+      });
+    }
+
+    // Our target order: cancelled, with a payment that's about to
+    // succeed on a run that's now full.
+    const [ord4] = await admin
+      .insert(order)
+      .values({
+        orderNumber: "MB-99999999-WHTEST04",
+        status: "cancelled",
+        buyerName: "Test Reaper Race B",
+        buyerEmail: "race-b@example.invalid",
+        buyerPhone: "+41 79 000 00 00",
+        recipientName: "Test Recipient",
+        deliveryStreet: "Teststrasse 4",
+        deliveryPlz: TEST_PLZ,
+        deliveryCity: TEST_ORT,
+        deliveryZoneName: TEST_ZONE_NAME,
+        deliveryContext: "residential",
+        fulfilment: "run",
+        deliveryRunId: runId,
+        deliveryDate: todayIso,
+        sortTime: TEST_WINDOW_START,
+        subtotalGross: "50.00",
+        deliveryFeeGross: "10.00",
+        totalGross: "60.00",
+        amountDueGross: "60.00",
+      })
+      .returning({ id: order.id });
+
+    const refundIntentId = "pi_test_reaper_race_refund";
+    const [pay4] = await admin
+      .insert(payment)
+      .values({
+        orderId: ord4.id,
+        method: "card",
+        providerPaymentIntentId: refundIntentId,
+        amountGross: "60.00",
+        status: "pending",
+      })
+      .returning({ id: payment.id });
+
+    const ev = fakeEvent(
+      "evt_test_webhook_race_refund_007",
+      "payment_intent.succeeded",
+      refundIntentId,
+    );
+    const result = await processStripeEvent(ev);
+
+    expect(result.kind).toBe("flagged");
+    if (result.kind === "flagged") {
+      expect(result.reason).toMatch(/manual refund needed/i);
+    }
+
+    // Payment flipped to succeeded (money is on Stripe).
+    const [p4] = await admin
+      .select({ status: payment.status, paidAt: payment.paidAt })
+      .from(payment)
+      .where(eq(payment.id, pay4.id))
+      .limit(1);
+    expect(p4.status).toBe("succeeded");
+    expect(p4.paidAt).not.toBeNull();
+
+    // Order stays cancelled.
+    const [o4] = await admin
+      .select({ status: order.status })
+      .from(order)
+      .where(eq(order.id, ord4.id))
+      .limit(1);
+    expect(o4.status).toBe("cancelled");
+
+    // Audit row carries the loud MANUAL REFUND message.
+    const [auditRow] = await admin
+      .select({ error: stripeEvent.error })
+      .from(stripeEvent)
+      .where(eq(stripeEvent.stripeEventId, "evt_test_webhook_race_refund_007"))
+      .limit(1);
+    expect(auditRow.error).toMatch(/MANUAL REFUND REQUIRED/);
+  });
 });
