@@ -37,14 +37,8 @@ export default async function KasseErfolgPage({
       </h1>
       <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light">
         Wir haben Ihre Bestellung erhalten und den Liefertermin für Sie
-        reserviert.
+        reserviert. Eine Bestätigung per E-Mail ist unterwegs.
       </p>
-      <div className="px-4 py-3 bg-cream border border-mist text-[0.85rem] text-bark leading-[1.7] max-w-md mx-auto">
-        <strong className="font-medium">Hinweis:</strong> Automatische
-        Bestätigungen per E-Mail und die Übersicht für unsere Floristin
-        werden zurzeit noch aufgeschaltet. Bitte rufen Sie kurz an, damit
-        wir Ihre Bestellung bestätigen können.
-      </div>
 
       {orderNumber && (
         <div className="mt-4 inline-block border border-mist px-6 py-4 text-left">
@@ -55,21 +49,16 @@ export default async function KasseErfolgPage({
             {orderNumber}
           </div>
           <p className="text-[0.72rem] text-sage mt-2 leading-[1.55]">
+            Die vollständigen Details finden Sie in Ihrer Bestätigungs-E-Mail.
             Bei Rückfragen erwähnen Sie bitte diese Nummer.
           </p>
         </div>
       )}
 
-      <div className="mt-8 space-y-2 text-[0.85rem] text-bark/75 leading-[1.7]">
-        <p>
-          <strong className="text-bark font-medium">Barzahlung:</strong> Sie
-          bezahlen bei Abholung oder an der Haustür an unsere Fahrerin.
-        </p>
-        <p>
-          <strong className="text-bark font-medium">Rechnung:</strong> Wir
-          schicken Ihnen die Rechnung per E-Mail. Zahlungsziel 30 Tage.
-        </p>
-      </div>
+      <p className="text-[0.85rem] text-bark/75 leading-[1.7] max-w-md mx-auto">
+        Haben Sie innerhalb von 15 Minuten keine E-Mail erhalten? Prüfen Sie
+        bitte den Spam-Ordner oder rufen Sie uns an.
+      </p>
 
       <div className="pt-6 flex flex-wrap gap-3 justify-center">
         <Link

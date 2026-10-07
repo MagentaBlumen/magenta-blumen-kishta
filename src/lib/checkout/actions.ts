@@ -317,8 +317,9 @@ export async function resetCheckoutAction(): Promise<void> {
 //
 //   card / twint: Stripe intent created inside the reserve tx. Action
 //     clears the cookies and RETURNS { orderNumber, clientSecret }. The
-//     client-side Payment Element (Session 6b) uses the clientSecret to
-//     call stripe.confirmPayment({ return_url: /kasse/erfolg?... }).
+//     client-side Payment Element (components/storefront/bestaetigen-form)
+//     uses the clientSecret to call
+//     stripe.confirmPayment({ return_url: /kasse/erfolg?... }).
 //     Stripe (not us) redirects the browser to the success URL on
 //     successful confirmation.
 //

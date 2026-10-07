@@ -27,8 +27,10 @@ import { processStripeEvent } from "@/lib/checkout/webhook";
  *      this intent." Uncaught throws still surface as 500 - reserved
  *      for real infrastructure faults (DB down).
  *
- *   5. Notifications (buyer + shop email) land in Session 6f and
- *      fire AFTER the tx inside processStripeEvent commits.
+ *   5. Notifications (buyer + shop email) fire AFTER the tx inside
+ *      processStripeEvent commits, via sendOrderEmails(). Never
+ *      inside the tx - a failing email must not roll back a
+ *      successful payment capture (doc §4 step 16).
  *
  * Local dev: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
  * and copy the whsec_... it prints into STRIPE_WEBHOOK_SECRET.

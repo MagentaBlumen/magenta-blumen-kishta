@@ -12,8 +12,10 @@ import { useEffect, useRef, useState } from "react";
  *   - No wishlist heart (wishlist feature is out of scope)
  *   - No account icon yet (customer accounts are optional post-payment;
  *     no meaningful place for it in the header pre-checkout)
- *   - Cart icon shows the count but the drawer wiring is in Session 5.
- *     For now the click routes to /warenkorb which lands in Session 5.
+ *   - Cart icon shows the count from the server-rendered layout and
+ *     routes to the full /warenkorb page (we chose a dedicated page
+ *     over the Figma's slide-out drawer; one less bit of mobile UX to
+ *     maintain, same functional end state).
  *
  * Dropdowns toggle on CLICK, not hover. Touch users can't hover; hover
  * also flickers when the pointer crosses the gap between button and

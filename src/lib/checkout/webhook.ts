@@ -39,12 +39,13 @@ import { ZONE } from "./time";
  *      is fine for infrastructure faults (DB down) but wrong for
  *      "we don't know this intent" - hence rule 2.
  *
- * Notifications (buyer + shop email) land in Session 6f and fire
- * OUTSIDE this handler after the tx commits.
+ * Notifications (buyer + shop email) fire OUTSIDE the tx after
+ * commit, via sendOrderEmails(). Never inside - a failing email
+ * must not roll back a successful payment capture.
  *
  * Reaper-vs-webhook race (payment succeeded on a cancelled order)
- * is 6d - detected here today but only marked with the error field
- * on the stripe_event row; restore-or-refund logic comes later.
+ * is handled by tryRestoreCancelledOrder() below: restores the order
+ * if capacity is still free, flags for manual refund otherwise.
  */
 
 type DbClient = typeof defaultDb;
@@ -74,7 +75,7 @@ export async function processStripeEvent(
     await dbClient.insert(stripeEvent).values({
       stripeEventId: event.id,
       type: event.type,
-      payload: event as unknown as Record<string, unknown>,
+      payload: redactStripeEvent(event),
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -220,8 +221,9 @@ async function processPaymentIntentEvent(
       // tell the customer. Shop email still fires so Sandra knows a
       // refund is needed; buyer email intentionally doesn't (sending
       // "thanks for your order!" on an order that didn't survive is
-      // worse than sending nothing). Nuance left for 6g+ - for now
-      // the audit row + journalctl line is the signal.
+      // worse than sending nothing). The shop email branch itself is
+      // a follow-up: for now the audit row + journalctl line is the
+      // signal that a manual refund is needed.
       await markProcessed(
         tx,
         event.id,
@@ -449,6 +451,53 @@ async function tryRestoreCancelledOrder(
     .set({ status: "new", updatedAt: new Date() })
     .where(eq(order.id, orderId));
   return { kind: "restored" };
+}
+
+// ------------------------------------------------------------------
+// stripe_event.payload redaction
+// ------------------------------------------------------------------
+//
+// We store the full Stripe event so the audit trail has it, but we
+// strip any field that could carry buyer PII. In practice our events
+// (payment_intent.*) don't carry much - we never ask Stripe to collect
+// shipping or send receipts - but a field could appear in a future
+// event shape or if someone changes PaymentIntent creation params.
+// This bounds the blast radius if the DB is ever dumped under FADP.
+//
+// Deliberately strip (not allowlist) so the audit trail keeps the
+// rest of the event intact. Driver / metadata / status / amount all
+// survive - they're what makes the audit useful.
+
+const PII_FIELDS = new Set([
+  // Known fields that may carry buyer PII.
+  "shipping",
+  "receipt_email",
+  "billing_details",
+  // Charge-level details some events embed.
+  "customer",
+  "customer_email",
+  // Opaque personal description fields.
+  "statement_descriptor_suffix",
+]);
+
+function redactStripeEvent(event: Stripe.Event): Record<string, unknown> {
+  return redactValue(event) as Record<string, unknown>;
+}
+
+function redactValue(input: unknown): unknown {
+  if (input === null || typeof input !== "object") return input;
+  if (Array.isArray(input)) return input.map(redactValue);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (PII_FIELDS.has(k)) {
+      // Replace with a marker so a human reading the audit knows a
+      // field was present AND redacted, as opposed to never set.
+      out[k] = "[REDACTED]";
+      continue;
+    }
+    out[k] = redactValue(v);
+  }
+  return out;
 }
 
 /**

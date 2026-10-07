@@ -14,19 +14,20 @@ import { getStripe } from "@/lib/checkout/stripe-browser";
 /**
  * Payment method picker + two-phase reserve flow.
  *
- * Phase 1: user picks method + clicks "Kostenpflichtig bestellen".
+ * Step 1: user picks method + clicks "Kostenpflichtig bestellen".
  *   cash / invoice -> server action reserves order + redirect()s to
- *     /kasse/erfolg. UI never reaches phase 2.
+ *     /kasse/erfolg. UI never reaches step 2.
  *   card / twint   -> server action reserves order + creates Stripe
  *     PaymentIntent + returns { orderNumber, clientSecret }. UI mounts
  *     <Elements> below with the clientSecret and shows the
  *     PaymentElement (card fields or TWINT redirect prompt).
  *
- * Phase 2 (card/twint only): user fills the PaymentElement + clicks
+ * Step 2 (card/twint only): user fills the PaymentElement + clicks
  *   "Jetzt bezahlen" -> stripe.confirmPayment({ return_url }). Stripe
  *   handles the 3DS / TWINT redirect + eventually navigates the
- *   browser to /kasse/erfolg?bestellnummer=<order-number>. The webhook
- *   (Session 6c) is what actually flips payment.status to succeeded.
+ *   browser to /kasse/erfolg?bestellnummer=<order-number>. The Stripe
+ *   webhook (src/app/api/webhooks/stripe) is what actually flips
+ *   payment.status to succeeded + fires the confirmation emails.
  */
 
 type MethodValue = "invoice" | "cash" | "card" | "twint";
@@ -70,7 +71,7 @@ export function BestaetigenForm() {
     });
   }
 
-  // Phase 2 for card/twint.
+  // Step 2 for card/twint - PaymentElement + Stripe confirm.
   if (pending) {
     return (
       <div className="space-y-4">

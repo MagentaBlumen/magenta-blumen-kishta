@@ -13,8 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Read-only product list. Editing lands in chunk 3b (/admin/produkte/[id]).
-// Categories join is deferred - not needed for the first-cut overview.
+// Product list. Click a row to edit under /admin/produkte/[id].
+// Categories join is deferred - not needed for the overview.
 export default async function ProdukteListPage() {
   const products = await db
     .select({

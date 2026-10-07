@@ -10,13 +10,14 @@ import Stripe from "stripe";
  *                                   Server-only, NEVER prefixed with
  *                                   NEXT_PUBLIC_.
  *   STRIPE_WEBHOOK_SECRET           whsec_... . Used by the webhook route
- *                                   (Session 6c) to verify signed events.
- *                                   Different per environment.
+ *                                   under src/app/api/webhooks/stripe to
+ *                                   verify signed events. Different per
+ *                                   environment.
  *   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
  *                                   pk_test_... in dev, pk_live_... in prod.
  *                                   Client-safe; used by the Payment
- *                                   Element (Session 6b) to talk to Stripe
- *                                   from the browser.
+ *                                   Element on /kasse/bestaetigen to talk
+ *                                   to Stripe from the browser.
  *
  * apiVersion pin: locks us to a specific Stripe API shape so their
  * monthly backwards-incompatible changes don't drift under us. Bump

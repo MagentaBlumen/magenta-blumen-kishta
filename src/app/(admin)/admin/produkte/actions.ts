@@ -14,6 +14,7 @@ import {
   productCategory,
   productVariant,
 } from "@/db/schema/catalogue";
+import { orderLine } from "@/db/schema/order";
 import { slugify } from "@/lib/slug";
 
 /**
@@ -399,11 +400,12 @@ export async function updateProduct(id: number, formData: FormData) {
     }
 
     // Variants: three-way diff (insert new, update existing, delete missing).
-    // TODO(post-orders): before deleting, check for order_line rows
-    // referencing this variant. Today no orders exist so a stray delete
-    // would fail loudly on the FK. Once orders exist, refuse the delete
-    // with a helpful message ("Variante hat Bestellungen; auf 'nicht
-    // verfügbar' setzen statt löschen").
+    //
+    // Before deleting, check for order_line rows referencing the variant.
+    // The FK has no cascade (rule 10 - orders aren't hard-deleted) so a
+    // stray delete would fail with a cryptic PostgresError; we throw a
+    // readable German message first so Sandra sees "mark as unavailable
+    // instead" rather than a 500.
     const existing = await tx
       .select({ id: productVariant.id })
       .from(productVariant)
@@ -415,6 +417,16 @@ export async function updateProduct(id: number, formData: FormData) {
     const toDelete = [...existingIds].filter((eid) => !keptIds.has(eid));
 
     if (toDelete.length > 0) {
+      const referencing = await tx
+        .select({ variantId: orderLine.variantId })
+        .from(orderLine)
+        .where(inArray(orderLine.variantId, toDelete))
+        .limit(1);
+      if (referencing.length > 0) {
+        throw new Error(
+          "Mindestens eine Variante hat bestehende Bestellungen und kann nicht gelöscht werden. Bitte setzen Sie sie stattdessen auf 'nicht verfügbar'.",
+        );
+      }
       await tx
         .delete(productVariant)
         .where(inArray(productVariant.id, toDelete));

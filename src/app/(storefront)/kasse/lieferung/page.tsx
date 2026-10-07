@@ -105,8 +105,8 @@ export default async function KasseLieferungPage() {
               <TimedSlotSection selectedIso={checkout.rda} />
             )}
 
-            {/* Continue button appears once a slot is chosen. /kasse/lieferdaten
-                lands in 5e (buyer + recipient form). */}
+            {/* Continue button appears once a slot is chosen; the next
+                step collects buyer + recipient details. */}
             {isSlotChosen(checkout) && (
               <div className="pt-2">
                 <Link

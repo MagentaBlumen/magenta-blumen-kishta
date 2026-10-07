@@ -465,8 +465,9 @@ export async function reserveOrder(
     //
     // Card / TWINT: create the Stripe intent INSIDE this tx (before the
     // payment insert). The intent ties back to the order via metadata;
-    // the webhook (Session 6c) matches on providerPaymentIntentId to
-    // flip status. Intent creation is a 200-500ms network call inside a
+    // the Stripe webhook (src/app/api/webhooks/stripe) matches on
+    // providerPaymentIntentId to flip payment.status when the capture
+    // confirms. Intent creation is a 200-500ms network call inside a
     // held row lock - acceptable at florist scale and simpler than the
     // two-phase alternative (commit tx, then call Stripe, then update
     // payment) which leaves an orphan window if the process dies
