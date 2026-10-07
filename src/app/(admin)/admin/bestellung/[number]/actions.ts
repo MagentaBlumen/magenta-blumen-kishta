@@ -6,6 +6,11 @@ import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { order } from "@/db/schema/order";
 import { payment } from "@/db/schema/payment";
+import {
+  ALL_STATUSES,
+  isValidTransition,
+  type OrderStatus,
+} from "@/lib/admin/order-status";
 
 /**
  * Server actions for /admin/bestellung/[number]. Each re-checks admin
@@ -116,3 +121,48 @@ export async function updateInternalNotesAction(
   revalidatePath(`/admin/bestellung/${orderNumber}`);
 }
 
+/**
+ * Transition order.status to a new value. Re-reads the CURRENT status
+ * from the DB (not from form data) and validates against the state
+ * machine in src/lib/admin/order-status.ts. A stale tab clicking
+ * "Delivered" on an order someone else just cancelled must throw,
+ * not silently reset it.
+ *
+ * We don't attempt to detect "no-op" transitions here (status == next)
+ * - the UI already greys those buttons out, and the extra round trip
+ * is harmless.
+ */
+export async function updateOrderStatusAction(
+  orderNumberRaw: string,
+  nextStatusRaw: string,
+): Promise<void> {
+  await requireAdmin();
+  const orderNumber = String(orderNumberRaw ?? "").trim();
+  if (!orderNumber) throw new Error("Ungültige Bestellnummer");
+
+  if (!ALL_STATUSES.includes(nextStatusRaw as OrderStatus)) {
+    throw new Error("Ungültiger Bestellstatus");
+  }
+  const nextStatus = nextStatusRaw as OrderStatus;
+
+  const [row] = await db
+    .select({ id: order.id, status: order.status })
+    .from(order)
+    .where(eq(order.orderNumber, orderNumber))
+    .limit(1);
+  if (!row) throw new Error("Bestellung nicht gefunden");
+
+  if (!isValidTransition(row.status, nextStatus)) {
+    throw new Error(
+      `Übergang ${row.status} → ${nextStatus} ist nicht erlaubt.`,
+    );
+  }
+
+  await db
+    .update(order)
+    .set({ status: nextStatus, updatedAt: new Date() })
+    .where(eq(order.id, row.id));
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/bestellung/${orderNumber}`);
+}

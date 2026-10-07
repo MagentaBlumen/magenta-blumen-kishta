@@ -12,6 +12,7 @@ import {
 import { formatChf } from "@/lib/money";
 import { MarkPaidButton } from "./_components/mark-paid";
 import { InternalNotesEditor } from "./_components/internal-notes";
+import { StatusButtons } from "./_components/status-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,14 @@ export default async function OrderDetailPage({ params }: PageProps) {
           </div>
         </div>
       </header>
+
+      {/* Status transitions bar */}
+      <section className="rounded-md border p-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+          Status
+        </h2>
+        <StatusButtons orderNumber={o.orderNumber} current={o.status} />
+      </section>
 
       {/* Grid: left big column + right side panel */}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
