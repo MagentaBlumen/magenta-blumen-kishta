@@ -10,6 +10,7 @@ import { deliveryRun } from "@/db/schema/delivery";
 import { order } from "@/db/schema/order";
 import { payment, stripeEvent } from "@/db/schema/payment";
 import { settings } from "@/db/schema/settings";
+import { sendOrderEmails } from "@/lib/email/send";
 import { ZONE } from "./time";
 
 /**
@@ -131,8 +132,18 @@ async function processPaymentIntentEvent(
   }
 
   // -------- 3. Wrap the payment + order updates in one tx --------
+  //
+  // The tx returns BOTH the ProcessResult AND an optional orderId to
+  // email AFTER commit. Emails must fire outside the tx per
+  // docs/checkout-transaction.md §4 step 16 - a Resend outage must
+  // never roll back a successful payment capture.
 
-  return dbClient.transaction(async (tx) => {
+  type TxOutput = {
+    result: ProcessResult;
+    emailOrderId: number | null;
+  };
+
+  const { result, emailOrderId } = await dbClient.transaction<TxOutput>(async (tx) => {
     // Re-read inside the tx to get a fresh view of order.status +
     // payment.status. Everything below decides based on this.
     const [freshPayment] = await tx
@@ -152,7 +163,7 @@ async function processPaymentIntentEvent(
         event.id,
         `payment ${row.id} disappeared during processing`,
       );
-      return { kind: "unknown_intent" };
+      return { result: { kind: "unknown_intent" }, emailOrderId: null };
     }
 
     const [ord] = await tx
@@ -193,24 +204,35 @@ async function processPaymentIntentEvent(
           event.id,
           `RESTORED: payment ${paymentAction} on cancelled order ${ord.id}; capacity was free, order flipped new -> cancelled -> new`,
         );
+        // Restored order: full buyer + shop confirmation flow applies.
         return {
-          kind: "flagged",
-          reason: `restored order ${ord.id} after reaper race`,
+          result: {
+            kind: "flagged",
+            reason: `restored order ${ord.id} after reaper race`,
+          },
+          emailOrderId: ord.id,
         };
       }
 
       // Capacity full or unavailable - order stays cancelled, payment
       // succeeded, Stripe holds the money. This is the LOUD case: a
       // human needs to issue a refund via the Stripe dashboard and
-      // tell the customer. 6f will email the shop automatically.
+      // tell the customer. Shop email still fires so Sandra knows a
+      // refund is needed; buyer email intentionally doesn't (sending
+      // "thanks for your order!" on an order that didn't survive is
+      // worse than sending nothing). Nuance left for 6g+ - for now
+      // the audit row + journalctl line is the signal.
       await markProcessed(
         tx,
         event.id,
         `MANUAL REFUND REQUIRED: payment ${paymentAction} on cancelled order ${ord.id}; ${outcome.reason}. Refund via Stripe dashboard and notify customer.`,
       );
       return {
-        kind: "flagged",
-        reason: `manual refund needed for order ${ord.id} - ${outcome.reason}`,
+        result: {
+          kind: "flagged",
+          reason: `manual refund needed for order ${ord.id} - ${outcome.reason}`,
+        },
+        emailOrderId: null,
       };
     }
 
@@ -221,8 +243,29 @@ async function processPaymentIntentEvent(
       event.type,
     );
     await markProcessed(tx, event.id, null);
-    return { kind: "processed", action };
+
+    // Email on the first successful transition only. "already succeeded"
+    // means a duplicate retry we don't want to spam Sandra for; "no-op"
+    // and "ignored" branches similarly.
+    const emailOrderId =
+      event.type === "payment_intent.succeeded" && action.startsWith("flipped")
+        ? freshPayment.orderId
+        : null;
+
+    return { result: { kind: "processed", action }, emailOrderId };
   });
+
+  // -------- 4. Fire emails AFTER the tx commits ----------------------
+  //
+  // sendOrderEmails never throws. A Resend outage logs loudly in
+  // journalctl but the webhook still returns 200 to Stripe. If we were
+  // to await inside the tx, a slow Resend would hold the row locks the
+  // handler was done with.
+  if (emailOrderId !== null) {
+    await sendOrderEmails(emailOrderId, dbClient);
+  }
+
+  return result;
 }
 
 /**

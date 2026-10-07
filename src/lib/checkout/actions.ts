@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearCartCookie, readCartCookie } from "@/lib/cart/cookie";
+import { sendOrderEmails } from "@/lib/email/send";
 import { clearCheckoutCookie, patchCheckoutCookie, readCheckoutCookie } from "./cookie";
 import { reserveOrder, ReserveError, type ReservePaymentMethod } from "./reserve";
 import {
@@ -362,7 +363,16 @@ export async function reserveOrderAction(
   revalidatePath("/", "layout");
 
   if (paymentMethod === "cash" || paymentMethod === "invoice") {
-    // No Stripe round-trip needed. Straight to the confirmation page.
+    // Cash + invoice are actionable at creation, so emails fire NOW
+    // (after the reserve tx committed). Card/twint emails fire from
+    // the webhook when payment confirms - at this point the money
+    // hasn't moved yet and Sandra should not get a "new order" ping
+    // for something that might never pay.
+    //
+    // sendOrderEmails never throws - a Resend outage must not break
+    // the redirect. We await it anyway so journalctl lines land in
+    // request order.
+    await sendOrderEmails(result.orderId);
     redirect(
       `/kasse/erfolg?bestellnummer=${encodeURIComponent(result.orderNumber)}`,
     );
