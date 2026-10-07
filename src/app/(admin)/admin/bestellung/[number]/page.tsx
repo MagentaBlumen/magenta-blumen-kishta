@@ -78,6 +78,38 @@ export default async function OrderDetailPage({ params }: PageProps) {
           <div className="text-xl font-semibold tabular-nums mt-2">
             {formatChf(o.totalGross)}
           </div>
+          <div className="mt-2">
+            <a
+              href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}/bon`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-foreground text-background rounded-md hover:bg-foreground/90 transition-colors"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 6 2 18 2 18 9" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <rect x="6" y="14" width="12" height="8" />
+              </svg>
+              {o.printedAt ? "Bon erneut drucken" : "Bon drucken"}
+            </a>
+            {o.printedAt && (
+              <div className="text-[10px] text-muted-foreground mt-1">
+                Zuletzt gedruckt{" "}
+                {DateTime.fromJSDate(o.printedAt, { zone: "Europe/Zurich" })
+                  .setLocale("de-CH")
+                  .toFormat("ccc d. LLL, HH:mm")}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

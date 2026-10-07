@@ -166,3 +166,29 @@ export async function updateOrderStatusAction(
   revalidatePath("/admin");
   revalidatePath(`/admin/bestellung/${orderNumber}`);
 }
+
+/**
+ * Set order.printed_at = now() so the Heute screen's ⎙ indicator shows
+ * the Bon has been printed. Called from the print page after the
+ * browser dispatches window.print(). Not a hard lock - Sandra can
+ * reprint by clicking the button again - but the indicator helps
+ * her avoid remaking an order she already filled.
+ *
+ * Idempotent: a second call just resets printed_at to a later time.
+ * No status change; printing is orthogonal to the state machine.
+ */
+export async function markOrderPrintedAction(
+  orderNumberRaw: string,
+): Promise<void> {
+  await requireAdmin();
+  const orderNumber = String(orderNumberRaw ?? "").trim();
+  if (!orderNumber) throw new Error("Ungültige Bestellnummer");
+
+  await db
+    .update(order)
+    .set({ printedAt: new Date() })
+    .where(eq(order.orderNumber, orderNumber));
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/bestellung/${orderNumber}`);
+}
