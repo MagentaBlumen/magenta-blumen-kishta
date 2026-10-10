@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ErfolgCleanup } from "@/components/storefront/erfolg-cleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function KasseErfolgPage({
 
   return (
     <div className="max-w-2xl mx-auto px-4 lg:px-6 py-16 lg:py-24 text-center space-y-6">
+      <ErfolgCleanup />
       <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
         Bestellung erhalten
       </p>

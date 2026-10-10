@@ -360,29 +360,30 @@ export async function reserveOrderAction(
     throw err;
   }
 
-  await Promise.all([clearCartCookie(), clearCheckoutCookie()]);
-  revalidatePath("/", "layout");
-
   if (paymentMethod === "cash" || paymentMethod === "invoice") {
-    // Cash + invoice are actionable at creation, so emails fire NOW
-    // (after the reserve tx committed). Card/twint emails fire from
-    // the webhook when payment confirms - at this point the money
-    // hasn't moved yet and Sandra should not get a "new order" ping
-    // for something that might never pay.
-    //
-    // sendOrderEmails never throws - a Resend outage must not break
-    // the redirect. We await it anyway so journalctl lines land in
-    // request order.
+    // Cash + invoice are actionable at creation. Clear the cookies +
+    // revalidate NOW, fire the confirmation emails, then redirect.
+    // sendOrderEmails never throws (a Resend outage must not break
+    // the redirect) and we await so journalctl lines land in order.
+    await Promise.all([clearCartCookie(), clearCheckoutCookie()]);
+    revalidatePath("/", "layout");
     await sendOrderEmails(result.orderId);
     redirect(
       `/kasse/erfolg?bestellnummer=${encodeURIComponent(result.orderNumber)}`,
     );
   }
 
-  // card / twint: return the client secret so the browser Payment
-  // Element can confirm. If Stripe never gave us a client_secret
-  // (misconfigured intent?) surface a clear error rather than sending
-  // the client to a confirm call it can't complete.
+  // card / twint: payment hasn't completed yet. The client-side Payment
+  // Element still needs the cart+checkout cookies around (if Stripe
+  // declines, the user retries from the same Bestätigen state). Clearing
+  // + revalidating NOW would redraw this page server-side, hit the
+  // empty-cart guard, and redirect to /warenkorb before the Elements
+  // panel ever mounts. Instead, cookies get cleared on arrival at
+  // /kasse/erfolg via clearCheckoutCookiesAction below.
+  //
+  // Emails for card/twint fire from the Stripe webhook once the
+  // payment confirms, not here - we don't want Sandra pinged for an
+  // order that might fail at the card step.
   if (!result.clientSecret) {
     throw new Error(
       "Zahlung konnte nicht initialisiert werden. Bitte kontaktieren Sie uns.",
@@ -392,4 +393,19 @@ export async function reserveOrderAction(
     orderNumber: result.orderNumber,
     clientSecret: result.clientSecret,
   };
+}
+
+/**
+ * Idempotent cookie-cleanup. Called from /kasse/erfolg on page mount
+ * so a successful card/twint payment (where reserveOrderAction can't
+ * clear during the reserve step) still ends up with a fresh cart +
+ * checkout cookie for the next visit.
+ *
+ * No auth, no business logic: just a tidy-up. Safe to call multiple
+ * times - redundant calls just no-op since the cookies are already
+ * cleared.
+ */
+export async function clearCheckoutCookiesAction(): Promise<void> {
+  await Promise.all([clearCartCookie(), clearCheckoutCookie()]);
+  revalidatePath("/", "layout");
 }
