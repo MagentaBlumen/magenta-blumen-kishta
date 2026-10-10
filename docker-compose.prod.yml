@@ -30,6 +30,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # NEXT_PUBLIC_* vars are build-time inlined into the client bundle
+      # by Next.js, so env_file alone is not enough - compose has to
+      # forward them as build args. Values come from .env.production via
+      # the --env-file flag on the compose command line.
+      args:
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
     image: magenta-blumen-app:latest
     container_name: magenta-blumen-app
     restart: unless-stopped
