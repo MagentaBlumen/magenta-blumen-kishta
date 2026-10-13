@@ -28,11 +28,20 @@ Only needed once. Assumes the deploy user + `/opt/magenta-blumen` exist
 
 ### 1. Install rclone
 
+**Use rclone's official installer, not apt.** Ubuntu's packaged rclone
+can be years old — on Ubuntu 24.04 / 26.04 it's 1.60.1, which
+mis-signs R2 PUTs with chunked-SigV4 and gets a 501 NotImplemented on
+every first attempt (the retry succeeds, so backups still complete,
+but the noise masks real failures). We need at least 1.65 for correct
+Cloudflare R2 behaviour.
+
 ```bash
-sudo apt update
-sudo apt install -y rclone
-rclone version
+curl https://rclone.org/install.sh | sudo bash
+rclone version   # expect v1.65 or newer; v1.75+ is current
 ```
+
+To upgrade later, re-run the installer — it overwrites the binary at
+`/usr/bin/rclone`.
 
 The script uses rclone via environment variables — **no `rclone.conf`
 setup required**. `RCLONE_CONFIG_R2_*` in the script defines the remote
