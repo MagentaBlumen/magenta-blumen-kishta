@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  isSigninRateLimited,
+  recordSigninFailure,
+} from "@/lib/auth/rate-limit";
 
 type SignInPageProps = {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
@@ -16,6 +20,16 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   async function handleSignIn(formData: FormData) {
     "use server";
     const cb = (formData.get("callbackUrl") as string | null) ?? "/admin";
+
+    // Brute-force guard. 5 failed attempts per IP per 15 min blocks
+    // subsequent attempts. Check BEFORE calling signIn so an attacker
+    // can't keep probing while blocked.
+    if (await isSigninRateLimited()) {
+      redirect(
+        `/signin?error=RateLimited&callbackUrl=${encodeURIComponent(cb)}`,
+      );
+    }
+
     try {
       await signIn("credentials", {
         email: formData.get("email"),
@@ -24,6 +38,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
       });
     } catch (err) {
       if (err instanceof AuthError) {
+        await recordSigninFailure();
         redirect(`/signin?error=CredentialsSignin&callbackUrl=${encodeURIComponent(cb)}`);
       }
       throw err;
@@ -62,6 +77,12 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             {error === "CredentialsSignin" && (
               <p className="text-sm text-destructive">
                 E-Mail oder Passwort ist falsch.
+              </p>
+            )}
+            {error === "RateLimited" && (
+              <p className="text-sm text-destructive">
+                Zu viele fehlgeschlagene Anmeldeversuche. Bitte warten Sie
+                etwa 15 Minuten und versuchen Sie es erneut.
               </p>
             )}
             <Button type="submit" className="w-full">
