@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { fetchOrderDetail } from "@/lib/admin/order-detail";
 import {
   contextLabelDe,
+  nextHappyPathStep,
   paymentDisplayDe,
   statusLabelDe,
 } from "@/lib/admin/heute";
@@ -13,6 +14,7 @@ import { formatChf } from "@/lib/money";
 import { MarkPaidButton } from "./_components/mark-paid";
 import { InternalNotesEditor } from "./_components/internal-notes";
 import { StatusButtons } from "./_components/status-buttons";
+import { QuickStepButton } from "@/components/admin/quick-step-button";
 
 export const dynamic = "force-dynamic";
 
@@ -114,11 +116,35 @@ export default async function OrderDetailPage({ params }: PageProps) {
       </header>
 
       {/* Status transitions bar */}
-      <section className="rounded-md border p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Status
-        </h2>
-        <StatusButtons orderNumber={o.orderNumber} current={o.status} />
+      <section className="rounded-md border p-4 space-y-3">
+        {(() => {
+          const next = nextHappyPathStep(o.status);
+          if (!next) return null;
+          return (
+            <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Nächster Schritt
+                </h2>
+                <p className="text-sm mt-0.5">
+                  Von <strong>{statusLabelDe(o.status)}</strong> auf{" "}
+                  <strong>{statusLabelDe(next.target)}</strong>
+                </p>
+              </div>
+              <QuickStepButton
+                orderNumber={o.orderNumber}
+                target={next.target}
+                label={next.labelDe}
+              />
+            </div>
+          );
+        })()}
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Alle Status
+          </h2>
+          <StatusButtons orderNumber={o.orderNumber} current={o.status} />
+        </div>
       </section>
 
       {/* Grid: left big column + right side panel */}

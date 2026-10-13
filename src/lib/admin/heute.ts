@@ -264,6 +264,72 @@ export function contextLabelDe(c: HeuteOrder["deliveryContext"]): string {
   }
 }
 
+/**
+ * The single "most likely next step" from a given status, for the
+ * inline quick-action button on Heute. The full state matrix is
+ * still available on the detail page for exceptional transitions.
+ *
+ * Mapping:
+ *   new               -> confirmed       ("Bestätigen")
+ *   confirmed         -> in_production   ("In Produktion")
+ *   in_production     -> ready           ("Fertig markieren")
+ *   ready             -> out_for_delivery ("Ausliefern")
+ *   out_for_delivery  -> delivered       ("Geliefert")
+ *   delivery_failed   -> ready           ("Nochmal versuchen")
+ *   delivered, cancelled -> no next step (null)
+ */
+export type NextStep = {
+  target: HeuteOrder["status"];
+  labelDe: string;
+};
+
+export function nextHappyPathStep(status: HeuteOrder["status"]): NextStep | null {
+  switch (status) {
+    case "new":
+      return { target: "confirmed", labelDe: "Bestätigen" };
+    case "confirmed":
+      return { target: "in_production", labelDe: "In Produktion" };
+    case "in_production":
+      return { target: "ready", labelDe: "Fertig markieren" };
+    case "ready":
+      return { target: "out_for_delivery", labelDe: "Ausliefern" };
+    case "out_for_delivery":
+      return { target: "delivered", labelDe: "Geliefert" };
+    case "delivery_failed":
+      return { target: "ready", labelDe: "Nochmal versuchen" };
+    case "delivered":
+    case "cancelled":
+      return null;
+  }
+}
+
+/**
+ * Count orders by status for the summary bar at the top of Heute.
+ * Returns zero-counts filtered out so the bar stays short.
+ */
+export function countByStatus(
+  orders: HeuteOrder[],
+): { status: HeuteOrder["status"]; count: number }[] {
+  const counts = new Map<HeuteOrder["status"], number>();
+  for (const o of orders) {
+    counts.set(o.status, (counts.get(o.status) ?? 0) + 1);
+  }
+  // Stable order matching the state-machine flow left-to-right.
+  const flow: HeuteOrder["status"][] = [
+    "new",
+    "confirmed",
+    "in_production",
+    "ready",
+    "out_for_delivery",
+    "delivered",
+    "delivery_failed",
+    "cancelled",
+  ];
+  return flow
+    .map((s) => ({ status: s, count: counts.get(s) ?? 0 }))
+    .filter((row) => row.count > 0);
+}
+
 export function paymentDisplayDe(
   status: HeuteOrder["paymentStatus"],
   method: HeuteOrder["paymentMethod"],
