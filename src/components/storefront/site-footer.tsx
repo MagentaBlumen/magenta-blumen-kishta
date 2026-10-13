@@ -52,8 +52,9 @@ export function SiteFooter() {
 
         <div className="space-y-2">
           <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark mb-3">
-            Rechtliches
+            Service
           </div>
+          <FooterLink href="/bestellung-finden">Bestellung finden</FooterLink>
           <FooterLink href="/impressum">Impressum</FooterLink>
           <FooterLink href="/agb">AGB</FooterLink>
           <FooterLink href="/datenschutz">Datenschutz</FooterLink>

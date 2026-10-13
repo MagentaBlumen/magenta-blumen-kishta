@@ -71,6 +71,10 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
 
   const deliveryLabel = slotLabelDe(o);
   const paymentLabel = paymentMethodLabelDe(o.paymentMethod);
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://178-104-239-168.nip.io";
+  const lookupUrl = `${siteUrl}/bestellung-finden`;
+  const lookupLabel = lookupUrl.replace(/^https?:\/\//, "");
 
   const linesHtml = o.lines
     .map(
@@ -162,6 +166,11 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
               }
 
               <p style="margin:28px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
+                Status Ihrer Bestellung jederzeit abrufbar unter
+                <a href="${lookupUrl}" style="color:#a0185a;">${lookupLabel}</a>
+                (Bestellnummer + diese E-Mail-Adresse).
+              </p>
+              <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
                 Bei Fragen erreichen Sie uns unter <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>
                 oder <a href="mailto:info@magenta-blumen.ch" style="color:#a0185a;">info@magenta-blumen.ch</a>.
               </p>
@@ -207,6 +216,9 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
     o.cardMessage
       ? `\nKarte: «${o.cardMessage}»${o.cardIsAnonymous ? " (anonym)" : ""}`
       : ``,
+    ``,
+    `Status abrufen: ${lookupUrl}`,
+    `(Bestellnummer + diese E-Mail-Adresse)`,
     ``,
     `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
     ``,
