@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { LieferdatenForm } from "@/components/storefront/lieferdaten-form";
 import { hydrateCart } from "@/lib/cart/hydrate";
 import { readCheckoutCookie } from "@/lib/checkout/cookie";
 import { resolveZoneByPlzOrtschaft } from "@/lib/checkout/zones";
+import { fetchCustomerPrefill } from "@/lib/customer-auth/profile";
 import { formatChf } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +44,20 @@ export default async function KasseLieferdatenPage() {
   // Show a summary line of what step 1 resolved to.
   const zone = await resolveZoneByPlzOrtschaft(checkout.plz!, checkout.ort!);
 
+  // Logged-in customer? Prefill buyer fields from their profile. Cookie
+  // values still take precedence - a shopper buying for someone else
+  // may want to type a different buyer email, and we won't fight them.
+  const session = await auth();
+  const defaults = { ...checkout };
+  if (session?.user?.role === "customer" && session.user.customerId) {
+    const profile = await fetchCustomerPrefill(session.user.customerId);
+    if (profile) {
+      if (!defaults.bn) defaults.bn = profile.name;
+      if (!defaults.be) defaults.be = profile.email;
+      if (!defaults.bp && profile.phone) defaults.bp = profile.phone;
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 lg:px-6 py-10 lg:py-14">
       <CheckoutStepHeader step={2} />
@@ -65,7 +81,7 @@ export default async function KasseLieferdatenPage() {
       )}
 
       <div className="mt-8">
-        <LieferdatenForm defaults={checkout} />
+        <LieferdatenForm defaults={defaults} />
       </div>
 
       <div className="mt-10">
