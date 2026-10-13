@@ -31,7 +31,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     }
 
     try {
-      await signIn("credentials", {
+      await signIn("admin", {
         email: formData.get("email"),
         password: formData.get("password"),
         redirectTo: cb,

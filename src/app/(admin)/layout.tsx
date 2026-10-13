@@ -13,7 +13,10 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (!session?.user) redirect("/signin");
+  // Role check too: a logged-in customer must NOT reach admin even if
+  // they land on an admin URL by accident. The jwt callback stamps
+  // role on every session, so missing/other-role fails this closed.
+  if (!session?.user || session.user.role !== "admin") redirect("/signin");
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">

@@ -55,6 +55,7 @@ export function SiteFooter() {
             Service
           </div>
           <FooterLink href="/bestellung-finden">Bestellung finden</FooterLink>
+          <FooterLink href="/konto">Mein Konto</FooterLink>
           <FooterLink href="/impressum">Impressum</FooterLink>
           <FooterLink href="/agb">AGB</FooterLink>
           <FooterLink href="/datenschutz">Datenschutz</FooterLink>

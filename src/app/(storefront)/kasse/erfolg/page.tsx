@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { ErfolgCleanup } from "@/components/storefront/erfolg-cleanup";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export default async function KasseErfolgPage({
 }) {
   const { bestellnummer } = await searchParams;
   const orderNumber = sanitiseOrderNumber(bestellnummer);
+  const session = await auth();
+  const alreadyCustomer = session?.user?.role === "customer";
 
   return (
     <div className="max-w-2xl mx-auto px-4 lg:px-6 py-16 lg:py-24 text-center space-y-6">
@@ -61,6 +64,26 @@ export default async function KasseErfolgPage({
         Haben Sie innerhalb von 15 Minuten keine E-Mail erhalten? Prüfen Sie
         bitte den Spam-Ordner oder rufen Sie uns an.
       </p>
+
+      {!alreadyCustomer && (
+        <div className="mt-8 mx-auto max-w-md border border-mist p-5 text-left space-y-2">
+          <div className="text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium">
+            Beim nächsten Mal schneller?
+          </div>
+          <p className="text-[0.85rem] text-bark/80 leading-[1.6]">
+            Erstellen Sie ein Konto, damit Ihre Angaben beim nächsten Besuch
+            vorausgefüllt sind. Dauert eine Minute.
+          </p>
+          <div className="pt-1">
+            <Link
+              href="/konto/registrieren"
+              className="inline-block text-[0.78rem] text-rose hover:underline font-medium"
+            >
+              Konto erstellen →
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="pt-6 flex flex-wrap gap-3 justify-center">
         <Link
