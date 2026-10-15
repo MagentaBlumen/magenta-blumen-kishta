@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { clearCartCookie, readCartCookie } from "@/lib/cart/cookie";
 import { sendOrderEmails } from "@/lib/email/send";
 import { clearCheckoutCookie, patchCheckoutCookie, readCheckoutCookie } from "./cookie";
@@ -345,14 +346,23 @@ export async function reserveOrderAction(
       : null;
   if (!paymentMethod) throw new Error("Ungültige Zahlungsart.");
 
-  const [cart, checkout] = await Promise.all([
+  const [cart, checkout, session] = await Promise.all([
     readCartCookie(),
     readCheckoutCookie(),
+    auth(),
   ]);
+
+  // Logged-in customers get their id stamped onto the order. Guests
+  // (session null OR admin session - admins placing a customer order
+  // is a theoretical path we don't want to accidentally link) pass null.
+  const customerId =
+    session?.user?.role === "customer" && session.user.customerId
+      ? session.user.customerId
+      : null;
 
   let result;
   try {
-    result = await reserveOrder({ cart, checkout, paymentMethod });
+    result = await reserveOrder({ cart, checkout, paymentMethod, customerId });
   } catch (err) {
     // Business errors surface with their German message; anything else
     // is a real fault we want the error boundary + Sentry to see.

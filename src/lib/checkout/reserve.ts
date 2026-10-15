@@ -45,6 +45,14 @@ export type ReserveInput = {
   cart: CartCookie;
   checkout: CheckoutCookie;
   paymentMethod: ReservePaymentMethod;
+  /**
+   * Logged-in buyer's customer.id, if any. Guest checkouts pass null
+   * / omit; the order row gets customer_id = NULL. Set from the Auth.js
+   * session in reserveOrderAction. Still a snapshot: name/email/phone
+   * on order are always captured from the cookie, never joined back
+   * (rule 1).
+   */
+  customerId?: number | null;
 };
 
 export type ReserveResult = {
@@ -80,7 +88,7 @@ export async function reserveOrder(
   input: ReserveInput,
   dbClient: DbClient = defaultDb,
 ): Promise<ReserveResult> {
-  const { cart, checkout, paymentMethod } = input;
+  const { cart, checkout, paymentMethod, customerId: inputCustomerId } = input;
 
   if (cart.l.length === 0) throw new ReserveError("Der Warenkorb ist leer.");
 
@@ -384,9 +392,11 @@ export async function reserveOrder(
       .insert(order)
       .values({
         orderNumber,
-        // Guest checkout - customerId stays null; accounts are optional
-        // post-payment (Auth.js flow, not built here).
-        customerId: null,
+        // Logged-in customers get stamped so /konto's "Meine Bestellungen"
+        // can filter by customer_id. Guest checkouts stay NULL - that's
+        // the escape hatch per the customer schema. Order fields are
+        // still snapshots either way (rule 1).
+        customerId: inputCustomerId ?? null,
 
         buyerName,
         buyerEmail,
