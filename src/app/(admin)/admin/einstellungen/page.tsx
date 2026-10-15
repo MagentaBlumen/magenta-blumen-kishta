@@ -5,6 +5,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { SystemHealthCard } from "@/components/admin/system-health-card";
+import { fetchSystemHealth } from "@/lib/admin/system-health";
 import { updateSettings } from "./actions";
 
 // Keys that are logically numeric - render as type="number".
@@ -29,7 +31,7 @@ type PageProps = {
 export default async function EinstellungenPage({ searchParams }: PageProps) {
   const { ok } = await searchParams;
 
-  const [settingRows, taxRateRows] = await Promise.all([
+  const [settingRows, taxRateRows, health] = await Promise.all([
     db
       .select({
         key: settings.key,
@@ -48,6 +50,7 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
       })
       .from(taxRate)
       .orderBy(asc(taxRate.code)),
+    fetchSystemHealth(),
   ]);
 
   return (
@@ -65,6 +68,9 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
           Gespeichert.
         </div>
       )}
+
+      {/* -------- System health -------- */}
+      <SystemHealthCard health={health} />
 
       {/* -------- Editable settings form -------- */}
       <form action={updateSettings} className="space-y-6">
