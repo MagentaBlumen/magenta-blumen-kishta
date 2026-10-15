@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { SystemHealthCard } from "@/components/admin/system-health-card";
 import { fetchSystemHealth } from "@/lib/admin/system-health";
+import { AnonymiseCustomerForm } from "./_components/anonymise-customer";
 import { updateSettings } from "./actions";
 
 // Keys that are logically numeric - render as type="number".
@@ -25,11 +26,11 @@ const NUMERIC_KEYS = new Set<string>([
 ]);
 
 type PageProps = {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{ ok?: string; dsg?: string }>;
 };
 
 export default async function EinstellungenPage({ searchParams }: PageProps) {
-  const { ok } = await searchParams;
+  const { ok, dsg } = await searchParams;
 
   const [settingRows, taxRateRows, health] = await Promise.all([
     db
@@ -111,6 +112,42 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
           </button>
         </div>
       </form>
+
+      {/* -------- revFADP erasure -------- */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-medium">Datenschutz · Anonymisierung</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Anfrage nach Art. 32 revDSG. Löscht persönliche Felder des Kontos
+            (Name, E-Mail, Telefon, Passwort). Bestellungen bleiben wegen der
+            10-jährigen Aufbewahrungspflicht erhalten - mit den damals
+            erfassten Daten als Snapshot.
+          </p>
+        </div>
+        <div className="rounded-lg border p-6 bg-card">
+          {dsg === "ok" && (
+            <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              Kundenkonto anonymisiert. Bestellungen unverändert.
+            </div>
+          )}
+          {dsg === "notfound" && (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Keine Kundin mit dieser E-Mail gefunden.
+            </div>
+          )}
+          {dsg === "invalid" && (
+            <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              Bitte gültige E-Mail-Adresse eingeben.
+            </div>
+          )}
+          {dsg === "unconfirmed" && (
+            <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              Anonymisierung nicht bestätigt.
+            </div>
+          )}
+          <AnonymiseCustomerForm />
+        </div>
+      </section>
 
       {/* -------- Read-only tax rates -------- */}
       <section className="space-y-3">
