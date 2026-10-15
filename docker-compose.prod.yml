@@ -50,10 +50,11 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     networks:
       - internal
-    # Any 2xx/3xx from the root page counts as healthy. Swap to
-    # /api/health when that endpoint exists.
+    # /api/health pings Postgres and returns 200 only if the DB is
+    # reachable, so the container is unhealthy when the DB is down -
+    # which is what we want Compose to react to.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--tries=1", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-qO-", "--tries=1", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
