@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
@@ -189,6 +189,113 @@ function statusEmailKindFor(status: OrderStatus): StatusEmailKind | null {
     default:
       return null;
   }
+}
+
+/**
+ * Swap an order up or down one stop within its delivery run.
+ *
+ * Only applies to run orders (fulfilment='run', delivery_run_id set).
+ * Timed, pickup, post orders have no "route" to reorder - they're
+ * one-offs or at-shop.
+ *
+ * Normalisation strategy: before swapping, sequence every order in
+ * the run as 1..N based on existing route_stop_order (NULLS last) +
+ * placed_at. This way the first click on a brand-new run assigns
+ * sensible numbers, and subsequent clicks never leave gaps.
+ *
+ * Serialisability: at florist scale (one or two admins) the risk of
+ * two concurrent reorders is near zero; we rely on wrapping the
+ * read-normalise-swap in a single transaction. If two admins ever do
+ * clash, the worst case is one swap gets lost - run order is manually
+ * verifiable and easy to retry.
+ */
+export async function moveRouteStopAction(
+  orderNumberRaw: string,
+  directionRaw: string,
+): Promise<void> {
+  await requireAdmin();
+  const orderNumber = String(orderNumberRaw ?? "").trim();
+  if (!orderNumber) throw new Error("Ungültige Bestellnummer");
+
+  const direction = directionRaw === "up" ? "up" : directionRaw === "down" ? "down" : null;
+  if (!direction) throw new Error("Richtung muss 'up' oder 'down' sein");
+
+  await db.transaction(async (tx) => {
+    const [o] = await tx
+      .select({
+        id: order.id,
+        deliveryRunId: order.deliveryRunId,
+        fulfilment: order.fulfilment,
+      })
+      .from(order)
+      .where(eq(order.orderNumber, orderNumber))
+      .limit(1);
+    if (!o) throw new Error("Bestellung nicht gefunden");
+    if (o.fulfilment !== "run" || !o.deliveryRunId) {
+      throw new Error("Nur Lauf-Bestellungen können umsortiert werden");
+    }
+
+    const runOrders = await tx
+      .select({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        routeStopOrder: order.routeStopOrder,
+      })
+      .from(order)
+      .where(
+        and(
+          eq(order.deliveryRunId, o.deliveryRunId),
+          ne(order.status, "cancelled"),
+        ),
+      )
+      .orderBy(
+        // NULLS LAST isn't exposed cleanly in Drizzle for asc; the
+        // tiebreaker on placed_at keeps NULL rows at the bottom in
+        // deterministic order.
+        asc(order.routeStopOrder),
+        asc(order.placedAt),
+      );
+
+    // Normalise to 1..N. One UPDATE per row with a changed value;
+    // typically zero updates if the run was already sequenced.
+    for (let i = 0; i < runOrders.length; i++) {
+      const want = i + 1;
+      if (runOrders[i].routeStopOrder !== want) {
+        await tx
+          .update(order)
+          .set({ routeStopOrder: want })
+          .where(eq(order.id, runOrders[i].id));
+        runOrders[i].routeStopOrder = want;
+      }
+    }
+
+    const idx = runOrders.findIndex((r) => r.id === o.id);
+    if (idx === -1) return; // defensive, order dropped between queries
+
+    const swapWith =
+      direction === "up"
+        ? idx - 1
+        : direction === "down"
+          ? idx + 1
+          : -1;
+    if (swapWith < 0 || swapWith >= runOrders.length) {
+      // Already at edge - no-op, not an error.
+      return;
+    }
+
+    const a = runOrders[idx];
+    const b = runOrders[swapWith];
+    await tx
+      .update(order)
+      .set({ routeStopOrder: b.routeStopOrder })
+      .where(eq(order.id, a.id));
+    await tx
+      .update(order)
+      .set({ routeStopOrder: a.routeStopOrder })
+      .where(eq(order.id, b.id));
+  });
+
+  revalidatePath("/admin");
 }
 
 /**

@@ -14,6 +14,7 @@ import {
 import { formatChf } from "@/lib/money";
 import { todayZ } from "@/lib/checkout/time";
 import { QuickStepButton } from "@/components/admin/quick-step-button";
+import { RouteStopButtons } from "@/components/admin/route-stop-buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -161,11 +162,15 @@ function OrderRow({
       } ${shellClass}`}
     >
       <div className="grid grid-cols-[auto_1fr_auto] gap-3 sm:gap-4 items-start">
-        {/* Left: route stop (if set) + print indicator */}
+        {/* Left: route stop (if set) + optional reorder buttons + print indicator */}
         <div className="flex flex-col items-center justify-start pt-0.5 w-10 flex-shrink-0">
           <div className="text-base font-semibold tabular-nums leading-none">
             {order.routeStopOrder ?? "·"}
           </div>
+          {/* Reorder only applies to run orders - timed/pickup have no route. */}
+          {order.fulfilment === "run" && !isCarryover && !isDelivered && (
+            <RouteStopButtons orderNumber={order.orderNumber} />
+          )}
           {order.printedAt && (
             <div
               className="mt-1 text-[10px] text-muted-foreground"
