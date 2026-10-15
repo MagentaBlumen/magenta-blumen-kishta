@@ -22,6 +22,12 @@ export const contentType = "image/png";
 export const dynamic = "force-static";
 
 export default function OpengraphImage() {
+  // Satori (the renderer behind next/og) rejects any element with
+  // more than one child that is not explicitly `display: flex` /
+  // `contents` / `none`. That includes a text node + <br/> combo,
+  // so every multi-child container below is a flex column/row and
+  // the two-line tagline is two sibling divs rather than one text
+  // block with a <br/>.
   return new ImageResponse(
     (
       <div
@@ -39,6 +45,7 @@ export default function OpengraphImage() {
       >
         <div
           style={{
+            display: "flex",
             fontSize: 24,
             letterSpacing: "0.3em",
             textTransform: "uppercase",
@@ -58,6 +65,7 @@ export default function OpengraphImage() {
         >
           <div
             style={{
+              display: "flex",
               fontSize: 108,
               lineHeight: 1,
               color: "#2a1f1a",
@@ -69,6 +77,8 @@ export default function OpengraphImage() {
           </div>
           <div
             style={{
+              display: "flex",
+              flexDirection: "column",
               fontSize: 32,
               color: "#2a1f1a",
               opacity: 0.75,
@@ -76,9 +86,12 @@ export default function OpengraphImage() {
               lineHeight: 1.3,
             }}
           >
-            Frische Blumen aus Neuenhof. Lieferung im Aargau,
-            <br />
-            zwei Touren täglich, auch am Sonntag.
+            <div style={{ display: "flex" }}>
+              Frische Blumen aus Neuenhof. Lieferung im Aargau,
+            </div>
+            <div style={{ display: "flex" }}>
+              zwei Touren täglich, auch am Sonntag.
+            </div>
           </div>
         </div>
 
@@ -92,8 +105,10 @@ export default function OpengraphImage() {
             fontWeight: 500,
           }}
         >
-          <span style={{ fontSize: 36, lineHeight: 0.9 }}>·</span>
-          magenta-blumen.ch
+          <div style={{ display: "flex", fontSize: 36, lineHeight: 0.9 }}>
+            ·
+          </div>
+          <div style={{ display: "flex" }}>magenta-blumen.ch</div>
         </div>
       </div>
     ),
