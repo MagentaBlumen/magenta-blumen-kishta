@@ -11,9 +11,11 @@ import {
 } from "./resend";
 import {
   buyerConfirmationEmail,
+  buyerStatusEmail,
   shopNotificationEmail,
   type OrderEmailData,
   type OrderEmailLine,
+  type StatusEmailKind,
 } from "./templates";
 
 /**
@@ -118,6 +120,72 @@ async function sendShop(data: OrderEmailData): Promise<"sent" | "failed"> {
   } catch (err) {
     console.error(
       `[email] shop send threw for ${data.orderNumber}:`,
+      err,
+    );
+    return "failed";
+  }
+}
+
+/**
+ * Fire a single buyer email for a status transition - "unterwegs",
+ * "zugestellt", or "fehlgeschlagen". Called from
+ * updateOrderStatusAction right after the DB flip commits.
+ *
+ * NEVER THROWS, same contract as sendOrderEmails. A failing email
+ * must not undo the status flip Sandra just made.
+ *
+ * No per-transition idempotency: if the admin bounces status (e.g.
+ * ready -> delivery_failed by mistake -> ready) the "fehlgeschlagen"
+ * email already went out. Rare in practice; the alternative is three
+ * timestamp columns on `order` which is a schema change we don't
+ * need yet.
+ */
+export async function sendBuyerStatusEmail(
+  orderId: number,
+  kind: StatusEmailKind,
+  dbClient: DbClient = defaultDb,
+): Promise<"sent" | "skipped" | "failed"> {
+  if (!isEmailConfigured()) {
+    console.log(
+      `[email] skipping ${kind} status email for order ${orderId}: Resend not configured`,
+    );
+    return "skipped";
+  }
+
+  let data: OrderEmailData;
+  try {
+    data = await loadOrderEmailData(orderId, dbClient);
+  } catch (err) {
+    console.error(
+      `[email] failed to load order ${orderId} for ${kind} status email:`,
+      err,
+    );
+    return "failed";
+  }
+
+  const from = fromAddress();
+  if (!resend || !from) return "failed";
+
+  const tmpl = buyerStatusEmail(data, kind);
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: data.buyerEmail,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(
+        `[email] ${kind} status email send failed for ${data.orderNumber}:`,
+        error,
+      );
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(
+      `[email] ${kind} status email send threw for ${data.orderNumber}:`,
       err,
     );
     return "failed";

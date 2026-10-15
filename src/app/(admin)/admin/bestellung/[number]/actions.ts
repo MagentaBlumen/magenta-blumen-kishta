@@ -11,6 +11,8 @@ import {
   isValidTransition,
   type OrderStatus,
 } from "@/lib/admin/order-status";
+import { sendBuyerStatusEmail } from "@/lib/email/send";
+import type { StatusEmailKind } from "@/lib/email/templates";
 
 /**
  * Server actions for /admin/bestellung/[number]. Each re-checks admin
@@ -163,8 +165,30 @@ export async function updateOrderStatusAction(
     .set({ status: nextStatus, updatedAt: new Date() })
     .where(eq(order.id, row.id));
 
+  // Fire the buyer-notification email for the three status flips the
+  // customer actually cares about. Never throws; see sendBuyerStatusEmail.
+  // Admin interactions block until this returns, which is fine - Resend
+  // is sub-second and a slow email beats a silently dropped one.
+  const kind = statusEmailKindFor(nextStatus);
+  if (kind) {
+    await sendBuyerStatusEmail(row.id, kind);
+  }
+
   revalidatePath("/admin");
   revalidatePath(`/admin/bestellung/${orderNumber}`);
+}
+
+function statusEmailKindFor(status: OrderStatus): StatusEmailKind | null {
+  switch (status) {
+    case "out_for_delivery":
+      return "unterwegs";
+    case "delivered":
+      return "zugestellt";
+    case "delivery_failed":
+      return "fehlgeschlagen";
+    default:
+      return null;
+  }
 }
 
 /**

@@ -349,6 +349,138 @@ export function shopNotificationEmail(o: OrderEmailData): {
 }
 
 // ------------------------------------------------------------------
+// Buyer status-transition emails
+// ------------------------------------------------------------------
+// Fire exactly when the admin flips to:
+//   out_for_delivery  -> "unterwegs"
+//   delivered         -> "zugestellt"
+//   delivery_failed   -> "fehlgeschlagen"
+// Not fired on earlier statuses (new/confirmed/in_production/ready).
+// Those are noise - the buyer doesn't need an email every time
+// Sandra ticks another workflow box.
+
+export type StatusEmailKind = "unterwegs" | "zugestellt" | "fehlgeschlagen";
+
+export function buyerStatusEmail(
+  o: OrderEmailData,
+  kind: StatusEmailKind,
+): { subject: string; html: string; text: string } {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://178-104-239-168.nip.io";
+  const lookupUrl = `${siteUrl}/bestellung-finden`;
+  const lookupLabel = lookupUrl.replace(/^https?:\/\//, "");
+
+  const copy = statusEmailCopy(kind, o);
+
+  const html = `
+<!doctype html>
+<html lang="de-CH">
+  <body style="margin:0;padding:0;background:#fdfcf9;font-family:'DM Sans',system-ui,sans-serif;color:#2a1f1a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #ede9e3;">
+          <tr><td style="padding:24px 32px 8px;">
+            <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#4f6752;">
+              Magenta Blumen
+            </div>
+          </td></tr>
+          <tr><td style="padding:8px 32px 24px;">
+            <h1 style="font-family:Cormorant,Georgia,serif;font-size:28px;font-weight:400;color:#2a1f1a;margin:0 0 16px;">
+              ${escapeHtml(copy.heading)}
+            </h1>
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+              ${copy.htmlBody}
+            </p>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:16px;font-size:14px;">
+              <tr><td style="padding:4px 0;color:#4f6752;width:120px;">Bestellnummer</td><td style="padding:4px 0;font-family:monospace;">${escapeHtml(o.orderNumber)}</td></tr>
+              <tr><td style="padding:4px 0;color:#4f6752;">Empfänger</td><td style="padding:4px 0;">${escapeHtml(o.recipientName)}</td></tr>
+            </table>
+
+            <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
+              Status Ihrer Bestellung jederzeit abrufbar unter
+              <a href="${lookupUrl}" style="color:#a0185a;">${lookupLabel}</a>.
+            </p>
+            <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
+              Bei Fragen erreichen Sie uns unter
+              <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>
+              oder <a href="mailto:info@magenta-blumen.ch" style="color:#a0185a;">info@magenta-blumen.ch</a>.
+            </p>
+          </td></tr>
+          <tr><td style="padding:16px 32px;border-top:1px solid #ede9e3;color:#4f6752;font-size:11px;letter-spacing:0.08em;">
+            Magenta Blumen · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`.trim();
+
+  const text = [
+    `Magenta Blumen`,
+    ``,
+    copy.heading,
+    ``,
+    copy.textBody,
+    ``,
+    `Bestellnummer: ${o.orderNumber}`,
+    `Empfänger: ${o.recipientName}`,
+    ``,
+    `Status abrufen: ${lookupUrl}`,
+    ``,
+    `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
+    ``,
+    `Magenta Blumen - Zürcherstrasse 142 - 5432 Neuenhof - CHE-363.951.581 MWST`,
+  ].join("\n");
+
+  return { subject: copy.subject, html, text };
+}
+
+function statusEmailCopy(
+  kind: StatusEmailKind,
+  o: OrderEmailData,
+): { subject: string; heading: string; htmlBody: string; textBody: string } {
+  const slot = slotLabelDe(o);
+  switch (kind) {
+    case "unterwegs":
+      return {
+        subject: `Ihre Bestellung ${o.orderNumber} ist unterwegs`,
+        heading: "Ihre Blumen sind unterwegs.",
+        htmlBody: `Guten Tag ${escapeHtml(o.buyerName)},<br/><br/>
+          Unsere Fahrerin ist mit Ihrer Bestellung auf dem Weg zum
+          Empfänger. Geplantes Lieferfenster: <strong>${escapeHtml(slot)}</strong>.`,
+        textBody: `Guten Tag ${o.buyerName},
+
+Unsere Fahrerin ist mit Ihrer Bestellung auf dem Weg zum Empfänger. Geplantes Lieferfenster: ${slot}.`,
+      };
+    case "zugestellt":
+      return {
+        subject: `Ihre Bestellung ${o.orderNumber} wurde zugestellt`,
+        heading: "Zugestellt. Danke für Ihr Vertrauen.",
+        htmlBody: `Guten Tag ${escapeHtml(o.buyerName)},<br/><br/>
+          Ihre Bestellung wurde soeben an <strong>${escapeHtml(o.recipientName)}</strong>
+          zugestellt. Wir hoffen, die Blumen bereiten Freude.`,
+        textBody: `Guten Tag ${o.buyerName},
+
+Ihre Bestellung wurde soeben an ${o.recipientName} zugestellt. Wir hoffen, die Blumen bereiten Freude.`,
+      };
+    case "fehlgeschlagen":
+      return {
+        subject: `Ihre Bestellung ${o.orderNumber}: Zustellung nicht möglich`,
+        heading: "Zustellung nicht möglich.",
+        htmlBody: `Guten Tag ${escapeHtml(o.buyerName)},<br/><br/>
+          Wir konnten die Blumen leider nicht zustellen - etwa weil
+          niemand angetroffen wurde oder die Adresse nicht erreichbar
+          war. Wir melden uns bei Ihnen zur Absprache. Falls Sie uns
+          zuvorkommen möchten, rufen Sie uns bitte an.`,
+        textBody: `Guten Tag ${o.buyerName},
+
+Wir konnten die Blumen leider nicht zustellen - etwa weil niemand angetroffen wurde oder die Adresse nicht erreichbar war. Wir melden uns bei Ihnen zur Absprache. Falls Sie uns zuvorkommen möchten, rufen Sie uns bitte an.`,
+      };
+  }
+}
+
+// ------------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------------
 
