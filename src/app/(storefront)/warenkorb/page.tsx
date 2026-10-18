@@ -32,7 +32,7 @@ export default async function CartPage() {
   const anySoldOut = cart.lines.some((l) => !l.isAvailable);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-6 py-10 lg:py-14">
+    <div className="max-w-6xl mx-auto px-4 lg:px-6 py-10 lg:py-14 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <header className="mb-8">
         <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium mb-2">
           Warenkorb
@@ -63,7 +63,7 @@ export default async function CartPage() {
           {cart.lines.map((l) => (
             <li
               key={`${l.productId}:${l.variantId}`}
-              className="grid grid-cols-[80px_1fr_auto] sm:grid-cols-[100px_1fr_auto] gap-4 sm:gap-6 py-5 border-b border-mist"
+              className="group grid grid-cols-[80px_1fr_auto] sm:grid-cols-[100px_1fr_auto] gap-4 sm:gap-6 py-5 border-b border-mist"
             >
               <Link
                 href={`/produkt/${l.productSlug}`}
@@ -74,7 +74,7 @@ export default async function CartPage() {
                   <img
                     src={thumbUrl(l.imageUrl)}
                     alt={l.imageAlt ?? l.productNameDe}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
                     loading="lazy"
                   />
                 ) : null}
@@ -173,9 +173,12 @@ export default async function CartPage() {
       <div className="mt-10">
         <Link
           href="/kategorie/alle-anlaesse"
-          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
+          className="group inline-flex items-center gap-2 px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors duration-200"
         >
-          ← Weiter einkaufen
+          <span className="transition-transform duration-200 group-hover:-translate-x-1">
+            ←
+          </span>
+          Weiter einkaufen
         </Link>
       </div>
     </div>
@@ -184,7 +187,7 @@ export default async function CartPage() {
 
 function EmptyCart() {
   return (
-    <div className="max-w-2xl mx-auto px-6 py-24 text-center space-y-6">
+    <div className="max-w-2xl mx-auto px-6 py-24 text-center space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
         Warenkorb
       </p>
@@ -197,13 +200,16 @@ function EmptyCart() {
       <div className="pt-4 flex flex-wrap gap-3 justify-center">
         <Link
           href="/kategorie/alle-anlaesse"
-          className="inline-block bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
+          className="group inline-flex items-center gap-2 bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
         >
           Zum Sortiment
+          <span className="transition-transform duration-200 group-hover:translate-x-1">
+            →
+          </span>
         </Link>
         <a
           href="tel:+41565565609"
-          className="inline-block border border-bark text-bark px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory transition-colors"
+          className="inline-block border border-bark text-bark px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory active:translate-y-px transition-all duration-200"
         >
           Anrufen
         </a>
@@ -214,7 +220,7 @@ function EmptyCart() {
 
 function CheckoutButton({ disabled }: { disabled: boolean }) {
   const base =
-    "block w-full text-center mt-5 h-[52px] leading-[52px] text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-colors";
+    "mt-5 w-full h-[52px] text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-all duration-200 inline-flex items-center justify-center gap-2";
   if (disabled) {
     return (
       <span
@@ -228,9 +234,12 @@ function CheckoutButton({ disabled }: { disabled: boolean }) {
   return (
     <Link
       href="/kasse/lieferung"
-      className={`${base} bg-rose text-ivory hover:bg-[#831249]`}
+      className={`group ${base} bg-rose text-ivory hover:bg-[#831249] active:translate-y-px`}
     >
       Zur Kasse
+      <span className="transition-transform duration-200 group-hover:translate-x-1">
+        →
+      </span>
     </Link>
   );
 }
