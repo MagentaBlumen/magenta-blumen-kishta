@@ -10,12 +10,13 @@ import { useEffect, useRef, useState } from "react";
  * Deliberate omissions vs Figma per project_phase1_scope_lock:
  *   - No search icon (search overlay is out of scope for MVP)
  *   - No wishlist heart (wishlist feature is out of scope)
- *   - No account icon yet (customer accounts are optional post-payment;
- *     no meaningful place for it in the header pre-checkout)
  *   - Cart icon shows the count from the server-rendered layout and
  *     routes to the full /warenkorb page (we chose a dedicated page
  *     over the Figma's slide-out drawer; one less bit of mobile UX to
  *     maintain, same functional end state).
+ *   - Account icon ALWAYS routes to /konto. If the visitor is logged
+ *     in they see the dashboard; otherwise the page redirects them to
+ *     /konto/anmelden with ?callbackUrl=/konto. One icon, both paths.
  *
  * Dropdowns toggle on CLICK, not hover. Touch users can't hover; hover
  * also flickers when the pointer crosses the gap between button and
@@ -177,6 +178,23 @@ export function SiteHeader({
 
         {/* Icons */}
         <div className="flex items-center gap-4 sm:gap-5">
+          <Link
+            href="/konto"
+            className="text-bark hover:text-rose transition-colors"
+            aria-label="Mein Konto"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </Link>
           <Link
             href="/warenkorb"
             className="relative text-bark hover:text-rose transition-colors"
