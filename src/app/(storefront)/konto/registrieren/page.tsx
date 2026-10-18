@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { AuthPanel } from "@/components/storefront/auth-panel";
 import { signupAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -32,31 +33,33 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
   const { error } = await searchParams;
 
   return (
-    <div className="max-w-xl mx-auto px-4 lg:px-6 py-14 lg:py-20 space-y-8">
-      <header className="space-y-2">
+    <AuthPanel
+      quote="Jeder Strauss ist ein Gespräch zwischen zwei Menschen."
+      attribution="Werkstatt-Notiz"
+    >
+      <header className="space-y-2 mb-8">
         <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
           Konto erstellen
         </p>
-        <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
+        <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,2.75rem)] leading-[1.1]">
           Beim nächsten Mal schneller.
         </h1>
-        <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light">
+        <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light pt-2">
           Mit einem Konto werden Ihre Angaben für die nächste Bestellung
-          vorausgefüllt. Ein Konto ist optional - Sie können jederzeit als
-          Gast bestellen.
+          vorausgefüllt. Optional - Sie können jederzeit als Gast bestellen.
         </p>
       </header>
 
       <form action={signupAction} className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field
+          <AuthField
             id="firstName"
             name="firstName"
             label="Vorname"
             required
             autoComplete="given-name"
           />
-          <Field
+          <AuthField
             id="lastName"
             name="lastName"
             label="Nachname"
@@ -65,7 +68,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
           />
         </div>
 
-        <Field
+        <AuthField
           id="email"
           name="email"
           label="E-Mail-Adresse"
@@ -74,7 +77,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
           autoComplete="email"
         />
 
-        <Field
+        <AuthField
           id="phone"
           name="phone"
           label="Telefonnummer"
@@ -84,7 +87,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
           hint="Für Rückfragen zur Lieferung."
         />
 
-        <Field
+        <AuthField
           id="password"
           name="password"
           label="Passwort"
@@ -96,7 +99,10 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
         />
 
         {error === "email_exists" && (
-          <p className="text-[0.85rem] text-rose">
+          <p
+            role="alert"
+            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+          >
             Für diese E-Mail besteht bereits ein Konto.{" "}
             <Link href="/konto/anmelden" className="underline">
               Jetzt anmelden
@@ -105,30 +111,44 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
           </p>
         )}
         {error === "weak_password" && (
-          <p className="text-[0.85rem] text-rose">
+          <p
+            role="alert"
+            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+          >
             Das Passwort muss mindestens 8 Zeichen lang sein.
           </p>
         )}
         {error === "invalid" && (
-          <p className="text-[0.85rem] text-rose">
+          <p
+            role="alert"
+            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+          >
             Bitte prüfen Sie die Eingaben.
           </p>
         )}
         {error === "RateLimited" && (
-          <p className="text-[0.85rem] text-rose">
+          <p
+            role="alert"
+            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+          >
             Zu viele Versuche. Bitte warten Sie ca. 15 Minuten.
           </p>
         )}
 
         <button
           type="submit"
-          className="w-full bg-bark text-ivory px-6 py-3 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
+          className="group w-full bg-bark text-ivory px-6 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
         >
-          Konto erstellen
+          <span className="inline-flex items-center gap-2">
+            Konto erstellen
+            <span className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
+          </span>
         </button>
       </form>
 
-      <div className="pt-6 border-t border-mist text-[0.82rem] text-bark/70 leading-[1.65] space-y-2">
+      <div className="pt-8 mt-8 border-t border-mist text-[0.82rem] text-bark/70 leading-[1.65] space-y-2">
         <p>
           Sie haben bereits ein Konto?{" "}
           <Link href="/konto/anmelden" className="text-rose hover:underline">
@@ -144,11 +164,11 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
           .
         </p>
       </div>
-    </div>
+    </AuthPanel>
   );
 }
 
-function Field({
+function AuthField({
   id,
   name,
   label,
@@ -168,10 +188,10 @@ function Field({
   hint?: string;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="block text-[0.72rem] tracking-[0.16em] uppercase text-sage font-medium"
+        className="block text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium"
       >
         {label}
       </label>
@@ -182,7 +202,7 @@ function Field({
         required={required}
         autoComplete={autoComplete}
         minLength={minLength}
-        className="w-full border border-mist bg-ivory px-3 py-2.5 text-[0.95rem] text-bark focus:border-rose focus:outline-none"
+        className="w-full border border-mist bg-ivory px-3 py-2.5 text-[0.95rem] text-bark placeholder:text-sage/60 focus:border-rose focus:ring-2 focus:ring-rose/15 focus:outline-none transition-colors duration-150"
       />
       {hint && <p className="text-[0.72rem] text-sage">{hint}</p>}
     </div>
