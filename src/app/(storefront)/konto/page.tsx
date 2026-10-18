@@ -32,7 +32,7 @@ export default async function KontoPage() {
   const orders = await fetchCustomerOrders(session.user.customerId);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-12 lg:py-16 space-y-10">
+    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-12 lg:py-16 space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
@@ -51,7 +51,7 @@ export default async function KontoPage() {
         >
           <button
             type="submit"
-            className="inline-block border border-bark text-bark px-5 py-2 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory transition-colors"
+            className="inline-block border border-bark text-bark px-5 py-2 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory active:translate-y-px transition-all duration-200"
           >
             Abmelden
           </button>
