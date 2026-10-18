@@ -32,8 +32,25 @@ export default async function KasseErfolgPage({
   const alreadyCustomer = session?.user?.role === "customer";
 
   return (
-    <div className="max-w-2xl mx-auto px-4 lg:px-6 py-16 lg:py-24 text-center space-y-6">
+    <div className="max-w-2xl mx-auto px-4 lg:px-6 py-16 lg:py-24 text-center space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <ErfolgCleanup />
+      <div
+        aria-hidden
+        className="mx-auto w-14 h-14 rounded-full bg-rose/10 text-rose flex items-center justify-center animate-in zoom-in-50 duration-700"
+      >
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </div>
       <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
         Bestellung erhalten
       </p>
@@ -46,7 +63,7 @@ export default async function KasseErfolgPage({
       </p>
 
       {orderNumber && (
-        <div className="mt-4 inline-block border border-mist px-6 py-4 text-left">
+        <div className="mt-4 inline-block border border-mist bg-cream/50 px-6 py-4 text-left">
           <div className="text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium">
             Ihre Bestellnummer
           </div>
@@ -66,7 +83,7 @@ export default async function KasseErfolgPage({
       </p>
 
       {!alreadyCustomer && (
-        <div className="mt-8 mx-auto max-w-md border border-mist p-5 text-left space-y-2">
+        <div className="mt-8 mx-auto max-w-md border border-mist bg-cream/40 p-5 text-left space-y-2 animate-in fade-in duration-700 delay-200">
           <div className="text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium">
             Beim nächsten Mal schneller?
           </div>
@@ -77,9 +94,12 @@ export default async function KasseErfolgPage({
           <div className="pt-1">
             <Link
               href="/konto/registrieren"
-              className="inline-block text-[0.78rem] text-rose hover:underline font-medium"
+              className="group inline-flex items-center gap-1.5 text-[0.78rem] text-rose font-medium hover:underline"
             >
-              Konto erstellen →
+              Konto erstellen
+              <span className="transition-transform duration-200 group-hover:translate-x-1">
+                →
+              </span>
             </Link>
           </div>
         </div>
@@ -88,15 +108,18 @@ export default async function KasseErfolgPage({
       <div className="pt-6 flex flex-wrap gap-3 justify-center">
         <Link
           href="/"
-          className="inline-block bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
+          className="group inline-flex items-center gap-2 bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
         >
+          <span className="transition-transform duration-200 group-hover:-translate-x-1">
+            ←
+          </span>
           Zurück zur Startseite
         </Link>
         <a
           href="tel:+41565565609"
-          className="inline-block border border-bark text-bark px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory transition-colors"
+          className="inline-block border border-bark text-bark px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory active:translate-y-px transition-all duration-200"
         >
-          Anrufen: 056 556 56 09
+          Anrufen . 056 556 56 09
         </a>
       </div>
     </div>
