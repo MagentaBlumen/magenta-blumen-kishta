@@ -456,3 +456,66 @@ export async function updateProduct(id: number, formData: FormData) {
   await revalidateStorefrontForProduct(id, values.slug, values.categoryIds);
   redirect("/admin/produkte");
 }
+
+// -------- bulk archive / unarchive --------
+
+/**
+ * Flip is_archived on a batch of product ids. Soft delete only -
+ * CLAUDE.md rule 10 is explicit: products get is_archived, never
+ * DROP. The row stays, past orders keep referencing it (snapshots)
+ * and nothing cascades.
+ *
+ * Called from the produkte list's multi-select bar. Takes a direction
+ * so one action handles both "Archivieren" and "Wiederherstellen".
+ */
+export async function archiveProductsAction(
+  ids: number[],
+  archive: boolean,
+): Promise<void> {
+  await requireAdmin();
+  const cleanIds = ids
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (cleanIds.length === 0) return;
+
+  // Fetch slugs + category links for cache invalidation BEFORE the
+  // update, so a storefront visitor refreshing right after the archive
+  // doesn't still see the archived product.
+  const touched = await db
+    .select({ id: product.id, slug: product.slug })
+    .from(product)
+    .where(inArray(product.id, cleanIds));
+
+  const categoryLinks = await db
+    .select({
+      productId: productCategory.productId,
+      categoryId: productCategory.categoryId,
+    })
+    .from(productCategory)
+    .where(inArray(productCategory.productId, cleanIds));
+
+  await db
+    .update(product)
+    .set({ isArchived: archive })
+    .where(inArray(product.id, cleanIds));
+
+  // Admin list refresh
+  revalidatePath("/admin/produkte");
+
+  // Storefront: invalidate every affected product's caches + every
+  // category it belongs to. Group categoryIds by product so each slug
+  // flushes its own tags, not a union.
+  const categoriesForProduct = new Map<number, number[]>();
+  for (const link of categoryLinks) {
+    const bucket = categoriesForProduct.get(link.productId) ?? [];
+    bucket.push(link.categoryId);
+    categoriesForProduct.set(link.productId, bucket);
+  }
+  for (const row of touched) {
+    await revalidateStorefrontForProduct(
+      row.id,
+      row.slug,
+      categoriesForProduct.get(row.id) ?? [],
+    );
+  }
+}
