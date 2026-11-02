@@ -250,6 +250,44 @@ function parseVariants(formData: FormData): VariantInput[] {
   });
 }
 
+// -------- draft create --------
+
+/**
+ * Create a stub product with placeholder values + is_archived=true,
+ * then redirect to its edit page. This lets Sandra see the full form
+ * AND the images editor on one page from the first click, instead of
+ * "save, then upload images" being two steps.
+ *
+ * Abandoned drafts stay archived with a placeholder name - they only
+ * appear under the "Archiviert" filter. They're harmless (invisible
+ * to the storefront) but we may add a janitor sweep later for
+ * placeholders older than 24h with no edits.
+ */
+export async function createDraftProductAction(): Promise<void> {
+  await requireAdmin();
+
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  const draftSlug = `entwurf-${randomSuffix}`;
+
+  const [row] = await db
+    .insert(product)
+    .values({
+      slug: draftSlug,
+      nameDe: "Neues Produkt (Entwurf)",
+      pricingMode: "variant",
+      isAvailable: false,
+      isOnlineOrderable: false,
+      isAddon: false,
+      isArchived: true,
+      leadTimeDays: 0,
+      sortOrder: 0,
+    })
+    .returning({ id: product.id });
+
+  revalidatePath("/admin/produkte");
+  redirect(`/admin/produkte/${row.id}?neu=1`);
+}
+
 // -------- create --------
 
 export async function createProduct(formData: FormData) {

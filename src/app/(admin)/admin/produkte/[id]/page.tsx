@@ -19,10 +19,13 @@ import { updateProduct } from "../actions";
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ neu?: string }>;
 };
 
-export default async function EditProductPage({ params }: PageProps) {
+export default async function EditProductPage({ params, searchParams }: PageProps) {
   const { id: idParam } = await params;
+  const { neu } = await searchParams;
+  const isDraft = neu === "1";
   const id = Number(idParam);
   if (!Number.isFinite(id)) notFound();
 
@@ -141,10 +144,10 @@ export default async function EditProductPage({ params }: PageProps) {
           Produkte
         </Link>
         <h1 className="font-display font-light text-[clamp(1.8rem,3vw,2.4rem)] leading-tight mt-2">
-          {productRow.nameDe}
+          {isDraft ? "Neues Produkt" : productRow.nameDe}
         </h1>
         <p className="text-xs text-muted-foreground mt-1 font-mono">
-          {productRow.slug}
+          {isDraft ? "Entwurf – geben Sie Namen + Varianten ein und speichern." : productRow.slug}
         </p>
       </div>
 
@@ -154,15 +157,18 @@ export default async function EditProductPage({ params }: PageProps) {
         colours={colours}
         product={{
           id: productRow.id,
-          slug: productRow.slug,
-          nameDe: productRow.nameDe,
+          slug: isDraft ? "" : productRow.slug,
+          nameDe: isDraft ? "" : productRow.nameDe,
           descriptionDe: productRow.descriptionDe,
           pricingMode: productRow.pricingMode,
           taxRateId: productRow.taxRateId,
-          isAvailable: productRow.isAvailable,
-          isOnlineOrderable: productRow.isOnlineOrderable,
+          // For a fresh draft, default the publish toggles to ON so
+          // "Anlegen" publishes immediately. User can turn them off
+          // if they want to keep editing before going live.
+          isAvailable: isDraft ? true : productRow.isAvailable,
+          isOnlineOrderable: isDraft ? true : productRow.isOnlineOrderable,
           isAddon: productRow.isAddon,
-          isArchived: productRow.isArchived,
+          isArchived: isDraft ? false : productRow.isArchived,
           leadTimeDays: productRow.leadTimeDays,
           sortOrder: productRow.sortOrder,
         }}
@@ -170,7 +176,7 @@ export default async function EditProductPage({ params }: PageProps) {
         selectedColourIds={selectedColourIds}
         initialVariants={initialVariants}
         action={updateWithId}
-        submitLabel="Speichern"
+        submitLabel={isDraft ? "Anlegen" : "Speichern"}
       />
 
       {/* Images live OUTSIDE the ProductForm on purpose: uploads persist

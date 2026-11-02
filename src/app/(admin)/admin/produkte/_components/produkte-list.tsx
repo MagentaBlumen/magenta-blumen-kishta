@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { thumbUrl } from "@/lib/image-urls";
 import { formatChf, formatChfFrom, minPrice } from "@/lib/money";
-import { archiveProductsAction } from "../actions";
+import { archiveProductsAction, createDraftProductAction } from "../actions";
 
 /**
  * Produkte grid. Server loads rows + first image + variant prices;
@@ -130,15 +130,17 @@ export function ProdukteList({
               : `${counts.all} ${counts.all === 1 ? "Produkt" : "Produkte"} insgesamt`}
           </p>
         </div>
-        <Link
-          href="/admin/produkte/neu"
-          className="group inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 text-xs tracking-[0.14em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
-        >
-          Neues Produkt
-          <span className="transition-transform duration-200 group-hover:translate-x-1">
-            →
-          </span>
-        </Link>
+        <form action={createDraftProductAction}>
+          <button
+            type="submit"
+            className="group inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 text-xs tracking-[0.14em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
+          >
+            Neues Produkt
+            <span className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
+          </button>
+        </form>
       </div>
 
       {/* Filter chips */}
@@ -392,15 +394,17 @@ function EmptyState({ filter }: { filter: Filter }) {
         {sub[filter]}
       </p>
       {filter === "alle" && (
-        <Link
-          href="/admin/produkte/neu"
-          className="group inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 text-xs tracking-[0.14em] uppercase font-medium hover:bg-rose transition-colors"
-        >
-          Erstes Produkt anlegen
-          <span className="transition-transform duration-200 group-hover:translate-x-1">
-            →
-          </span>
-        </Link>
+        <form action={createDraftProductAction}>
+          <button
+            type="submit"
+            className="group inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 text-xs tracking-[0.14em] uppercase font-medium hover:bg-rose transition-colors"
+          >
+            Erstes Produkt anlegen
+            <span className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
+          </button>
+        </form>
       )}
     </div>
   );
