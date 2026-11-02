@@ -45,12 +45,20 @@ WITH threshold AS (
   FROM settings
   WHERE key = 'abandoned_order_minutes'
 )
+-- `updated_at < threshold` closes the webhook-restore race:
+--   1. reaper would cancel at t = 30:00
+--   2. late webhook restored the order to 'new' at t = 29:50
+--      and the restore bumped updated_at
+-- Without the updated_at check, the reaper would promptly re-cancel
+-- the just-restored order. With it, a recently-touched row is left
+-- alone until the next tick (another threshold-interval later).
 UPDATE "order" o
    SET status = 'cancelled',
        updated_at = now()
   FROM threshold t
  WHERE o.status = 'new'
    AND o.placed_at < now() - (t.minutes || ' minutes')::interval
+   AND o.updated_at < now() - (t.minutes || ' minutes')::interval
    AND NOT EXISTS (
      SELECT 1
        FROM payment p

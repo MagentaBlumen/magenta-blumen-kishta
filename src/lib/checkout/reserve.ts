@@ -343,6 +343,32 @@ export async function reserveOrder(
         throw new ReserveError("Dieser Termin ist leider ausgebucht. Bitte wählen Sie einen anderen.");
       }
 
+      // Soft-launch daily cap: upper bound on ALL orders for a date,
+      // across both run windows. 0 (or unset) disables. On Dec 1 she
+      // can set this to e.g. 5 to limit total daily throughput while
+      // we smoke-test. The FOR UPDATE above on this run row doesn't
+      // serialise against the OTHER run's bookings, but at florist
+      // scale the chance of two reserves against different runs
+      // crossing the cap in the same millisecond is negligible.
+      const dailyCap = await getIntSetting(tx, "soft_launch_daily_cap", 0);
+      if (dailyCap > 0) {
+        const [dayCountRow] = await tx
+          .select({ c: sql<number>`count(*)::int` })
+          .from(order)
+          .where(
+            and(
+              eq(order.deliveryDate, runRow.runDate),
+              ne(order.status, "cancelled"),
+            ),
+          );
+        const dayBooked = dayCountRow?.c ?? 0;
+        if (dayBooked >= dailyCap) {
+          throw new ReserveError(
+            "Für diesen Tag sind leider schon alle Liefertermine vergeben. Bitte wählen Sie einen anderen Tag.",
+          );
+        }
+      }
+
       deliveryRunId = runRow.id;
       deliveryDate = runRow.runDate;
       sortTime = runRow.windowStart;

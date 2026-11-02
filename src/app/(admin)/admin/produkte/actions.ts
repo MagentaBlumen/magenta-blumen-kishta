@@ -3,7 +3,6 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, inArray } from "drizzle-orm";
-import { auth } from "@/auth";
 import { db } from "@/db/client";
 import {
   attribute,
@@ -15,6 +14,7 @@ import {
   productVariant,
 } from "@/db/schema/catalogue";
 import { orderLine } from "@/db/schema/order";
+import { requireAdmin } from "@/lib/admin/require-admin";
 import { slugify } from "@/lib/slug";
 
 /**
@@ -59,16 +59,6 @@ async function revalidateStorefrontForProduct(
   // Suppress unused warning (productId reserved for future
   // tag-based invalidation once we adopt fetch cache tags).
   void productId;
-}
-
-// Server Actions are public endpoints in a URL you can't see - CLAUDE.md
-// rule. Every action re-checks auth itself; do not rely on the middleware
-// or the (admin) layout gate.
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    throw new Error("Nicht angemeldet");
-  }
 }
 
 // -------- form parsing --------

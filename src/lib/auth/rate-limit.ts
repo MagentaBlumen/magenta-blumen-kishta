@@ -1,5 +1,5 @@
 import "server-only";
-import { headers } from "next/headers";
+import { clientIp } from "@/lib/http/client-ip";
 
 /**
  * In-memory brute-force protector for the admin signin flow.
@@ -23,20 +23,6 @@ const WINDOW_MS = 15 * 60 * 1000;   // 15 minutes
 const MAX_FAILURES = 5;
 
 const failures = new Map<string, number[]>();
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  // Caddy sets x-forwarded-for as "client, proxy1, proxy2". First
-  // entry is the real client. Fall back to a sentinel so unknown
-  // sources share one bucket (worst case: harmless over-blocking of
-  // a single unknown attacker).
-  const xff = h.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return "unknown";
-}
 
 /**
  * Returns true if the current client is currently blocked. Does NOT

@@ -29,20 +29,14 @@ export function resolveDeliveryTaxRate(
   }
   if (buckets.size === 0) return null;
 
-  let bestRate: string | null = null;
-  let bestSum = -Infinity;
-  for (const [rate, sum] of buckets) {
-    if (sum > bestSum) {
-      bestRate = rate;
-      bestSum = sum;
-      continue;
-    }
-    if (sum === bestSum && bestRate !== null) {
-      // Tie: pick the higher rate.
-      if (Number(rate) > Number(bestRate)) {
-        bestRate = rate;
-      }
-    }
-  }
-  return bestRate;
+  // Sort by (sum desc, rate desc) so the tie-break is independent of
+  // Map insertion order. Previous iteration-order approach only ran the
+  // tie-break branch when the tie was seen AFTER an existing bestRate,
+  // which meant lines[] order could decide the winner on exactly-equal
+  // sums. Rappen-level impact but deterministic now either way.
+  const ranked = Array.from(buckets.entries()).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return Number(b[0]) - Number(a[0]);
+  });
+  return ranked[0][0];
 }

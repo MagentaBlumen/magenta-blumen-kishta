@@ -2,7 +2,6 @@
 
 import { and, asc, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { order } from "@/db/schema/order";
 import { payment } from "@/db/schema/payment";
@@ -11,6 +10,7 @@ import {
   isValidTransition,
   type OrderStatus,
 } from "@/lib/admin/order-status";
+import { requireAdmin } from "@/lib/admin/require-admin";
 import { sendBuyerStatusEmail } from "@/lib/email/send";
 import type { StatusEmailKind } from "@/lib/email/templates";
 
@@ -20,11 +20,6 @@ import type { StatusEmailKind } from "@/lib/email/templates";
  * belt + braces, not a replacement for in-action checks per
  * CLAUDE.md's red zone).
  */
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) throw new Error("Nicht angemeldet");
-}
 
 const VALID_MARKED_BY = new Set(["Shop", "Sandra", "Inhaberin", "Andere"]);
 
@@ -148,7 +143,13 @@ export async function updateOrderStatusAction(
   const nextStatus = nextStatusRaw as OrderStatus;
 
   const [row] = await db
-    .select({ id: order.id, status: order.status })
+    .select({
+      id: order.id,
+      status: order.status,
+      buyerNotifiedOutForDeliveryAt: order.buyerNotifiedOutForDeliveryAt,
+      buyerNotifiedDeliveredAt: order.buyerNotifiedDeliveredAt,
+      buyerNotifiedFailedAt: order.buyerNotifiedFailedAt,
+    })
     .from(order)
     .where(eq(order.orderNumber, orderNumber))
     .limit(1);
@@ -160,18 +161,42 @@ export async function updateOrderStatusAction(
     );
   }
 
-  await db
-    .update(order)
-    .set({ status: nextStatus, updatedAt: new Date() })
-    .where(eq(order.id, row.id));
-
-  // Fire the buyer-notification email for the three status flips the
-  // customer actually cares about. Never throws; see sendBuyerStatusEmail.
-  // Admin interactions block until this returns, which is fine - Resend
-  // is sub-second and a slow email beats a silently dropped one.
+  // Email idempotency: track per-kind "already notified" so bouncing
+  // status (ready -> delivery_failed -> ready) doesn't resend. The
+  // flag + status both get set in the same UPDATE so a crash between
+  // them can't desync.
   const kind = statusEmailKindFor(nextStatus);
-  if (kind) {
-    await sendBuyerStatusEmail(row.id, kind);
+  const alreadyNotified =
+    (kind === "unterwegs" && row.buyerNotifiedOutForDeliveryAt !== null) ||
+    (kind === "zugestellt" && row.buyerNotifiedDeliveredAt !== null) ||
+    (kind === "fehlgeschlagen" && row.buyerNotifiedFailedAt !== null);
+  const shouldEmail = kind !== null && !alreadyNotified;
+
+  const now = new Date();
+  const updates: Partial<typeof order.$inferInsert> = {
+    status: nextStatus,
+    updatedAt: now,
+  };
+  if (shouldEmail) {
+    if (kind === "unterwegs") updates.buyerNotifiedOutForDeliveryAt = now;
+    else if (kind === "zugestellt") updates.buyerNotifiedDeliveredAt = now;
+    else if (kind === "fehlgeschlagen") updates.buyerNotifiedFailedAt = now;
+  }
+
+  await db.update(order).set(updates).where(eq(order.id, row.id));
+
+  // Fire-and-forget: the DB flip is already committed, and Resend's
+  // P99 is multi-second with worst-case timeouts in the 30s range.
+  // Blocking the admin's spinner on that is worse than a slow email -
+  // we have Sentry + console.error for drops. The flag above was
+  // committed in the same transaction so we won't re-attempt.
+  if (shouldEmail) {
+    sendBuyerStatusEmail(row.id, kind).catch((err) => {
+      console.error(
+        `[email] background status-email dispatch failed for order ${row.id}:`,
+        err,
+      );
+    });
   }
 
   revalidatePath("/admin");
@@ -235,6 +260,11 @@ export async function moveRouteStopAction(
       throw new Error("Nur Lauf-Bestellungen können umsortiert werden");
     }
 
+    // FOR UPDATE on every non-cancelled order in the run. Two concurrent
+    // admins (Sandra on laptop + the owner on a tablet) clicking reorder
+    // at the same second would otherwise each independently renumber the
+    // run and produce duplicate route_stop_order values. The lock
+    // serialises them; the second admin blocks until the first commits.
     const runOrders = await tx
       .select({
         id: order.id,
@@ -254,7 +284,8 @@ export async function moveRouteStopAction(
         // deterministic order.
         asc(order.routeStopOrder),
         asc(order.placedAt),
-      );
+      )
+      .for("update");
 
     // Normalise to 1..N. One UPDATE per row with a changed value;
     // typically zero updates if the run was already sequenced.

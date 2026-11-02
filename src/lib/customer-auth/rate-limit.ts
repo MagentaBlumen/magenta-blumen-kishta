@@ -1,5 +1,5 @@
 import "server-only";
-import { headers } from "next/headers";
+import { clientIp } from "@/lib/http/client-ip";
 
 /**
  * IP sliding window for customer signup + signin.
@@ -17,16 +17,6 @@ const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES = 10;
 
 const failures = new Map<string, number[]>();
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const xff = h.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return "unknown";
-}
 
 export async function isCustomerAuthRateLimited(): Promise<boolean> {
   const ip = await clientIp();

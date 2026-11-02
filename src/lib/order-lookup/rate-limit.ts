@@ -1,5 +1,5 @@
 import "server-only";
-import { headers } from "next/headers";
+import { clientIp } from "@/lib/http/client-ip";
 
 /**
  * In-memory IP sliding window for the guest order-lookup form.
@@ -17,16 +17,6 @@ const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES = 10;
 
 const failures = new Map<string, number[]>();
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const xff = h.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return "unknown";
-}
 
 export async function isOrderLookupRateLimited(): Promise<boolean> {
   const ip = await clientIp();

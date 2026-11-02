@@ -3,15 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
-import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { customer } from "@/db/schema/customer";
 import { settings } from "@/db/schema/settings";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) throw new Error("Nicht angemeldet");
-}
+import { requireAdmin } from "@/lib/admin/require-admin";
 
 /**
  * Bulk-update every seeded settings row.

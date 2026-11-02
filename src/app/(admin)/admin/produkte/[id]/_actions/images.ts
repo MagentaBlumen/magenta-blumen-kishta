@@ -2,9 +2,9 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { asc, eq, max } from "drizzle-orm";
-import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { product, productImage, productVariant } from "@/db/schema/catalogue";
+import { requireAdmin } from "@/lib/admin/require-admin";
 import {
   deleteObjects,
   keyFromPublicUrl,
@@ -15,11 +15,6 @@ import {
   processImage,
   randomKeySegment,
 } from "@/lib/images";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) throw new Error("Nicht angemeldet");
-}
 
 /**
  * Upload a single image, attach to a product. Persists immediately -

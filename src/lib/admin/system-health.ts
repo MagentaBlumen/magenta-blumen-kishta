@@ -1,5 +1,6 @@
 import "server-only";
 import { and, eq, gte, sql } from "drizzle-orm";
+import { DateTime } from "luxon";
 import { db } from "@/db/client";
 import { deliveryRun } from "@/db/schema/delivery";
 import { order } from "@/db/schema/order";
@@ -67,11 +68,17 @@ export async function fetchSystemHealth(): Promise<SystemHealth> {
     ]);
 
   const latestRunDate = latestRunRow[0]?.runDate ?? null;
+  // Luxon diff in Europe/Zurich — avoids the DST off-by-one that bare
+  // `new Date(iso)` arithmetic hits on the two changeover Sundays
+  // (rule 5).
   const daysAhead = latestRunDate
-    ? Math.max(0, Math.floor(
-        (new Date(latestRunDate + "T00:00:00Z").getTime() -
-          new Date(todayIso + "T00:00:00Z").getTime()) / 86400000,
-      ))
+    ? Math.max(
+        0,
+        Math.floor(
+          DateTime.fromISO(latestRunDate, { zone: "Europe/Zurich" })
+            .diff(today, "days").days,
+        ),
+      )
     : 0;
 
   return {

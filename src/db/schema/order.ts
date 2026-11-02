@@ -129,6 +129,21 @@ export const order = pgTable(
     printedAt: timestamp('printed_at', { withTimezone: true }),
 
     /**
+     * Buyer-notification email dispatch timestamps. Set when the admin
+     * flips the order into the matching status; checked before firing
+     * so a fat-finger "ready -> delivery_failed -> ready" doesn't send
+     * the "Zustellung nicht möglich" email twice.
+     *
+     * Each is one-shot per order. If a genuine second attempt happens
+     * (e.g. driver re-tried after a failed delivery), the admin resets
+     * these to NULL by hand - no business flow currently needs that,
+     * so there is no UI for it yet.
+     */
+    buyerNotifiedOutForDeliveryAt: timestamp('buyer_notified_out_for_delivery_at', { withTimezone: true }),
+    buyerNotifiedDeliveredAt: timestamp('buyer_notified_delivered_at', { withTimezone: true }),
+    buyerNotifiedFailedAt: timestamp('buyer_notified_failed_at', { withTimezone: true }),
+
+    /**
      * Shop-only. Never rendered to the customer, never printed on the ticket.
      * "Customer called about the address", "second attempt Saturday".
      */

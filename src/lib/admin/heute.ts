@@ -66,10 +66,18 @@ export async function fetchHeuteOrders(): Promise<HeuteOrder[]> {
   const today = todayZ();
   const todayIso = today.toISODate() ?? "";
 
-  const actionable = sql`EXISTS (
-    SELECT 1 FROM payment p
-    WHERE p.order_id = ${order.id}
-      AND (p.status = 'succeeded' OR p.method IN ('cash','invoice'))
+  // Actionable: has an active payment (succeeded card/twint, or any
+  // cash/invoice row), OR amount_due = 0 (future gift-card-fully-paid
+  // escape hatch - CLAUDE.md rule 11). The gift-card case produces NO
+  // payment row and NO webhook, so without this clause the order would
+  // be silently invisible on Heute.
+  const actionable = sql`(
+    ${order.amountDueGross} = 0
+    OR EXISTS (
+      SELECT 1 FROM payment p
+      WHERE p.order_id = ${order.id}
+        AND (p.status = 'succeeded' OR p.method IN ('cash','invoice'))
+    )
   )`;
 
   const dateFilter = sql`(
@@ -105,11 +113,21 @@ export async function fetchHeuteOrders(): Promise<HeuteOrder[]> {
       // orders per day). If this ever becomes a problem, flatten to
       // joins with GROUP BY.
       itemCount: sql<number>`(SELECT COUNT(*) FROM "order_line" ol WHERE ol.order_id = ${order.id})::int`,
+      // Prefer the LIVE payment row (status <> 'failed'). An order
+      // whose first intent failed and succeeded on retry has two rows
+      // in the payment table; without the ORDER BY, LIMIT 1 could
+      // return the failed row and misrepresent paid state.
       paymentStatus: sql<HeuteOrder["paymentStatus"]>`(
-        SELECT p.status FROM payment p WHERE p.order_id = ${order.id} LIMIT 1
+        SELECT p.status FROM payment p
+        WHERE p.order_id = ${order.id}
+        ORDER BY (p.status = 'succeeded') DESC, (p.status <> 'failed') DESC
+        LIMIT 1
       )`,
       paymentMethod: sql<HeuteOrder["paymentMethod"]>`(
-        SELECT p.method FROM payment p WHERE p.order_id = ${order.id} LIMIT 1
+        SELECT p.method FROM payment p
+        WHERE p.order_id = ${order.id}
+        ORDER BY (p.status = 'succeeded') DESC, (p.status <> 'failed') DESC
+        LIMIT 1
       )`,
     })
     .from(order)
