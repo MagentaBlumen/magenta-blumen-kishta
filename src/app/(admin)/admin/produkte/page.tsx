@@ -1,6 +1,6 @@
-import { asc, inArray, sql } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { product, productVariant } from "@/db/schema/catalogue";
+import { product, productImage, productVariant } from "@/db/schema/catalogue";
 import { ProdukteList } from "./_components/produkte-list";
 
 export const dynamic = "force-dynamic";
@@ -34,39 +34,56 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
       isOnlineOrderable: product.isOnlineOrderable,
       isArchived: product.isArchived,
       sortOrder: product.sortOrder,
-      // First image by sort_order. ANY image (no variant_id IS NULL
-      // filter) so products with only variant-specific photos still
-      // get a thumbnail. One correlated subquery per row; fine at
-      // florist scale (we're reading tens, not thousands).
-      imageUrl: sql<string | null>`(
-        SELECT url FROM product_image
-        WHERE product_id = ${product.id}
-        ORDER BY (variant_id IS NULL) DESC, sort_order ASC, id ASC
-        LIMIT 1
-      )`,
-      imageAlt: sql<string | null>`(
-        SELECT alt_de FROM product_image
-        WHERE product_id = ${product.id}
-        ORDER BY (variant_id IS NULL) DESC, sort_order ASC, id ASC
-        LIMIT 1
-      )`,
     })
     .from(product)
     .orderBy(asc(product.isArchived), asc(product.sortOrder), asc(product.nameDe));
 
-  // Load every variant price in one shot, group by productId in JS.
   const productIds = products.map((p) => p.id);
-  const variants = productIds.length === 0
-    ? []
-    : await db
-        .select({
-          productId: productVariant.productId,
-          priceGross: productVariant.priceGross,
-          salePriceGross: productVariant.salePriceGross,
-          isAvailable: productVariant.isAvailable,
-        })
-        .from(productVariant)
-        .where(inArray(productVariant.productId, productIds));
+
+  // Pull images + variants in two bulk queries, group in JS. Correlated
+  // subqueries from a `sql` template were unreliable in this version of
+  // Drizzle - the outer-table column reference didn't always rewrite
+  // right inside the inner SELECT.
+  const [images, variants] = productIds.length === 0
+    ? [[], []]
+    : await Promise.all([
+        db
+          .select({
+            productId: productImage.productId,
+            variantId: productImage.variantId,
+            url: productImage.url,
+            altDe: productImage.altDe,
+            sortOrder: productImage.sortOrder,
+            id: productImage.id,
+          })
+          .from(productImage)
+          .where(inArray(productImage.productId, productIds)),
+        db
+          .select({
+            productId: productVariant.productId,
+            priceGross: productVariant.priceGross,
+            salePriceGross: productVariant.salePriceGross,
+            isAvailable: productVariant.isAvailable,
+          })
+          .from(productVariant)
+          .where(inArray(productVariant.productId, productIds)),
+      ]);
+
+  // Primary image per product: prefer variant_id IS NULL (product-level),
+  // then lowest sort_order, then lowest id.
+  const imageByProduct = new Map<number, { url: string; alt: string | null }>();
+  const sorted = [...images].sort((a, b) => {
+    const aPrim = a.variantId === null ? 0 : 1;
+    const bPrim = b.variantId === null ? 0 : 1;
+    if (aPrim !== bPrim) return aPrim - bPrim;
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.id - b.id;
+  });
+  for (const img of sorted) {
+    if (!imageByProduct.has(img.productId)) {
+      imageByProduct.set(img.productId, { url: img.url, alt: img.altDe });
+    }
+  }
 
   const variantsByProduct = new Map<
     number,
@@ -87,6 +104,7 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
 
   const rows = products.map((p) => {
     const vs = variantsByProduct.get(p.id);
+    const img = imageByProduct.get(p.id);
     return {
       id: p.id,
       slug: p.slug,
@@ -96,8 +114,8 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
       isOnlineOrderable: p.isOnlineOrderable,
       isArchived: p.isArchived,
       sortOrder: p.sortOrder,
-      imageUrl: p.imageUrl,
-      imageAlt: p.imageAlt,
+      imageUrl: img?.url ?? null,
+      imageAlt: img?.alt ?? null,
       prices: vs?.prices ?? [],
       variantCount: vs?.variantCount ?? 0,
     };
