@@ -55,17 +55,22 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-10 max-w-3xl animate-in fade-in slide-in-from-bottom-1 duration-300">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Einstellungen</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
+        <p className="text-[0.65rem] tracking-[0.2em] uppercase text-muted-foreground font-medium mb-2">
+          Shop
+        </p>
+        <h1 className="font-display font-light text-[clamp(1.8rem,3vw,2.4rem)] leading-tight">
+          Einstellungen
+        </h1>
+        <p className="text-muted-foreground mt-2 text-sm">
           Konfiguration, die sich ohne Deploy ändern lässt. Änderungen greifen
           sofort.
         </p>
       </div>
 
       {ok && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 animate-in fade-in slide-in-from-top-1 duration-300">
           Gespeichert.
         </div>
       )}
@@ -74,9 +79,17 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
       <SystemHealthCard health={health} />
 
       {/* -------- Editable settings form -------- */}
-      <form action={updateSettings} className="space-y-6">
-        <h2 className="text-lg font-medium">Betriebsparameter</h2>
-        <div className="space-y-5 rounded-lg border p-6 bg-card">
+      <form action={updateSettings} className="space-y-5">
+        <div>
+          <h2 className="font-display font-light text-xl leading-tight">
+            Betriebsparameter
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Globale Zahlen (Cutoff-Stunden, Mindestbestellwert, Horizont).
+            Treffen den ganzen Shop, nicht einzelne Produkte.
+          </p>
+        </div>
+        <div className="space-y-5 rounded-lg border border-mist bg-card p-6">
           {settingRows.map((row) => {
             const isNumeric = NUMERIC_KEYS.has(row.key);
             return (
@@ -107,24 +120,32 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
           })}
         </div>
         <div className="flex justify-end">
-          <button type="submit" className={buttonVariants()}>
+          <button
+            type="submit"
+            className={`group ${buttonVariants()} inline-flex items-center gap-2 active:translate-y-px transition-all`}
+          >
             Speichern
+            <span className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
           </button>
         </div>
       </form>
 
       {/* -------- revFADP erasure -------- */}
-      <section className="space-y-3">
+      <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-medium">Datenschutz · Anonymisierung</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h2 className="font-display font-light text-xl leading-tight">
+            Datenschutz · Anonymisierung
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Anfrage nach Art. 32 revDSG. Löscht persönliche Felder des Kontos
             (Name, E-Mail, Telefon, Passwort). Bestellungen bleiben wegen der
             10-jährigen Aufbewahrungspflicht erhalten - mit den damals
             erfassten Daten als Snapshot.
           </p>
         </div>
-        <div className="rounded-lg border p-6 bg-card">
+        <div className="rounded-lg border border-mist bg-card p-6">
           {dsg === "ok" && (
             <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
               Kundenkonto anonymisiert. Bestellungen unverändert.
@@ -150,15 +171,17 @@ export default async function EinstellungenPage({ searchParams }: PageProps) {
       </section>
 
       {/* -------- Read-only tax rates -------- */}
-      <section className="space-y-3">
+      <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-medium">MWST-Sätze</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h2 className="font-display font-light text-xl leading-tight">
+            MWST-Sätze
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Nur zur Ansicht. Änderungen erfordern Rücksprache mit dem
-            Treuhänder . siehe <code className="text-xs">docs/vat-rates.md</code>.
+            Treuhänder · siehe <code className="text-xs font-mono">docs/vat-rates.md</code>.
           </p>
         </div>
-        <div className="rounded-lg border overflow-hidden divide-y">
+        <div className="rounded-lg border border-mist overflow-hidden divide-y divide-mist bg-card">
           {taxRateRows.map((r) => (
             <div
               key={r.id}

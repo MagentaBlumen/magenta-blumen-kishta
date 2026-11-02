@@ -1,28 +1,24 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 /**
- * Phone-first search in the admin header. Submits to /admin/suche?q=…
- * via a plain router push - no server action needed. Pre-fills from
- * the current URL so Sandra sees her query on the results page.
+ * Phone-first search in the admin header.
+ *
+ * Plain GET form submitting to /admin/suche?q=…  — no onSubmit handler,
+ * no router.push, no preventDefault. If JS fails, the native form
+ * submission still works. Keeps a controlled input only so the URL's
+ * ?q=… pre-populates on the results page.
  */
 export function SearchBox() {
-  const router = useRouter();
   const params = useSearchParams();
   const [value, setValue] = useState(params.get("q") ?? "");
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const q = value.trim();
-    if (!q) return;
-    router.push(`/admin/suche?q=${encodeURIComponent(q)}`);
-  }
-
   return (
-    <form onSubmit={submit} className="relative">
+    <form action="/admin/suche" method="get" className="relative">
       <input
+        name="q"
         type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -30,14 +26,13 @@ export function SearchBox() {
         aria-label="Bestellung suchen"
         inputMode="search"
         enterKeyHint="search"
-        className="w-full sm:w-64 h-9 pl-3 pr-9 border border-input bg-background text-sm rounded-md focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full sm:w-56 lg:w-64 h-9 pl-3 pr-9 border border-input bg-background text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-rose/30 focus:border-rose transition-colors"
       />
       <button
         type="submit"
         aria-label="Suchen"
-        className="absolute right-1.5 top-1.5 bottom-1.5 px-2 text-muted-foreground hover:text-foreground"
+        className="absolute right-1.5 top-1.5 bottom-1.5 px-2 text-muted-foreground hover:text-rose transition-colors"
       >
-        {/* magnifier */}
         <svg
           width="16"
           height="16"

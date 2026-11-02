@@ -34,18 +34,20 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
       isOnlineOrderable: product.isOnlineOrderable,
       isArchived: product.isArchived,
       sortOrder: product.sortOrder,
-      // First image by sort_order. One correlated subquery per row;
-      // fine at florist scale (we're reading tens, not thousands).
+      // First image by sort_order. ANY image (no variant_id IS NULL
+      // filter) so products with only variant-specific photos still
+      // get a thumbnail. One correlated subquery per row; fine at
+      // florist scale (we're reading tens, not thousands).
       imageUrl: sql<string | null>`(
         SELECT url FROM product_image
-        WHERE product_id = ${product.id} AND variant_id IS NULL
-        ORDER BY sort_order ASC, id ASC
+        WHERE product_id = ${product.id}
+        ORDER BY (variant_id IS NULL) DESC, sort_order ASC, id ASC
         LIMIT 1
       )`,
       imageAlt: sql<string | null>`(
         SELECT alt_de FROM product_image
-        WHERE product_id = ${product.id} AND variant_id IS NULL
-        ORDER BY sort_order ASC, id ASC
+        WHERE product_id = ${product.id}
+        ORDER BY (variant_id IS NULL) DESC, sort_order ASC, id ASC
         LIMIT 1
       )`,
     })

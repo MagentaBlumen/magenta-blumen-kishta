@@ -212,7 +212,7 @@ export function ProdukteList({
       {rows.length === 0 ? (
         <EmptyState filter={filter} />
       ) : (
-        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+        <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {rows.map((r) => (
             <li key={r.id}>
               <ProductCard
@@ -271,7 +271,7 @@ function ProductCard({
         selected ? "border-rose ring-2 ring-rose/30" : "border-mist"
       } ${row.isArchived ? "opacity-70" : ""}`}
     >
-      <div className="relative aspect-[4/5] bg-mist overflow-hidden">
+      <div className="relative aspect-square bg-mist overflow-hidden">
         {src ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -281,7 +281,7 @@ function ProductCard({
             className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[0.7rem] text-sage uppercase tracking-wider">
+          <div className="w-full h-full flex items-center justify-center text-[0.6rem] text-sage uppercase tracking-wider">
             Kein Bild
           </div>
         )}
@@ -295,7 +295,7 @@ function ProductCard({
             e.stopPropagation();
             onToggle();
           }}
-          className={`absolute top-2 left-2 flex items-center justify-center w-7 h-7 rounded border-2 bg-ivory/95 cursor-pointer transition-opacity duration-150 ${
+          className={`absolute top-1.5 left-1.5 flex items-center justify-center w-6 h-6 rounded border-2 bg-ivory/95 cursor-pointer transition-opacity duration-150 ${
             selected
               ? "border-rose opacity-100"
               : "border-foreground/40 opacity-0 group-hover:opacity-100"
@@ -310,34 +310,29 @@ function ProductCard({
             className="sr-only"
           />
           {selected && (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a0185a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a0185a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           )}
         </label>
 
         {/* Status pill: top-right */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-1.5 right-1.5">
           <StatusPill row={row} />
         </div>
       </div>
 
-      <div className="p-3 space-y-1">
-        <div className="text-sm font-medium leading-tight line-clamp-2 group-hover:text-rose transition-colors duration-200">
+      <div className="p-2 space-y-0.5">
+        <div className="text-xs font-medium leading-tight line-clamp-2 group-hover:text-rose transition-colors duration-200">
           {row.nameDe}
         </div>
-        <div className="flex items-baseline justify-between gap-2 text-xs">
-          <span className="text-muted-foreground tabular-nums">{price}</span>
-          <span className="text-muted-foreground/70 text-[0.68rem]">
-            {row.variantCount > 0
-              ? `${row.variantCount} ${row.variantCount === 1 ? "Variante" : "Varianten"}`
-              : row.pricingMode === "enquiry"
-                ? "Anfrage"
-                : ""}
-          </span>
-        </div>
-        <div className="text-[0.68rem] text-muted-foreground/60 font-mono truncate">
-          {row.slug}
+        <div className="flex items-baseline justify-between gap-1.5 text-[0.68rem]">
+          <span className="text-muted-foreground tabular-nums truncate">{price}</span>
+          {row.variantCount > 0 && (
+            <span className="text-muted-foreground/70 text-[0.6rem] flex-shrink-0">
+              {row.variantCount}×
+            </span>
+          )}
         </div>
       </div>
     </Link>
@@ -346,7 +341,7 @@ function ProductCard({
 
 function StatusPill({ row }: { row: Row }) {
   const base =
-    "inline-block text-[0.6rem] tracking-[0.1em] uppercase font-medium px-2 py-0.5 border rounded shadow-sm bg-ivory/95";
+    "inline-block text-[0.55rem] tracking-[0.08em] uppercase font-medium px-1.5 py-0.5 border rounded shadow-sm bg-ivory/95";
   if (row.isArchived) {
     return (
       <span className={`${base} text-stone-600 border-stone-300`}>
