@@ -129,18 +129,23 @@ export default async function EditProductPage({ params }: PageProps) {
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
       <div>
-        <div className="text-sm text-muted-foreground">
-          <Link href="/admin/produkte" className="hover:underline">
-            Produkte
-          </Link>
-          {" / "}
-          <span>{productRow.nameDe}</span>
-        </div>
-        <h1 className="text-3xl font-semibold tracking-tight mt-1">
+        <Link
+          href="/admin/produkte"
+          className="text-xs tracking-[0.1em] uppercase text-muted-foreground hover:text-rose transition-colors inline-flex items-center gap-1 group"
+        >
+          <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+            ←
+          </span>
+          Produkte
+        </Link>
+        <h1 className="font-display font-light text-[clamp(1.8rem,3vw,2.4rem)] leading-tight mt-2">
           {productRow.nameDe}
         </h1>
+        <p className="text-xs text-muted-foreground mt-1 font-mono">
+          {productRow.slug}
+        </p>
       </div>
 
       <ProductForm
