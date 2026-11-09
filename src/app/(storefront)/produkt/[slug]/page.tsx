@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ProductCard } from "@/components/storefront/product-card";
 import { ProductGallery } from "@/components/storefront/product-gallery";
 import { ProductVariantPicker } from "@/components/storefront/product-variant-picker";
 import { largeUrl } from "@/lib/image-urls";
 import { minPrice } from "@/lib/money";
 import {
+  getCategoryBySlug,
   getProductBySlug,
   getProductDetailBundle,
+  getProductsInCategory,
 } from "@/lib/cached-storefront";
 
 export const dynamic = "force-dynamic";
@@ -48,9 +51,6 @@ export default async function ProductDetailPage({ params }: PageProps) {
     p.slug,
   );
 
-  // Prefer a range category ("Sträusse", "Rosen") as the eyebrow line
-  // above the title . matches Figma's use of the variety label. Fall
-  // back to the first category, or nothing.
   const eyebrow =
     categories.find((c) => c.kind === "range")?.nameDe ??
     categories[0]?.nameDe ??
@@ -58,8 +58,27 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   const heroImage = images[0] ?? null;
 
+  // Related products: pull from the first category, strip the current
+  // product, take up to 4. getProductDetailBundle doesn't return the
+  // category id in its select, so we re-resolve by slug — cheap, hits
+  // the same categories cache.
+  const firstCategory = categories[0] ?? null;
+  const firstCategoryFull = firstCategory
+    ? await getCategoryBySlug(firstCategory.slug)
+    : null;
+  const relatedAll = firstCategoryFull
+    ? await getProductsInCategory(firstCategoryFull.id, firstCategoryFull.slug)
+    : [];
+  const related = relatedAll.filter((r) => r.slug !== p.slug).slice(0, 4);
+
+  // Split the title into "main" and "italic trailer" by the LAST
+  // comma or dash. Falls back to italicising the last word so the
+  // display heading always has that Fraunces/Cormorant italic kick
+  // from the mockup without needing per-product title data.
+  const { titleMain, titleItalic } = splitTitle(p.nameDe);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 lg:px-6 py-4 lg:py-6">
+    <div className="max-w-[1280px] mx-auto px-4 lg:px-8 py-6 lg:py-8 flex flex-col gap-8">
       <ProductJsonLd
         product={p}
         variants={variants}
@@ -68,163 +87,290 @@ export default async function ProductDetailPage({ params }: PageProps) {
       />
 
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-[0.68rem] tracking-[0.08em] uppercase text-sage mb-8">
+      <nav
+        aria-label="Brotkrümelnavigation"
+        className="text-[13px] text-sage flex flex-wrap items-center gap-2"
+      >
         <Link href="/" className="hover:text-rose transition-colors">
           Startseite
         </Link>
-        <span>/</span>
-        {eyebrow && categories[0] ? (
+        <span aria-hidden>/</span>
+        {firstCategory && (
           <>
             <Link
-              href={`/kategorie/${categories[0].slug}`}
+              href={`/kategorie/${firstCategory.slug}`}
               className="hover:text-rose transition-colors"
             >
-              {categories[0].nameDe}
+              {firstCategory.nameDe}
             </Link>
-            <span>/</span>
+            <span aria-hidden>/</span>
           </>
-        ) : null}
-        <span className="text-bark normal-case tracking-normal text-[0.75rem]">
+        )}
+        <span aria-current="page" className="text-bark">
           {p.nameDe}
         </span>
       </nav>
 
-      <div className="grid md:grid-cols-2 gap-10 md:gap-14 items-start pb-16">
-        {/* -------- Gallery -------- */}
-        <ProductGallery
-          images={images}
-          productName={p.nameDe}
-          showSoldOut={!p.isAvailable}
-        />
+      {/* ---------- Product: gallery + buy box ---------- */}
+      <div className="flex flex-wrap items-start gap-12 lg:gap-16">
+        <div className="flex-[7_1_480px] min-w-0 lg:sticky lg:top-6 flex flex-col gap-3">
+          {/* Gallery wrapped so an availability chip can overlay the
+              top-left corner of the image frame. ProductGallery itself
+              doesn't own badges. */}
+          <div className="relative">
+            <ProductGallery
+              images={images}
+              productName={p.nameDe}
+              showSoldOut={!p.isAvailable}
+            />
+            {p.isAvailable && p.pricingMode !== "enquiry" && (
+              <AvailabilityChip />
+            )}
+          </div>
+          <p className="text-[13px] text-sage leading-[1.5] m-0">
+            Jedes Arrangement wird von Hand gebunden — Blumen können je
+            nach Saison leicht abweichen.
+          </p>
+        </div>
 
-        {/* -------- Info column -------- */}
-        <div>
-          {eyebrow && (
-            <p className="text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium mb-2.5">
-              {eyebrow}
-            </p>
-          )}
-          <h1 className="font-display font-light text-bark text-[clamp(2rem,3.5vw,2.8rem)] leading-[1.1] mb-6">
-            {p.nameDe}
-          </h1>
+        <form className="flex-[5_1_380px] min-w-0 flex flex-col gap-7" onSubmit={(e) => e.preventDefault()}>
+          {/* Head */}
+          <div className="flex flex-col gap-3">
+            {eyebrow && (
+              <p className="m-0 text-[13px] tracking-[0.14em] uppercase text-rose font-semibold">
+                {eyebrow}
+              </p>
+            )}
+            <h1 className="m-0 font-display font-light text-bark text-[clamp(34px,3.4vw,46px)] leading-[1.08] tracking-[-0.015em]">
+              {titleMain}
+              {titleItalic && (
+                <>
+                  {" "}
+                  <em className="italic">{titleItalic}</em>
+                </>
+              )}
+            </h1>
 
+            {p.pricingMode !== "enquiry" && (
+              <p className="m-0 text-[14px] text-bark/70">
+                Lieferung im Aargau ab CHF 12 ·{" "}
+                <strong className="font-semibold text-bark">
+                  gratis ab CHF 120
+                </strong>
+              </p>
+            )}
+          </div>
+
+          {/* Buy box or enquiry hint */}
           {p.pricingMode === "enquiry" ? (
             <EnquiryBlock />
           ) : (
             <ProductVariantPicker productId={p.id} variants={variants} />
           )}
 
+          {/* Colours (informational — colour is a product facet, not a
+              selectable variant in our schema). */}
           {colours.length > 0 && p.pricingMode !== "enquiry" && (
-            <div className="pt-6">
-              <p className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark mb-2.5">
-                Farbe
-              </p>
-              <div className="flex flex-wrap gap-2">
+            <fieldset className="border-0 p-0 m-0 min-w-0">
+              <legend className="text-[0.78rem] font-semibold text-bark mb-3">
+                Farbton{" "}
+                <span className="font-normal text-sage">
+                  — {colours.map((c) => c.nameDe).join(", ")}
+                </span>
+              </legend>
+              <div className="flex flex-wrap gap-2.5">
                 {colours.map((c) => (
                   <span
                     key={c.value}
-                    className="inline-flex items-center gap-2 px-3 py-2 border border-mist text-[0.75rem] text-bark"
+                    title={c.nameDe}
+                    aria-label={c.nameDe}
+                    className="inline-block w-10 h-10 rounded-full border border-bark/20 p-1"
                   >
                     <span
                       aria-hidden
-                      className="inline-block h-4 w-4 rounded-full border border-mist"
+                      className="block w-full h-full rounded-full"
                       style={{
                         background:
                           c.hex ??
                           "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)",
                       }}
                     />
-                    {c.nameDe}
                   </span>
                 ))}
               </div>
-            </div>
+            </fieldset>
           )}
 
-          {/* Enquiry-only products keep the "call us" pointer since there
-              is no checkout for them by design. */}
-          {p.pricingMode === "enquiry" && (
-            <div className="mt-8 px-4 py-3 bg-cream border border-mist text-[0.75rem] text-sage">
-              Für Hochzeit, Trauer oder Event rufen Sie uns bitte direkt an:{" "}
-              <a
-                href="tel:+41565565609"
-                className="text-bark hover:text-rose transition-colors"
-              >
-                056 556 56 09
-              </a>
-              .
-            </div>
-          )}
+          {/* Trust row */}
+          {p.pricingMode !== "enquiry" && <TrustRow />}
 
-          {/* -------- Accordions -------- */}
-          <div className="mt-8 border-t border-mist">
+          {/* Accordions */}
+          <div className="flex flex-col">
             {p.descriptionDe && (
               <Accordion label="Beschreibung" defaultOpen>
-                <p className="text-[0.85rem] text-bark/75 leading-[1.75] font-light whitespace-pre-line">
+                <p className="text-[15px] text-bark/70 leading-[1.7] whitespace-pre-line m-0">
                   {p.descriptionDe}
                 </p>
               </Accordion>
             )}
-
+            <Accordion label="Lieferung">
+              <p className="text-[15px] text-bark/70 leading-[1.7] m-0">
+                Zwei Touren täglich um 10:00 und 16:00 — auch am Sonntag.
+                Bestellschluss jeweils drei Stunden vor der Tour. Lieferung
+                mit unserem eigenen Van in 27 Aargauer Postleitzahlen,
+                ab CHF 12, gratis ab CHF 120.
+              </p>
+            </Accordion>
             <Accordion label="Pflegehinweise">
-              <ul className="space-y-1.5 pl-4 list-disc marker:text-sage">
+              <ul className="space-y-1.5 pl-4 list-disc marker:text-sage m-0">
                 {CARE_STEPS.map((step) => (
-                  <li key={step} className="text-[0.85rem] text-bark/75 leading-[1.6]">
+                  <li
+                    key={step}
+                    className="text-[15px] text-bark/70 leading-[1.6]"
+                  >
                     {step}
                   </li>
                 ))}
               </ul>
             </Accordion>
-
-            <Accordion label="Lieferung">
-              <dl className="space-y-2.5">
-                {DELIVERY_FACTS.map(([k, v]) => (
-                  <div key={k} className="flex gap-3">
-                    <dt className="text-[0.68rem] tracking-[0.08em] uppercase font-medium text-bark w-[110px] flex-shrink-0 pt-0.5">
-                      {k}
-                    </dt>
-                    <dd className="text-[0.85rem] text-bark/75 leading-[1.55]">{v}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Accordion>
-
             <Accordion label="Herkunft">
-              <dl className="space-y-2.5">
+              <dl className="m-0 space-y-2.5">
                 {ORIGIN_FACTS.map(([k, v]) => (
                   <div key={k} className="flex gap-3">
-                    <dt className="text-[0.68rem] tracking-[0.08em] uppercase font-medium text-bark w-[110px] flex-shrink-0 pt-0.5">
+                    <dt className="text-[0.68rem] tracking-[0.08em] uppercase font-semibold text-bark w-[110px] flex-shrink-0 pt-0.5">
                       {k}
                     </dt>
-                    <dd className="text-[0.85rem] text-bark/75 leading-[1.55]">{v}</dd>
+                    <dd className="text-[15px] text-bark/70 leading-[1.55]">
+                      {v}
+                    </dd>
                   </div>
                 ))}
               </dl>
             </Accordion>
           </div>
-        </div>
+        </form>
       </div>
+
+      {/* ---------- Related ---------- */}
+      {related.length > 0 && firstCategory && (
+        <section className="mt-12 lg:mt-16 flex flex-col gap-7">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="m-0 font-display font-light text-bark text-[clamp(28px,3vw,40px)] leading-[1.1]">
+              Das könnte Ihnen <em className="italic">auch gefallen</em>
+            </h2>
+            <Link
+              href={`/kategorie/${firstCategory.slug}`}
+              className="text-[15px] font-semibold text-bark border-b border-bark pb-0.5 hover:text-rose hover:border-rose transition-colors"
+            >
+              Alle {firstCategory.nameDe}
+            </Link>
+          </div>
+          <ul className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {related.map((r) => (
+              <li key={r.slug}>
+                <ProductCard product={r} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
+  );
+}
+
+function AvailabilityChip() {
+  return (
+    <div className="absolute top-4 left-4 inline-flex items-center gap-2 bg-ivory/95 backdrop-blur-sm rounded-full px-3.5 py-2 text-[13px] font-semibold text-bark shadow-sm">
+      <span className="w-2 h-2 rounded-full bg-emerald-600" aria-hidden />
+      Heute lieferbar
+    </div>
+  );
+}
+
+function TrustRow() {
+  return (
+    <ul className="m-0 p-5 list-none border-y border-mist grid grid-cols-1 sm:grid-cols-3 gap-3 text-[13px] leading-[1.4] text-bark/70">
+      <li className="flex flex-col gap-1.5">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-rose"
+          aria-hidden
+        >
+          <path d="M2 7h11v9H2z" />
+          <path d="M13 10h4l3 3v3h-7z" />
+          <circle cx="6" cy="18" r="2" />
+          <circle cx="17" cy="18" r="2" />
+        </svg>
+        Eigener Van, kein Kurier
+      </li>
+      <li className="flex flex-col gap-1.5">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-rose"
+          aria-hidden
+        >
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 10h18M8 3v4M16 3v4" />
+        </svg>
+        Auch am Sonntag
+      </li>
+      <li className="flex flex-col gap-1.5">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-rose"
+          aria-hidden
+        >
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <path d="M2 10h20" />
+        </svg>
+        TWINT &amp; Karte
+      </li>
+    </ul>
   );
 }
 
 function EnquiryBlock() {
   return (
-    <div className="border-y border-mist py-5 space-y-1">
-      <p className="font-display text-[1.6rem] font-normal text-bark leading-none">
+    <div className="border-y border-mist py-5 space-y-2">
+      <p className="font-display text-[1.6rem] font-normal text-bark leading-none m-0">
         Nur auf Anfrage
       </p>
-      <p className="text-[0.78rem] text-sage mt-1.5">
-        Hochzeit, Trauer, Event, Gärtnerservice . bitte kontaktieren Sie uns direkt.
+      <p className="text-[0.85rem] text-sage m-0">
+        Hochzeit, Trauer, Event, Gärtnerservice — bitte kontaktieren Sie uns
+        direkt unter{" "}
+        <a
+          href="tel:+41565565609"
+          className="text-rose hover:underline font-medium"
+        >
+          056 556 56 09
+        </a>
+        .
       </p>
     </div>
   );
 }
 
-/**
- * Uses native <details> for zero-JS collapse. Rotating the marker is
- * pure CSS. `defaultOpen` prop maps to the HTML `open` attribute.
- */
 function Accordion({
   label,
   defaultOpen = false,
@@ -239,11 +385,11 @@ function Accordion({
       open={defaultOpen}
       className="group border-b border-mist [&_summary::-webkit-details-marker]:hidden"
     >
-      <summary className="flex items-center justify-between py-4 cursor-pointer list-none text-[0.72rem] tracking-[0.12em] uppercase font-medium text-bark hover:text-rose transition-colors">
+      <summary className="flex items-center justify-between py-4 cursor-pointer list-none text-[15px] font-semibold text-bark hover:text-rose transition-colors">
         {label}
         <span
           aria-hidden
-          className="text-[1.1rem] leading-none text-sage transition-transform group-open:rotate-45"
+          className="text-[1.25rem] leading-none text-sage transition-transform group-open:rotate-45"
         >
           +
         </span>
@@ -253,10 +399,35 @@ function Accordion({
   );
 }
 
-// ------------------------------------------------------------------
-// Content that isn't in the DB. Same for every product for now.
-// If per-product overrides are ever needed, add fields to `product`.
-// ------------------------------------------------------------------
+/**
+ * Split a product name for italic emphasis on the trailing fragment.
+ * Priority: last comma, then last " in ", then last " – ", then last
+ * two words. If splitting isn't natural, no italic fragment is used.
+ */
+function splitTitle(name: string): { titleMain: string; titleItalic: string | null } {
+  const trimmed = name.trim();
+
+  const commaIdx = trimmed.lastIndexOf(",");
+  if (commaIdx > 0 && commaIdx < trimmed.length - 2) {
+    return {
+      titleMain: trimmed.slice(0, commaIdx).trim(),
+      titleItalic: trimmed.slice(commaIdx + 1).trim(),
+    };
+  }
+
+  for (const sep of [" in ", " aus ", " mit "]) {
+    const idx = trimmed.lastIndexOf(sep);
+    if (idx > 0) {
+      return {
+        titleMain: trimmed.slice(0, idx).trim(),
+        titleItalic: trimmed.slice(idx).trim(),
+      };
+    }
+  }
+
+  // Fallback: no italic fragment. Cleaner than mandatory emphasis.
+  return { titleMain: trimmed, titleItalic: null };
+}
 
 const CARE_STEPS = [
   "Stiele schräg anschneiden",
@@ -266,13 +437,6 @@ const CARE_STEPS = [
   "Welke Blätter entfernen",
 ];
 
-const DELIVERY_FACTS: [string, string][] = [
-  ["Liefergebiet", "27 Postleitzahlen im Aargau (siehe Zonen bei der Kasse)"],
-  ["Zeitfenster", "10:00–12:00 oder 16:00–18:00, sieben Tage die Woche"],
-  ["Vorlauf", "Mindestens 3 Stunden vor der Tour bestellen"],
-  ["Abholung", "In-Store-Abholung in Neuenhof jederzeit möglich"],
-];
-
 const ORIGIN_FACTS: [string, string][] = [
   ["Werkstatt", "Magenta Blumen, Neuenhof AG"],
   ["Bindung", "Jeder Strauss von der Inhaberin persönlich gebunden"],
@@ -280,7 +444,7 @@ const ORIGIN_FACTS: [string, string][] = [
 ];
 
 // ------------------------------------------------------------------
-// schema.org Product JSON-LD (unchanged from before the restyle).
+// schema.org Product JSON-LD (unchanged behavior; kept as-is).
 // ------------------------------------------------------------------
 
 function ProductJsonLd({
@@ -335,4 +499,3 @@ function ProductJsonLd({
     />
   );
 }
-

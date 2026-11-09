@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { formatChf } from "@/lib/money";
 import { addToCartAction } from "@/lib/cart/actions";
 
@@ -13,25 +13,22 @@ type Variant = {
 };
 
 /**
- * Size-pill variant selector + prominent price display + qty stepper +
- * add-to-cart button. This is the whole purchase panel on the product
- * detail page.
+ * Buy box: variant tiles → qty stepper → CTA with live total → free-
+ * shipping progress hint.
  *
- * Sold-out variants render greyed and non-clickable (rule 7 . no
- * integer stock, availability is boolean; sold-out never hidden).
- * The Add button disables while the current variant is unavailable.
- *
- * State lives here (not lifted) because nothing outside the panel
- * needs to know which size / qty is selected until the moment a line
- * hits the cookie. Server action is called via useTransition so the
- * button can show a pending state without blocking the UI.
+ * Variant tiles render as a grid with name + price per tile, mirroring
+ * the mockup's size picker. Selected tile is bark-filled; unavailable
+ * tiles are dimmed but still shown (rule 7 — sold-out visible, not
+ * hidden).
  */
 export function ProductVariantPicker({
   productId,
   variants,
+  freeShippingThreshold = 120,
 }: {
   productId: number;
   variants: Variant[];
+  freeShippingThreshold?: number;
 }) {
   const firstAvailableIdx = variants.findIndex((v) => v.isAvailable);
   const initialIdx = firstAvailableIdx >= 0 ? firstAvailableIdx : 0;
@@ -41,6 +38,20 @@ export function ProductVariantPicker({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const selected = variants[selectedIdx] ?? variants[0];
+
+  const { unitPriceNum, totalNum, hasSale } = useMemo(() => {
+    if (!selected) return { unitPriceNum: 0, totalNum: 0, hasSale: false };
+    const unit = Number(selected.salePriceGross ?? selected.priceGross);
+    return {
+      unitPriceNum: unit,
+      totalNum: unit * qty,
+      hasSale:
+        selected.salePriceGross !== null &&
+        selected.salePriceGross !== selected.priceGross,
+    };
+  }, [selected, qty]);
+
   if (variants.length === 0) {
     return (
       <div className="text-[0.85rem] text-sage">
@@ -49,24 +60,12 @@ export function ProductVariantPicker({
     );
   }
 
-  const selected = variants[selectedIdx] ?? variants[0];
-  const displayPrice = selected.salePriceGross ?? selected.priceGross;
-  const hasSale =
-    selected.salePriceGross !== null && selected.salePriceGross !== selected.priceGross;
-
-  // TODO(sandra): decide whether variant.is_available=false blocks
-  // ordering entirely, or only means "not available for today's runs".
-  // For a made-to-order florist delivering days ahead, a bouquet marked
-  // unavailable today could reasonably be orderable for next Tuesday.
-  //
-  // Current behaviour: UI disables Add. This is a placeholder decision.
-  // The cookie / server action already allow is_available=false lines
-  // in the cart per rule 7 - only the button here blocks. Flip the
-  // canBuy line below (drop the isAvailable check) if Sandra prefers
-  // "sold-out today but still orderable for a future slot".
   const canBuy = selected.isAvailable && !isPending;
+  const shortfallToFree = Math.max(0, freeShippingThreshold - totalNum);
+  const willBeFree = totalNum >= freeShippingThreshold;
 
   function handleSelect(i: number) {
+    if (!variants[i]?.isAvailable) return;
     setSelectedIdx(i);
     setFeedback("idle");
     setErrorMsg(null);
@@ -86,8 +85,6 @@ export function ProductVariantPicker({
       try {
         await addToCartAction(productId, selected.id, qty);
         setFeedback("added");
-        // Reset the visible feedback after a moment, but leave the
-        // cart badge count (rendered by the server layout) alone.
         setTimeout(() => setFeedback("idle"), 2200);
       } catch (err) {
         setFeedback("error");
@@ -97,85 +94,96 @@ export function ProductVariantPicker({
   }
 
   return (
-    <>
-      {/* -------- Price block -------- */}
-      <div className="border-y border-mist py-5">
-        <div className="flex items-baseline gap-3">
-          <p className="font-display text-[2rem] font-normal text-bark tabular-nums leading-none">
-            {formatChf(displayPrice)}
-          </p>
-          {hasSale && (
-            <p className="text-[0.9rem] text-sage line-through tabular-nums">
-              {formatChf(selected.priceGross)}
-            </p>
-          )}
-        </div>
-        <p className="text-[0.72rem] text-sage mt-1.5">
-          Inkl. MwSt. · Lieferung im Aargau ab CHF 12
-        </p>
+    <div className="flex flex-col gap-7">
+      {/* -------- Price -------- */}
+      <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
+        <span className="font-display text-[2rem] font-normal text-bark tabular-nums leading-none">
+          {formatChf(selected.salePriceGross ?? selected.priceGross)}
+        </span>
+        {hasSale && (
+          <span className="text-[0.95rem] text-sage line-through tabular-nums">
+            {formatChf(selected.priceGross)}
+          </span>
+        )}
+        <span className="text-[0.78rem] text-sage">inkl. MwSt.</span>
       </div>
 
-      {/* -------- Size pills -------- */}
+      {/* -------- Size tiles -------- */}
       {variants.length > 1 && (
-        <div className="pt-6">
-          <p className="text-[0.68rem] tracking-[0.12em] uppercase font-medium text-bark mb-2.5">
-            Grösse
+        <fieldset className="border-0 p-0 m-0 min-w-0">
+          <legend className="text-[0.78rem] font-semibold text-bark mb-3">
+            Grösse{" "}
             {selected.sizeLabelDe && (
-              <span className="text-sage font-normal tracking-normal normal-case ml-2">
-                . {selected.sizeLabelDe}
+              <span className="font-normal text-sage">
+                — {selected.sizeLabelDe}
               </span>
             )}
-          </p>
-          <div className="flex gap-2">
+          </legend>
+          <div className="grid grid-cols-3 gap-2">
             {variants.map((v, i) => {
               const isSelected = i === selectedIdx;
               const isDisabled = !v.isAvailable;
+              const price = formatChf(v.salePriceGross ?? v.priceGross);
               return (
                 <button
                   key={v.id}
                   type="button"
                   disabled={isDisabled}
                   onClick={() => handleSelect(i)}
-                  className={`flex-1 min-w-0 px-2 py-2.5 text-[0.72rem] tracking-[0.08em] uppercase font-medium border transition-colors ${
+                  aria-pressed={isSelected}
+                  className={`min-h-[64px] px-2 py-2 border rounded flex flex-col items-center justify-center gap-0.5 text-center transition-colors duration-150 ${
                     isSelected
-                      ? "border-rose bg-rose text-ivory"
-                      : "border-mist text-bark hover:border-bark"
-                  } ${isDisabled ? "opacity-40 cursor-not-allowed line-through hover:border-mist" : "cursor-pointer"}`}
+                      ? "border-bark border-2 bg-bark text-ivory"
+                      : isDisabled
+                        ? "border-mist text-sage opacity-40 cursor-not-allowed line-through"
+                        : "border-bark/20 text-bark hover:border-bark cursor-pointer"
+                  }`}
                 >
-                  {v.sizeLabelDe || "Standard"}
+                  <span className="text-[0.85rem] font-semibold">
+                    {v.sizeLabelDe || "Standard"}
+                  </span>
+                  <span
+                    className={`text-[0.72rem] tabular-nums ${isSelected ? "text-ivory/85" : "text-sage"}`}
+                  >
+                    {price}
+                  </span>
                 </button>
               );
             })}
           </div>
-        </div>
+        </fieldset>
       )}
 
-      {/* -------- Qty + Add --------
-          Mobile: stepper stretches full width (thirds), Add stacked full width below.
-          sm+   : stepper at intrinsic width, Add fills remaining space. */}
-      <div className="pt-6 flex flex-col sm:flex-row gap-3">
-        <div className="flex items-center border border-mist h-[50px] w-full sm:w-auto sm:flex-shrink-0">
+      {/* -------- Qty + CTA -------- */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex items-center border border-bark/20 rounded h-[56px]">
           <button
             type="button"
             onClick={() => handleQty(-1)}
             disabled={qty <= 1}
             aria-label="Menge verringern"
-            className="w-1/3 sm:w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-12 h-full text-[1.4rem] text-bark hover:text-rose disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             −
           </button>
-          <span
-            aria-live="polite"
-            className="w-1/3 sm:w-9 text-center text-[0.88rem] font-medium text-bark tabular-nums"
-          >
-            {qty}
-          </span>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={qty}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              setQty(Number.isFinite(n) ? Math.max(1, Math.min(99, n)) : 1);
+            }}
+            aria-label="Menge"
+            className="w-10 h-full text-center text-[16px] font-semibold text-bark tabular-nums bg-transparent border-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
           <button
             type="button"
             onClick={() => handleQty(1)}
             disabled={qty >= 99}
             aria-label="Menge erhöhen"
-            className="w-1/3 sm:w-11 h-full text-[1.2rem] text-bark hover:bg-cream disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="w-12 h-full text-[1.4rem] text-bark hover:text-rose disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             +
           </button>
@@ -185,10 +193,10 @@ export function ProductVariantPicker({
           type="button"
           onClick={handleAdd}
           disabled={!canBuy}
-          className={`w-full sm:flex-1 h-[50px] px-6 text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-colors ${
+          className={`flex-1 min-w-[220px] h-[56px] px-6 rounded text-[15px] font-semibold tracking-[0.02em] transition-all duration-200 ${
             feedback === "added"
               ? "bg-bark text-ivory"
-              : "bg-rose text-ivory hover:bg-[#831249]"
+              : "bg-rose text-ivory hover:brightness-90 active:translate-y-px"
           } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {!selected.isAvailable
@@ -197,13 +205,25 @@ export function ProductVariantPicker({
               ? "Wird hinzugefügt ..."
               : feedback === "added"
                 ? "✓ Zum Warenkorb hinzugefügt"
-                : "In den Warenkorb"}
+                : `In den Warenkorb · ${formatChf(totalNum.toFixed(2))}`}
         </button>
       </div>
 
-      {feedback === "error" && errorMsg && (
-        <p className="pt-3 text-[0.78rem] text-rose">{errorMsg}</p>
+      {/* Free-shipping hint */}
+      {selected.isAvailable && unitPriceNum > 0 && (
+        <p
+          aria-live="polite"
+          className="text-[13px] text-sage -mt-2"
+        >
+          {willBeFree
+            ? "Diese Bestellung wird gratis geliefert."
+            : `Noch ${formatChf(shortfallToFree.toFixed(2))} bis zur Gratis-Lieferung.`}
+        </p>
       )}
-    </>
+
+      {feedback === "error" && errorMsg && (
+        <p className="text-[0.85rem] text-rose">{errorMsg}</p>
+      )}
+    </div>
   );
 }
