@@ -41,3 +41,40 @@ export async function fetchCustomerPrefill(
     phone: row.phone ?? null,
   };
 }
+
+/**
+ * Full profile for the /konto edit form. Separate from prefill so the
+ * callers don't accidentally echo editable rows into checkout.
+ */
+export type CustomerProfile = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+};
+
+export async function fetchCustomerProfile(
+  customerId: number,
+): Promise<CustomerProfile | null> {
+  const [row] = await db
+    .select({
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      email: customer.email,
+      phone: customer.phone,
+      anonymisedAt: customer.anonymisedAt,
+    })
+    .from(customer)
+    .where(eq(customer.id, customerId))
+    .limit(1);
+
+  if (!row) return null;
+  if (row.anonymisedAt) return null;
+
+  return {
+    firstName: row.firstName ?? "",
+    lastName: row.lastName ?? "",
+    email: row.email,
+    phone: row.phone,
+  };
+}

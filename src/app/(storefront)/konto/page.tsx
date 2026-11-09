@@ -4,8 +4,13 @@ import { redirect } from "next/navigation";
 import { DateTime } from "luxon";
 import { auth, signOut } from "@/auth";
 import { fetchCustomerOrders } from "@/lib/customer-auth/orders";
+import { fetchCustomerAddresses } from "@/lib/customer-auth/addresses";
+import { fetchCustomerProfile } from "@/lib/customer-auth/profile";
 import { formatChf } from "@/lib/money";
 import { statusLabelDe } from "@/lib/admin/heute";
+import { ProfileCard } from "./_components/profile-card";
+import { PasswordChangeCard } from "./_components/password-change-card";
+import { AddressBook } from "./_components/address-book";
 
 export const dynamic = "force-dynamic";
 
@@ -15,33 +20,52 @@ export const metadata: Metadata = {
 };
 
 /**
- * Customer-facing dashboard. Shows:
- *   - profile card (name + email)
- *   - orders list (filtered to customer_id = me)
- *   - sign-out button
- *
- * No profile edit UI yet; low priority. Password reset is phone-based
- * (call the shop). Address book is deferred to Phase 2.
+ * Customer-facing dashboard. Four sections:
+ *   - header with greeting + Abmelden
+ *   - Profil (editable name + phone, read-only email)
+ *   - Sicherheit (password change, collapsed by default)
+ *   - Adressen (address book CRUD)
+ *   - Meine Bestellungen (history)
+ *   - Datenschutz footer
  */
 export default async function KontoPage() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "customer" || !session.user.customerId) {
+  if (
+    !session?.user ||
+    session.user.role !== "customer" ||
+    !session.user.customerId
+  ) {
     redirect("/konto/anmelden?callbackUrl=/konto");
   }
 
-  const orders = await fetchCustomerOrders(session.user.customerId);
+  const customerId = session.user.customerId;
+
+  const [profile, orders, addresses] = await Promise.all([
+    fetchCustomerProfile(customerId),
+    fetchCustomerOrders(customerId),
+    fetchCustomerAddresses(customerId),
+  ]);
+
+  if (!profile) {
+    // Shouldn't happen (authorize gates anonymised accounts) — defensive.
+    redirect("/konto/anmelden");
+  }
+
+  const greeting =
+    [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
+    profile.email;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-12 lg:py-16 space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-12 lg:py-16 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-2">
           <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
             Mein Konto
           </p>
           <h1 className="font-display font-light text-bark text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.1]">
-            {session.user.name ?? "Willkommen"}
+            {greeting}
           </h1>
-          <p className="text-[0.85rem] text-bark/70">{session.user.email}</p>
+          <p className="text-[0.85rem] text-bark/70">{profile.email}</p>
         </div>
         <form
           action={async () => {
@@ -58,25 +82,38 @@ export default async function KontoPage() {
         </form>
       </header>
 
-      <section className="space-y-3">
+      <div className="grid gap-5 md:grid-cols-2">
+        <ProfileCard
+          initial={{
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            email: profile.email,
+            phone: profile.phone,
+          }}
+        />
+        <PasswordChangeCard />
+      </div>
+
+      <AddressBook addresses={addresses} />
+
+      <section className="rounded-lg border border-mist bg-card p-6 space-y-3">
         <h2 className="text-[0.72rem] tracking-[0.16em] uppercase text-sage font-medium">
           Meine Bestellungen
         </h2>
         {orders.length === 0 ? (
-          <div className="border border-dashed border-mist p-8 text-center space-y-3">
+          <div className="rounded-md border border-dashed border-mist p-6 text-center space-y-2">
             <p className="text-[0.9rem] text-bark/75">
               Noch keine Bestellungen auf diesem Konto.
             </p>
             <p className="text-[0.78rem] text-sage">
-              Bestellungen, die Sie als Gast aufgegeben haben, erscheinen hier
-              nicht. Sie können diese jederzeit unter{" "}
+              Als Gast bestellt?{" "}
               <Link
                 href="/bestellung-finden"
                 className="text-rose hover:underline"
               >
                 Bestellung finden
-              </Link>{" "}
-              abrufen.
+              </Link>
+              .
             </p>
           </div>
         ) : (
@@ -84,14 +121,14 @@ export default async function KontoPage() {
             {orders.map((o) => (
               <li
                 key={o.orderNumber}
-                className="grid grid-cols-[1fr_auto] gap-4 py-4 items-start"
+                className="grid grid-cols-[1fr_auto] gap-4 py-3 items-start"
               >
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="font-mono tabular-nums text-[0.85rem] text-bark">
+                    <span className="font-mono tabular-nums text-[0.82rem] text-bark">
                       {o.orderNumber}
                     </span>
-                    <span className="text-[0.78rem] text-sage">
+                    <span className="text-[0.76rem] text-sage">
                       {DateTime.fromJSDate(o.placedAt, {
                         zone: "Europe/Zurich",
                       })
@@ -103,7 +140,7 @@ export default async function KontoPage() {
                     An: {o.recipientName}
                   </div>
                   {o.deliveryDate && (
-                    <div className="text-[0.78rem] text-sage mt-0.5">
+                    <div className="text-[0.76rem] text-sage mt-0.5">
                       Lieferung{" "}
                       {DateTime.fromISO(o.deliveryDate, {
                         zone: "Europe/Zurich",
@@ -117,7 +154,7 @@ export default async function KontoPage() {
                   <div className="font-medium tabular-nums text-[0.9rem] text-bark">
                     {formatChf(o.totalGross)}
                   </div>
-                  <div className="text-[0.72rem] text-sage">
+                  <div className="text-[0.7rem] text-sage">
                     {statusLabelDe(o.status)}
                   </div>
                 </div>
@@ -127,7 +164,7 @@ export default async function KontoPage() {
         )}
       </section>
 
-      <section className="space-y-2 pt-4 border-t border-mist">
+      <section className="space-y-2 pt-2 border-t border-mist">
         <h2 className="text-[0.72rem] tracking-[0.16em] uppercase text-sage font-medium">
           Datenschutz
         </h2>
