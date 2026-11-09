@@ -1,31 +1,27 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
-import { useState } from "react";
-
 /**
- * Phone-first search in the admin header.
+ * Admin header search. Plain server-rendered GET form posting to
+ * /admin/suche?q=…
  *
- * Plain GET form submitting to /admin/suche?q=…  — no onSubmit handler,
- * no router.push, no preventDefault. If JS fails, the native form
- * submission still works. Keeps a controlled input only so the URL's
- * ?q=… pre-populates on the results page.
+ * Deliberately NOT a client component — nothing here needs React state.
+ * No useSearchParams, no useRouter, no JS whatsoever. The browser's
+ * native form submission is the ONLY code path. Keyboard + mouse both
+ * work out of the box; hitting Enter submits; clicking the button
+ * submits; nothing can swallow the event.
+ *
+ * On the results page, the Suche page itself echoes `q` back via its
+ * own markup so the user sees what they typed.
  */
 export function SearchBox() {
-  const params = useSearchParams();
-  const [value, setValue] = useState(params.get("q") ?? "");
-
   return (
     <form action="/admin/suche" method="get" className="relative">
       <input
         name="q"
         type="search"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
         placeholder="Telefon, Nummer, Name …"
         aria-label="Bestellung suchen"
         inputMode="search"
         enterKeyHint="search"
+        autoComplete="off"
         className="w-full sm:w-56 lg:w-64 h-9 pl-3 pr-9 border border-input bg-background text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-rose/30 focus:border-rose transition-colors"
       />
       <button
