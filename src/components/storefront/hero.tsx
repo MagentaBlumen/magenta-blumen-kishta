@@ -10,7 +10,7 @@ import Link from "next/link";
  */
 export function Hero() {
   return (
-    <section className="relative min-h-[min(92vh,700px)] overflow-hidden bg-mist flex items-center">
+    <section className="relative min-h-[min(94vh,820px)] overflow-hidden bg-mist flex items-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
           src="/images/FrontCoverPageImage.jpg"
@@ -34,16 +34,16 @@ export function Hero() {
             "linear-gradient(to bottom, rgba(253,252,249,0.72) 0%, rgba(253,252,249,0.55) 50%, rgba(253,252,249,0.72) 100%)",
         }}
       />
-      <div className="relative w-full max-w-7xl mx-auto px-4 lg:px-6 py-16 sm:py-20">
-        <div className="max-w-[560px] lg:max-w-2xl lg:mx-auto lg:text-center">
-          <h1 className="font-display font-light leading-[1.05] text-bark mb-5 text-[clamp(2.6rem,7vw,5.5rem)] tracking-[-0.01em]">
+      <div className="relative w-full max-w-7xl mx-auto px-4 lg:px-6 py-20 sm:py-24 lg:py-28">
+        <div className="max-w-[560px] lg:max-w-5xl lg:mx-auto lg:text-center">
+          <h1 className="font-display font-light leading-[1.08] text-bark mb-7 lg:mb-9 text-[clamp(2.8rem,8vw,7rem)] tracking-[-0.015em]">
             Frische Blumen aus
             <br />
             <em>Neuenhof,</em>
             <br />
             von Hand gebunden.
           </h1>
-          <p className="text-[0.9rem] text-bark/70 leading-[1.7] mb-8 font-light">
+          <p className="text-[0.95rem] lg:text-[1.05rem] text-bark/70 leading-[1.75] mb-10 font-light max-w-xl lg:mx-auto">
             Blumen-Werkstatt in Neuenhof AG.
             <br />
             Lieferung in 27 Aargauer Postleitzahlen mit unserem eigenen Van, auch am Sonntag.
