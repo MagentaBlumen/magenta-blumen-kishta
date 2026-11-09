@@ -32,6 +32,7 @@ export default async function AdminLayout({
             <nav className="flex items-center gap-1 text-sm">
               <NavLink href="/admin">Heute</NavLink>
               <NavLink href="/admin/produkte">Produkte</NavLink>
+              <NavLink href="/admin/kunden">Kunden</NavLink>
               <NavLink href="/admin/einstellungen">Einstellungen</NavLink>
             </nav>
           </div>

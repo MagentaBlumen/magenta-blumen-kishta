@@ -14,8 +14,12 @@ import { anonymiseCustomerAction } from "../actions";
  * keeps the destructive branch out of accidental double-clicks and
  * stray POSTs.
  */
-export function AnonymiseCustomerForm() {
-  const [email, setEmail] = useState("");
+export function AnonymiseCustomerForm({
+  defaultEmail = "",
+}: {
+  defaultEmail?: string;
+}) {
+  const [email, setEmail] = useState(defaultEmail);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     const target = e.target as HTMLFormElement;
