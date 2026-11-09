@@ -51,6 +51,7 @@ export type CustomerProfile = {
   lastName: string;
   email: string;
   phone: string | null;
+  createdAt: Date;
 };
 
 export async function fetchCustomerProfile(
@@ -62,6 +63,7 @@ export async function fetchCustomerProfile(
       lastName: customer.lastName,
       email: customer.email,
       phone: customer.phone,
+      createdAt: customer.createdAt,
       anonymisedAt: customer.anonymisedAt,
     })
     .from(customer)
@@ -76,5 +78,6 @@ export async function fetchCustomerProfile(
     lastName: row.lastName ?? "",
     email: row.email,
     phone: row.phone,
+    createdAt: row.createdAt,
   };
 }
