@@ -84,6 +84,26 @@ export const getHomeOccasionCategories = unstable_cache(
 
 // ---------- Category page ----------
 
+/**
+ * All categories of a given kind, sorted. Used for the occasion-chip
+ * row on category browse pages.
+ */
+export const getCategoriesByKind = unstable_cache(
+  async (kind: "range" | "occasion") => {
+    return db
+      .select({
+        id: category.id,
+        slug: category.slug,
+        nameDe: category.nameDe,
+      })
+      .from(category)
+      .where(eq(category.kind, kind))
+      .orderBy(asc(category.sortOrder), asc(category.nameDe));
+  },
+  ["storefront:categories-by-kind"],
+  { revalidate: 300, tags: ["categories"] },
+);
+
 export function getCategoryBySlug(slug: string) {
   return unstable_cache(
     async () => {
