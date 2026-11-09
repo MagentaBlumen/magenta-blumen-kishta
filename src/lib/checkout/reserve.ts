@@ -81,8 +81,30 @@ export class ReserveError extends Error {
 }
 
 // ------------------------------------------------------------------
-// The transaction
+// The two-phase reserve
 // ------------------------------------------------------------------
+//
+// Phase 1 (locked tx): capacity + order + lines + payment ROW.
+//   Everything that must be serialised against other reserves on the
+//   same run. Payment row's provider_payment_intent_id is NULL for
+//   card/twint at this point - phase 2 fills it in.
+//
+// Phase 2 (no lock, card/twint only): Stripe intent + persist id.
+//   Creating the Stripe intent inside the capacity-lock tx meant every
+//   other customer trying to book the same run blocked on our round-
+//   trip to Stripe (200-500ms+). Splitting it means the lock is held
+//   only for the DB work (~10ms).
+//
+// Crash recovery:
+//   Phase 1 crash  -> tx rolls back, no state created.
+//   Phase 2 Stripe fails  -> we throw ReserveError; the order + payment
+//     row are already committed. Reaper cancels them after 30 min.
+//     User sees German error, retries, gets a fresh order.
+//   Phase 2 Stripe succeeds, DB UPDATE fails (crash between)  -> the
+//     Stripe intent exists but provider_payment_intent_id is NULL in
+//     our DB. The webhook has a fallback lookup by metadata.order_number
+//     that back-fills the intent id when Stripe later pings us. The
+//     order DOES get paid correctly.
 
 export async function reserveOrder(
   input: ReserveInput,
@@ -141,7 +163,7 @@ export async function reserveOrder(
   const recipientName = checkout.rn;
   const street = checkout.st;
 
-  return dbClient.transaction(async (tx) => {
+  const result = await dbClient.transaction(async (tx) => {
     // -------- 1. Re-price the cart from the DB --------
     //
     // The cookie is a UX artefact. Everything monetary is derived from
@@ -486,77 +508,28 @@ export async function reserveOrder(
       );
     }
 
-    // -------- 9. Insert payment row + (for card/twint) Stripe intent --
+    // -------- 9. Insert payment row --------
     //
-    // amount_due = 0 short circuit: skip the payment row AND the Stripe
-    // call entirely. Phase 3 gift-card path. Nothing produces a zero
-    // in Phase 1 but the schema + code both handle it so the escape
-    // hatch works without touching the reserve core when gift cards
-    // land.
+    // amount_due = 0 short circuit: skip the payment row entirely.
+    // Phase 3 gift-card path. Nothing produces a zero in Phase 1 but
+    // the schema + code handle it so the escape hatch works without
+    // touching the reserve core when gift cards land.
     //
-    // Cash / invoice: payment row goes in with status='pending' and no
-    // Stripe intent. Actionable-on-Heute reads method IN ('cash','invoice')
-    // regardless of status; admin flips status -> 'succeeded' + fills
-    // markedPaidBy when the money actually arrives.
+    // Cash / invoice: payment row with status='pending'. Actionable-on-
+    // Heute reads method IN ('cash','invoice') regardless of status;
+    // admin flips status -> 'succeeded' + fills markedPaidBy when the
+    // money arrives.
     //
-    // Card / TWINT: create the Stripe intent INSIDE this tx (before the
-    // payment insert). The intent ties back to the order via metadata;
-    // the Stripe webhook (src/app/api/webhooks/stripe) matches on
-    // providerPaymentIntentId to flip payment.status when the capture
-    // confirms. Intent creation is a 200-500ms network call inside a
-    // held row lock - acceptable at florist scale and simpler than the
-    // two-phase alternative (commit tx, then call Stripe, then update
-    // payment) which leaves an orphan window if the process dies
-    // between the two.
-    //
-    // Idempotency key = order_number. Stripe SDK auto-retries transient
-    // failures; the key means those retries yield the SAME intent, not
-    // duplicates. Double-submit at the reserve level generates a new
-    // order_number and a new intent - that's a business decision, not
-    // an idempotency one, and the FOR UPDATE lock upstream handles
-    // capacity.
-
-    let clientSecret: string | undefined;
+    // Card / TWINT: payment row with provider_payment_intent_id = NULL
+    // for now. Phase 2 (outside this tx) creates the Stripe intent and
+    // persists the id. See the top-of-file comment on crash recovery.
 
     if (amountDueNum > 0) {
-      const usesStripe = paymentMethod === "card" || paymentMethod === "twint";
-
-      let providerPaymentIntentId: string | null = null;
-
-      if (usesStripe) {
-        const stripe = requireStripe();
-        const intent = await stripe.paymentIntents.create(
-          {
-            amount: chfToRappen(amountDueNum),
-            currency: "chf",
-            // TWINT is a redirect-based method; card is inline. Payment
-            // Element picks the right UI. Restricting the allowed
-            // methods here is a safety net so a customer can't select
-            // e.g. sofort by editing the client.
-            payment_method_types:
-              paymentMethod === "twint" ? ["twint"] : ["card"],
-            metadata: {
-              order_id: String(inserted.id),
-              order_number: orderNumber,
-            },
-            // Statement descriptor is bank-line text; keep short + ASCII.
-            description: `Magenta Blumen - Bestellung ${orderNumber}`,
-          },
-          { idempotencyKey: orderNumber },
-        );
-        providerPaymentIntentId = intent.id;
-        clientSecret = intent.client_secret ?? undefined;
-      }
-
       await tx.insert(payment).values({
         orderId: inserted.id,
         method: paymentMethod,
-        providerPaymentIntentId,
+        providerPaymentIntentId: null,
         amountGross: amountDueNum.toFixed(2),
-        // Card/twint status STAYS 'pending' until the webhook flips it
-        // to 'succeeded'. Cash/invoice status STAYS 'pending' until
-        // admin marks paid (fills marked_paid_by). Same field, two
-        // different lifecycles.
         status: "pending",
         markedPaidBy: null,
       });
@@ -567,9 +540,61 @@ export async function reserveOrder(
       orderNumber,
       totalGross: totalNum.toFixed(2),
       amountDueGross: amountDueNum.toFixed(2),
-      clientSecret,
     };
   });
+
+  // -------- Phase 2 (card/twint only): Stripe intent + persist id ----
+  //
+  // Idempotency key = order_number so Stripe SDK retries yield the
+  // SAME intent. If this throws, we have an order + payment row with
+  // NULL intent id; the reaper will cancel after 30 min. If the Stripe
+  // call succeeds but the UPDATE below fails, the webhook has a
+  // fallback lookup by metadata.order_number.
+  const needsStripeIntent =
+    Number(result.amountDueGross) > 0 &&
+    (paymentMethod === "card" || paymentMethod === "twint");
+
+  if (!needsStripeIntent) {
+    return result;
+  }
+
+  let clientSecret: string | undefined;
+  try {
+    const stripe = requireStripe();
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: chfToRappen(Number(result.amountDueGross)),
+        currency: "chf",
+        // TWINT is a redirect-based method; card is inline. Restricting
+        // the allowed methods here is a safety net so a client-side
+        // edit can't select e.g. sofort.
+        payment_method_types:
+          paymentMethod === "twint" ? ["twint"] : ["card"],
+        metadata: {
+          order_id: String(result.orderId),
+          order_number: result.orderNumber,
+        },
+        description: `Magenta Blumen - Bestellung ${result.orderNumber}`,
+      },
+      { idempotencyKey: result.orderNumber },
+    );
+    clientSecret = intent.client_secret ?? undefined;
+
+    await dbClient
+      .update(payment)
+      .set({ providerPaymentIntentId: intent.id })
+      .where(eq(payment.orderId, result.orderId));
+  } catch (err) {
+    console.error(
+      `[reserve] phase 2 (Stripe intent) failed for order ${result.orderNumber}:`,
+      err,
+    );
+    throw new ReserveError(
+      "Zahlungsvorbereitung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    );
+  }
+
+  return { ...result, clientSecret };
 }
 
 // ------------------------------------------------------------------

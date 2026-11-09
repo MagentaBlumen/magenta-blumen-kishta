@@ -111,7 +111,7 @@ async function processPaymentIntentEvent(
   const intent = event.data.object as Stripe.PaymentIntent;
 
   // Look up our payment row by the intent id we stored at reserve time.
-  const [row] = await dbClient
+  let [row] = await dbClient
     .select({
       id: payment.id,
       orderId: payment.orderId,
@@ -120,6 +120,46 @@ async function processPaymentIntentEvent(
     .from(payment)
     .where(eq(payment.providerPaymentIntentId, intent.id))
     .limit(1);
+
+  // Fallback: reserve's phase 2 may have crashed between Stripe
+  // creating the intent and our DB persisting its id, leaving the
+  // payment row with provider_payment_intent_id = NULL. The intent's
+  // metadata.order_number tells us which order this is. We find the
+  // live payment row by order number + back-fill the intent id so the
+  // next webhook delivery (or a human query) finds it directly.
+  if (!row) {
+    const orderNumberFromMeta = intent.metadata?.order_number;
+    if (orderNumberFromMeta) {
+      const [recovered] = await dbClient
+        .select({
+          id: payment.id,
+          orderId: payment.orderId,
+          status: payment.status,
+        })
+        .from(payment)
+        .innerJoin(order, eq(order.id, payment.orderId))
+        .where(
+          and(
+            eq(order.orderNumber, orderNumberFromMeta),
+            ne(payment.status, "failed"),
+          ),
+        )
+        .limit(1);
+      if (recovered) {
+        // Back-fill so future webhooks for this intent match the fast
+        // path. Done OUTSIDE the main tx below so even if the main tx
+        // rolls back later in processing, we still record the link.
+        await dbClient
+          .update(payment)
+          .set({ providerPaymentIntentId: intent.id })
+          .where(eq(payment.id, recovered.id));
+        row = recovered;
+        console.log(
+          `[stripe-webhook] recovered payment ${recovered.id} via metadata.order_number=${orderNumberFromMeta} (phase 2 crash recovery)`,
+        );
+      }
+    }
+  }
 
   if (!row) {
     // Rule 2 - unknown intent. Log, mark processed, do NOT throw.

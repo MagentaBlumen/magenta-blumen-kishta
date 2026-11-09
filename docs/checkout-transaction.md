@@ -134,42 +134,57 @@ at the same instant. It fails exactly once a year.
 
 ## 3. Phase B — charge (synchronous)
 
+Phase B runs in TWO steps. Step 11 is INSIDE the Phase A transaction; step
+12 happens AFTER the transaction has committed. This split is deliberate:
+step 12 is the slow-network call to Stripe (200–500 ms+). Holding the
+`FOR UPDATE` lock across that span would block every other customer trying
+to book the same run while Stripe round-trips.
+
 ```
   -- 10. ZERO-DUE SHORT CIRCUIT
   IF amount_due_gross = 0 THEN
-      mark the order paid at creation;
+      the Heute predicate treats amount_due = 0 as actionable;
       skip Stripe entirely;
+      no payment row needed;
       RETURN;
   END IF;
+
+  -- 11. Insert the payment row (STILL INSIDE the Phase A tx).
+  --     method                     = selected
+  --     provider_payment_intent_id = NULL   (filled in step 12)
+  --     status                     = 'pending'
 ```
 
-Nothing can produce a zero in Phase 1 — gift cards are deferred. Implement it
-anyway. When gift cards arrive and one covers a whole order, **no PaymentIntent
-exists and no webhook will ever fire.** Order-completion logic hanging off the
-webhook would create the order, never mark it paid, and it would never appear on
-the Heute screen. That is a silent bug in production. Five lines now; Phase 3 then
-never touches the checkout core.
-
-```
-  -- 11. Create the PaymentIntent.
-  --     amount   = amount_due_gross (in Rappen: multiply by 100, round, integer)
-  --     currency = 'chf'    <- TWINT is CHF-only
-  --     metadata = { order_id, order_number }
-  --     idempotency key = order_number
-  --
-  --     TWINT: single-use bank redirect. No manual capture, no recurring,
-  --     CHF 5000 max. So charge immediately - there is no authorise-now-
-  --     capture-later option. Design refunds around that.
-
-  -- 12. Insert the payment row: status 'pending', provider_payment_intent_id set.
-```
-
-Step 12 can fail on the partial unique index `one_live_payment_per_order
+Step 11 can fail on the partial unique index `one_live_payment_per_order
 WHERE status <> 'failed'`. **That failure is the feature** — it means a live
 payment already exists for this order, i.e. a double-submit. Return the existing
 `client_secret` rather than creating a second intent.
 
-Return `client_secret` to the browser. Done synchronously.
+```
+  -- 12. After COMMIT: create the Stripe PaymentIntent, persist the id.
+  --     (Card / TWINT only; cash/invoice are done at step 11.)
+  --
+  --     amount           = amount_due_gross (in Rappen: multiply by 100, round, integer)
+  --     currency         = 'chf'   <- TWINT is CHF-only
+  --     metadata         = { order_id, order_number }
+  --     idempotency key  = order_number
+  --
+  --     TWINT: single-use bank redirect. No manual capture, no recurring,
+  --     CHF 5000 max. So charge immediately - there is no authorise-now-
+  --     capture-later option. Design refunds around that.
+  --
+  --     UPDATE payment SET provider_payment_intent_id = intent.id
+  --       WHERE order_id = $orderId;
+```
+
+Return `client_secret` to the browser.
+
+**Phase B crash recovery.** The interesting failure modes in step 12:
+
+| When it crashes                                                          | State                                                                                          | Recovery                                                                                                                                                                                                      |
+|--------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Stripe `paymentIntents.create` throws                                    | Order + payment row committed, no Stripe intent.                                               | Surface error to the user (German message, try again). Reaper cancels the orphaned order after `abandoned_order_minutes`. Idempotency key = `order_number` means a later retry with the SAME number no-ops.   |
+| Stripe create succeeded, our DB `UPDATE payment` fails                   | Order + payment row + Stripe intent all exist. `provider_payment_intent_id` is NULL in our DB. | Webhook fallback (§4): if intent-id lookup finds no row, re-lookup by `metadata.order_number` and back-fill the intent id atomically. Nothing is lost; the order gets paid correctly when Stripe later pings. |
 
 ---
 
@@ -197,7 +212,10 @@ equivalent — the constraint holds even when the handler is wrong.
 -- 15. Process, in one transaction:
 BEGIN;
   find payment by provider_payment_intent_id;
-    not found            -> log, mark event processed, COMMIT, return 200
+    not found            -> fall back to metadata.order_number; if still
+                            no row, log, mark event processed, COMMIT,
+                            return 200. If the fallback found a row,
+                            back-fill its intent id and proceed.
     already 'succeeded'  -> no-op (out-of-order delivery), COMMIT, return 200
 
   UPDATE payment SET status = 'succeeded', paid_at = now();
