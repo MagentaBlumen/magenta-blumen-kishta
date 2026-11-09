@@ -17,16 +17,25 @@ export function Hero() {
           alt="Frische Blumen in einem Blumenladen"
           className="absolute inset-0 w-full h-full object-cover object-[center_top]"
       />
-      {/* Left-to-right ivory gradient so text on the left stays readable */}
+      {/* Ivory veil. Mobile: left-weighted (text sits left in the
+          column). Desktop (lg+): symmetric so centered text reads
+          across the full width. */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 lg:hidden"
         style={{
           background:
             "linear-gradient(to right, rgba(253,252,249,0.88) 0%, rgba(253,252,249,0.55) 50%, rgba(253,252,249,0.1) 100%)",
         }}
       />
+      <div
+        className="absolute inset-0 hidden lg:block"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(253,252,249,0.72) 0%, rgba(253,252,249,0.55) 50%, rgba(253,252,249,0.72) 100%)",
+        }}
+      />
       <div className="relative w-full max-w-7xl mx-auto px-4 lg:px-6 py-16 sm:py-20">
-        <div className="max-w-[560px]">
+        <div className="max-w-[560px] lg:max-w-2xl lg:mx-auto lg:text-center">
           <h1 className="font-display font-light leading-[1.05] text-bark mb-5 text-[clamp(2.6rem,7vw,5.5rem)] tracking-[-0.01em]">
             Frische Blumen aus
             <br />
@@ -41,9 +50,12 @@ export function Hero() {
           </p>
           <Link
             href="/kategorie/alle-anlaesse"
-            className="inline-block bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors"
+            className="group inline-flex items-center gap-2 bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
           >
             Jetzt bestellen
+            <span className="transition-transform duration-200 group-hover:translate-x-1">
+              →
+            </span>
           </Link>
         </div>
       </div>
