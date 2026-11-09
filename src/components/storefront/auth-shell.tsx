@@ -35,7 +35,11 @@ export function AuthShell({
       : "«Jeder Strauss ist ein Gespräch zwischen zwei Menschen.»";
 
   return (
-    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-ivory text-bark">
+    // Root is a <div> (not <main>) — the storefront layout already
+    // owns the page's single <main>. `-mb-16` cancels SiteFooter's
+    // own `mt-16` so the image panel sits flush against the footer
+    // on these two pages only (no site-wide spacing change).
+    <div className="min-h-screen -mb-16 grid grid-cols-1 lg:grid-cols-2 bg-ivory text-bark">
       {/* ===== Form side ===== */}
       <section className="order-2 lg:order-1 min-w-0 flex justify-center items-center px-6 sm:px-8 py-14 lg:py-16 animate-in fade-in slide-in-from-bottom-1 duration-500">
         <div className="w-full max-w-[440px] flex flex-col gap-8">
@@ -173,7 +177,7 @@ export function AuthShell({
           </ul>
         </div>
       </aside>
-    </main>
+    </div>
   );
 }
 
