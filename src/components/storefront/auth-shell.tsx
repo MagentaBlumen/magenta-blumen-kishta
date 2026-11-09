@@ -35,9 +35,9 @@ export function AuthShell({
       : "«Jeder Strauss ist ein Gespräch zwischen zwei Menschen.»";
 
   return (
-    <main className="min-h-screen flex flex-wrap bg-ivory text-bark">
+    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-ivory text-bark">
       {/* ===== Form side ===== */}
-      <section className="flex-1 basis-[520px] min-w-0 flex justify-center px-6 sm:px-8 py-16 sm:py-20 animate-in fade-in slide-in-from-bottom-1 duration-500">
+      <section className="order-2 lg:order-1 min-w-0 flex justify-center items-center px-6 sm:px-8 py-14 lg:py-16 animate-in fade-in slide-in-from-bottom-1 duration-500">
         <div className="w-full max-w-[440px] flex flex-col gap-8">
           {/* Intro */}
           <div className="flex flex-col gap-3">
@@ -73,21 +73,31 @@ export function AuthShell({
       {/* ===== Visual side ===== */}
       <aside
         aria-label="Vorteile eines Kontos"
-        className="relative flex-1 basis-[520px] min-w-0 min-h-[480px] lg:min-h-[640px] overflow-hidden text-ivory bg-gradient-to-br from-bark via-bark/90 to-rose/70"
+        className="order-1 lg:order-2 relative min-w-0 min-h-[360px] sm:min-h-[460px] lg:min-h-screen overflow-hidden text-ivory bg-bark"
       >
-        {/* Decorative branch — same SVG used elsewhere, at low opacity */}
-        <DecorativeBranch />
-        {/* Soft darken at the bottom for quote legibility */}
+        {/* Background photo. object-cover + object-center keeps the
+            roses framed regardless of the container's aspect ratio. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/auth-hero.jpg"
+          alt=""
+          loading="eager"
+          fetchPriority="high"
+          className="absolute inset-0 w-full h-full object-cover object-center"
+        />
+
+        {/* Bottom-heavy gradient — darkens the lower half for quote
+            legibility while letting the roses fully breathe up top. */}
         <div
           aria-hidden
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(180deg, rgba(42,31,26,0) 30%, rgba(42,31,26,0.78) 100%)",
+              "linear-gradient(180deg, rgba(42,31,26,0) 40%, rgba(42,31,26,0.55) 70%, rgba(42,31,26,0.88) 100%)",
           }}
         />
 
-        <div className="relative z-10 h-full min-h-[480px] lg:min-h-[640px] p-10 lg:p-14 flex flex-col justify-end gap-8">
+        <div className="relative z-10 h-full min-h-[360px] sm:min-h-[460px] lg:min-h-screen p-8 sm:p-10 lg:p-14 flex flex-col justify-end gap-6 lg:gap-8">
           <blockquote className="m-0 flex flex-col gap-3 max-w-[460px]">
             <p className="m-0 font-display italic font-light text-[clamp(28px,3vw,38px)] leading-[1.15]">
               {quote}
@@ -215,35 +225,3 @@ function Perk({
   );
 }
 
-function DecorativeBranch() {
-  return (
-    <svg
-      aria-hidden
-      className="absolute -right-10 -top-10 w-80 h-80 text-ivory/20 pointer-events-none"
-      viewBox="0 0 200 200"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    >
-      <path d="M160 20 Q 140 70, 100 90 Q 60 110, 40 160" />
-      <path d="M152 36 Q 156 28, 168 30" />
-      <path d="M152 36 Q 148 46, 154 56" />
-      <path d="M130 62 Q 130 52, 142 50" />
-      <path d="M130 62 Q 126 72, 134 82" />
-      <path d="M100 90 Q 96 80, 108 76" />
-      <path d="M100 90 Q 94 100, 102 112" />
-      <path d="M76 108 Q 68 100, 74 90" />
-      <path d="M76 108 Q 70 120, 78 130" />
-      <path d="M52 140 Q 42 136, 44 124" />
-      <path d="M52 140 Q 46 152, 54 162" />
-      <ellipse cx="170" cy="22" rx="4" ry="2.4" transform="rotate(30 170 22)" />
-      <ellipse cx="156" cy="56" rx="4" ry="2.4" transform="rotate(-20 156 56)" />
-      <ellipse cx="142" cy="50" rx="4" ry="2.4" transform="rotate(20 142 50)" />
-      <ellipse cx="108" cy="76" rx="4" ry="2.4" transform="rotate(20 108 76)" />
-      <ellipse cx="102" cy="112" rx="4" ry="2.4" transform="rotate(-25 102 112)" />
-      <ellipse cx="78" cy="130" rx="4" ry="2.4" transform="rotate(-10 78 130)" />
-      <ellipse cx="54" cy="162" rx="4" ry="2.4" transform="rotate(-15 54 162)" />
-    </svg>
-  );
-}
