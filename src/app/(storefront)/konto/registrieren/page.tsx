@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { AuthPanel } from "@/components/storefront/auth-panel";
+import { AuthShell } from "@/components/storefront/auth-shell";
+import { PasswordInput } from "@/components/storefront/password-input";
 import { signupAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +20,6 @@ type PageProps = {
   searchParams: Promise<{ error?: string }>;
 };
 
-/**
- * Customer signup. Optional per CLAUDE.md - guest checkout stays the
- * default. The value prop here is "beim nächsten Mal werden Ihre
- * Daten vorausgefüllt" (prefill-only, never source of truth).
- *
- * If already logged in: bounce to /konto.
- */
 export default async function RegistrierenPage({ searchParams }: PageProps) {
   const session = await auth();
   if (session?.user?.role === "customer") redirect("/konto");
@@ -33,75 +27,70 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
   const { error } = await searchParams;
 
   return (
-    <AuthPanel
-      quote="Jeder Strauss ist ein Gespräch zwischen zwei Menschen."
-      attribution="Werkstatt-Notiz"
+    <AuthShell
+      mode="register"
+      title="Beim nächsten Mal"
+      titleEmphasis="schneller."
+      lead="Mit einem Konto sind Ihre Angaben beim nächsten Besuch vorausgefüllt. Optional — Sie können jederzeit als Gast bestellen."
     >
-      <header className="space-y-2 mb-8">
-        <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
-          Konto erstellen
-        </p>
-        <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,2.75rem)] leading-[1.1]">
-          Beim nächsten Mal schneller.
-        </h1>
-        <p className="text-[0.9rem] text-bark/75 leading-[1.7] font-light pt-2">
-          Mit einem Konto werden Ihre Angaben für die nächste Bestellung
-          vorausgefüllt. Optional - Sie können jederzeit als Gast bestellen.
-        </p>
-      </header>
-
-      <form action={signupAction} className="space-y-5">
+      <form action={signupAction} className="flex flex-col gap-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <AuthField
+          <TextField
             id="firstName"
             name="firstName"
             label="Vorname"
-            required
             autoComplete="given-name"
+            required
           />
-          <AuthField
+          <TextField
             id="lastName"
             name="lastName"
             label="Nachname"
-            required
             autoComplete="family-name"
+            required
           />
         </div>
 
-        <AuthField
+        <TextField
           id="email"
           name="email"
           label="E-Mail-Adresse"
           type="email"
-          required
           autoComplete="email"
+          placeholder="name@beispiel.ch"
+          required
         />
 
-        <AuthField
+        <TextField
           id="phone"
           name="phone"
           label="Telefonnummer"
           type="tel"
-          required
           autoComplete="tel"
+          required
           hint="Für Rückfragen zur Lieferung."
         />
 
-        <AuthField
-          id="password"
-          name="password"
-          label="Passwort"
-          type="password"
-          required
-          autoComplete="new-password"
-          minLength={8}
-          hint="Mindestens 8 Zeichen."
-        />
+        <div className="flex flex-col gap-2">
+          <label
+            htmlFor="password"
+            className="text-[14px] font-semibold text-bark"
+          >
+            Passwort
+          </label>
+          <PasswordInput
+            id="password"
+            name="password"
+            autoComplete="new-password"
+            minLength={8}
+          />
+          <p className="text-[13px] text-bark/60">Mindestens 8 Zeichen.</p>
+        </div>
 
         {error === "email_exists" && (
           <p
             role="alert"
-            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+            className="text-[14px] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
           >
             Für diese E-Mail besteht bereits ein Konto.{" "}
             <Link href="/konto/anmelden" className="underline">
@@ -113,7 +102,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
         {error === "weak_password" && (
           <p
             role="alert"
-            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+            className="text-[14px] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
           >
             Das Passwort muss mindestens 8 Zeichen lang sein.
           </p>
@@ -121,7 +110,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
         {error === "invalid" && (
           <p
             role="alert"
-            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+            className="text-[14px] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
           >
             Bitte prüfen Sie die Eingaben.
           </p>
@@ -129,7 +118,7 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
         {error === "RateLimited" && (
           <p
             role="alert"
-            className="text-[0.85rem] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
+            className="text-[14px] text-rose animate-in fade-in slide-in-from-top-1 duration-300"
           >
             Zu viele Versuche. Bitte warten Sie ca. 15 Minuten.
           </p>
@@ -137,45 +126,69 @@ export default async function RegistrierenPage({ searchParams }: PageProps) {
 
         <button
           type="submit"
-          className="group w-full bg-bark text-ivory px-6 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
+          className="h-14 rounded bg-bark text-ivory text-[15px] font-semibold tracking-[0.02em] hover:bg-rose active:translate-y-px transition-all duration-200 inline-flex items-center justify-center gap-2.5"
         >
-          <span className="inline-flex items-center gap-2">
-            Konto erstellen
-            <span className="transition-transform duration-200 group-hover:translate-x-1">
-              →
-            </span>
-          </span>
+          Konto erstellen
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
         </button>
       </form>
 
-      <div className="pt-8 mt-8 border-t border-mist text-[0.82rem] text-bark/70 leading-[1.65] space-y-2">
-        <p>
-          Sie haben bereits ein Konto?{" "}
-          <Link href="/konto/anmelden" className="text-rose hover:underline">
-            Zur Anmeldung
-          </Link>
-          .
-        </p>
-        <p>
-          Lieber als Gast bestellen?{" "}
-          <Link href="/" className="text-rose hover:underline">
-            Zur Startseite
-          </Link>
-          .
-        </p>
+      <div className="flex items-center gap-4 text-[13px] text-sage">
+        <span className="flex-1 h-px bg-mist" aria-hidden />
+        oder
+        <span className="flex-1 h-px bg-mist" aria-hidden />
       </div>
-    </AuthPanel>
+
+      <Link
+        href="/"
+        className="group flex items-center justify-between gap-4 px-6 py-5 border border-bark/20 rounded-md hover:border-bark transition-colors"
+      >
+        <span className="flex flex-col gap-1">
+          <span className="text-[16px] font-semibold text-bark">
+            Lieber als Gast bestellen
+          </span>
+          <span className="text-[14px] text-bark/70">
+            Schnell und ohne Konto zur Kasse.
+          </span>
+        </span>
+        <span className="text-bark transition-transform duration-200 group-hover:translate-x-1">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </span>
+      </Link>
+    </AuthShell>
   );
 }
 
-function AuthField({
+function TextField({
   id,
   name,
   label,
   type = "text",
   required,
   autoComplete,
-  minLength,
+  placeholder,
   hint,
 }: {
   id: string;
@@ -184,15 +197,12 @@ function AuthField({
   type?: string;
   required?: boolean;
   autoComplete?: string;
-  minLength?: number;
+  placeholder?: string;
   hint?: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label
-        htmlFor={id}
-        className="block text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium"
-      >
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-[14px] font-semibold text-bark">
         {label}
       </label>
       <input
@@ -201,10 +211,10 @@ function AuthField({
         type={type}
         required={required}
         autoComplete={autoComplete}
-        minLength={minLength}
-        className="w-full border border-mist bg-ivory px-3 py-2.5 text-[0.95rem] text-bark placeholder:text-sage/60 focus:border-rose focus:ring-2 focus:ring-rose/15 focus:outline-none transition-colors duration-150"
+        placeholder={placeholder}
+        className="w-full h-[52px] px-4 border border-bark/20 bg-ivory rounded text-[16px] text-bark placeholder:text-sage/60 focus:border-rose focus:ring-2 focus:ring-rose/15 focus:outline-none transition-colors"
       />
-      {hint && <p className="text-[0.72rem] text-sage">{hint}</p>}
+      {hint && <p className="text-[13px] text-bark/60">{hint}</p>}
     </div>
   );
 }
