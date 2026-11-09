@@ -41,7 +41,7 @@ export function AuthShell({
     // on these two pages only (no site-wide spacing change).
     <div className="min-h-screen -mb-16 grid grid-cols-1 lg:grid-cols-2 bg-ivory text-bark">
       {/* ===== Form side ===== */}
-      <section className="order-2 lg:order-1 min-w-0 flex justify-center items-center px-6 sm:px-8 py-14 lg:py-16 animate-in fade-in slide-in-from-bottom-1 duration-500">
+      <section className="min-w-0 flex justify-center items-center px-6 sm:px-8 py-14 lg:py-16 animate-in fade-in slide-in-from-bottom-1 duration-500">
         <div className="w-full max-w-[440px] flex flex-col gap-8">
           {/* Intro */}
           <div className="flex flex-col gap-3">
@@ -77,7 +77,7 @@ export function AuthShell({
       {/* ===== Visual side ===== */}
       <aside
         aria-label="Vorteile eines Kontos"
-        className="order-1 lg:order-2 relative min-w-0 min-h-[360px] sm:min-h-[460px] lg:min-h-screen overflow-hidden text-ivory bg-bark"
+        className="relative min-w-0 min-h-[360px] sm:min-h-[460px] lg:min-h-screen overflow-hidden text-ivory bg-bark"
       >
         {/* Background photo. object-cover + object-center keeps the
             roses framed regardless of the container's aspect ratio. */}
