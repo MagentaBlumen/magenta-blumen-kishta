@@ -133,7 +133,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </p>
         </div>
 
-        <form className="flex-[5_1_380px] min-w-0 flex flex-col gap-7" onSubmit={(e) => e.preventDefault()}>
+        <div className="flex-[5_1_380px] min-w-0 flex flex-col gap-7">
           {/* Head */}
           <div className="flex flex-col gap-3">
             {eyebrow && (
@@ -248,7 +248,7 @@ export default async function ProductDetailPage({ params }: PageProps) {
               </dl>
             </Accordion>
           </div>
-        </form>
+        </div>
       </div>
 
       {/* ---------- Related ---------- */}
