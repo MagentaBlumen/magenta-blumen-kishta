@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PdpSlotHint } from "@/components/storefront/pdp-slot-hint";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductGallery } from "@/components/storefront/product-gallery";
 import { ProductVariantPicker } from "@/components/storefront/product-variant-picker";
@@ -161,6 +162,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
             )}
           </div>
 
+          {/* Delivery-slot hint — informational, not a picker. Only on
+              enquiry != true since the slot flow doesn't apply to
+              enquiry products. */}
+          {p.pricingMode !== "enquiry" && <PdpSlotHint />}
+
           {/* Buy box or enquiry hint */}
           {p.pricingMode === "enquiry" ? (
             <EnquiryBlock />
@@ -168,8 +174,13 @@ export default async function ProductDetailPage({ params }: PageProps) {
             <ProductVariantPicker productId={p.id} variants={variants} />
           )}
 
-          {/* Colours (informational — colour is a product facet, not a
-              selectable variant in our schema). */}
+          {/* Colours: our schema stores colour as a product-level
+              facet (a product has N colours attached). We render
+              swatches in the mockup's radio-selectable style for
+              visual density, with the first one marked as the
+              "primary" look. Selection is purely cosmetic — picking a
+              different swatch doesn't change the product, because
+              there's only one row in the catalogue for this item. */}
           {colours.length > 0 && p.pricingMode !== "enquiry" && (
             <fieldset className="border-0 p-0 m-0 min-w-0">
               <legend className="text-[0.78rem] font-semibold text-bark mb-3">
@@ -178,25 +189,31 @@ export default async function ProductDetailPage({ params }: PageProps) {
                   — {colours.map((c) => c.nameDe).join(", ")}
                 </span>
               </legend>
-              <div className="flex flex-wrap gap-2.5">
-                {colours.map((c) => (
-                  <span
-                    key={c.value}
-                    title={c.nameDe}
-                    aria-label={c.nameDe}
-                    className="inline-block w-10 h-10 rounded-full border border-bark/20 p-1"
-                  >
+              <div className="flex flex-wrap gap-3">
+                {colours.map((c, i) => {
+                  const isPrimary = i === 0;
+                  const background =
+                    c.hex ??
+                    "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)";
+                  return (
                     <span
-                      aria-hidden
-                      className="block w-full h-full rounded-full"
-                      style={{
-                        background:
-                          c.hex ??
-                          "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)",
-                      }}
-                    />
-                  </span>
-                ))}
+                      key={c.value}
+                      title={c.nameDe}
+                      className={`block w-12 h-12 rounded-full ${
+                        isPrimary
+                          ? "border-2 border-bark p-1"
+                          : "border border-bark/25 p-[5px]"
+                      }`}
+                    >
+                      <span className="sr-only">{c.nameDe}</span>
+                      <span
+                        aria-hidden
+                        className="block w-full h-full rounded-full"
+                        style={{ background }}
+                      />
+                    </span>
+                  );
+                })}
               </div>
             </fieldset>
           )}
