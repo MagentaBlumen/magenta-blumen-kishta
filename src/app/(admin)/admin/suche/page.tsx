@@ -17,6 +17,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Admin order search. The input in the admin header submits here via
+ * plain GET with `?q=…`.
+ *
+ * Searches: recipient name, buyer name, order number, phone (any of
+ * the digit substrings). NOT a product search — to find a product go
+ * to /admin/produkte and filter / scroll there instead.
+ */
 export default async function SearchResultsPage({
   searchParams,
 }: {
@@ -28,37 +36,114 @@ export default async function SearchResultsPage({
   const results = query ? await searchOrders(query) : [];
 
   return (
-    <div className="space-y-6">
-      <header>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-1 duration-300">
+      {/* Header */}
+      <div>
         <Link
           href="/admin"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="text-xs tracking-[0.1em] uppercase text-muted-foreground hover:text-rose transition-colors inline-flex items-center gap-1 group"
         >
-          ← Heute
+          <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+            ←
+          </span>
+          Heute
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight mt-1">Suche</h1>
-        {query ? (
-          <p className="text-sm text-muted-foreground mt-1">
-            {results.length === 0
-              ? `Keine Treffer für «${query}».`
-              : `${results.length} ${results.length === 1 ? "Treffer" : "Treffer"} für «${query}».`}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground mt-1">
-            Suche nach Telefonnummer, Bestellnummer oder Name.
-          </p>
-        )}
-      </header>
+        <h1 className="font-display font-light text-[clamp(1.8rem,3vw,2.4rem)] leading-tight mt-2">
+          Bestellungen suchen
+        </h1>
+        <p className="text-xs text-muted-foreground mt-1">
+          Nach Telefonnummer, Bestellnummer oder Empfänger-/Käufername.
+        </p>
+      </div>
 
-      {results.length > 0 && (
-        <ul className="space-y-1">
-          {results.map((o) => (
-            <li key={o.id}>
-              <ResultRow result={o} />
-            </li>
-          ))}
-        </ul>
+      {/* Visible search form — pre-filled with the current query. */}
+      <form action="/admin/suche" method="get" className="relative max-w-xl">
+        <input
+          name="q"
+          type="search"
+          defaultValue={query}
+          placeholder="z. B. 079 123 45 67 . oder MB-2026-… . oder Müller"
+          aria-label="Bestellung suchen"
+          inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoFocus
+          className="w-full h-11 pl-4 pr-28 border border-input bg-background text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-rose/30 focus:border-rose transition-colors"
+        />
+        <button
+          type="submit"
+          className="absolute right-1.5 top-1.5 bottom-1.5 px-4 text-xs tracking-[0.12em] uppercase font-medium bg-foreground text-background hover:bg-rose rounded transition-colors"
+        >
+          Suchen
+        </button>
+      </form>
+
+      {/* Results */}
+      {query === "" ? (
+        <EmptyHint />
+      ) : results.length === 0 ? (
+        <NoResults query={query} />
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            {results.length === 1
+              ? `1 Treffer für «${query}»`
+              : `${results.length} Treffer für «${query}»`}
+          </p>
+          <ul className="space-y-1">
+            {results.map((o) => (
+              <li key={o.id}>
+                <ResultRow result={o} />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
+    </div>
+  );
+}
+
+function EmptyHint() {
+  return (
+    <div className="rounded-lg border border-dashed border-mist p-10 text-center space-y-3">
+      <p className="text-sm text-bark/70">
+        Tippen Sie oben Telefon, Bestellnummer oder Name.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Produkte suchen? Das geht auf{" "}
+        <Link
+          href="/admin/produkte"
+          className="text-rose hover:underline"
+        >
+          /admin/produkte
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
+function NoResults({ query }: { query: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-mist p-10 text-center space-y-3">
+      <p className="text-sm text-bark">
+        Keine Bestellung zu «<span className="font-medium">{query}</span>» gefunden.
+      </p>
+      <div className="text-xs text-muted-foreground space-y-1">
+        <p>
+          Die Suche durchläuft Bestellungen (Name, Nummer, Telefon). Sie findet
+          keine Produkte.
+        </p>
+        <p>
+          Zum Produkt-Katalog:{" "}
+          <Link
+            href="/admin/produkte"
+            className="text-rose hover:underline"
+          >
+            /admin/produkte
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
@@ -70,7 +155,7 @@ function ResultRow({ result: o }: { result: SearchResult }) {
   return (
     <Link
       href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}`}
-      className={`block rounded-md border p-3 hover:bg-muted/60 transition-colors ${
+      className={`block rounded-md border border-mist p-3 hover:border-foreground/40 hover:bg-muted/40 transition-colors ${
         isCancelled ? "opacity-50" : ""
       }`}
     >
