@@ -306,10 +306,6 @@ export function SiteHeader({
                   <SwatchesPanel item={currentItem} onNavigate={closePanelNow} />
                 )}
               </div>
-              <PanelFooter
-                allHref={currentItem.allHref}
-                allLabel={currentItem.allLabel}
-              />
             </div>
           )}
         </div>
@@ -389,9 +385,16 @@ function ListPanel({
 }) {
   return (
     <div>
-      <p className="m-0 mb-4 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
-        {item.eyebrow}
-      </p>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
+          {item.eyebrow}
+        </p>
+        <AllLink
+          href={item.allHref}
+          label={item.allLabel}
+          onClick={onNavigate}
+        />
+      </div>
       <ul className="grid grid-cols-2 gap-x-6 gap-y-1">
         {item.items.map((cat) => (
           <li key={cat.href}>
@@ -438,9 +441,16 @@ function TilesPanel({
 }) {
   return (
     <div>
-      <p className="m-0 mb-4 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
-        {item.eyebrow}
-      </p>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
+          {item.eyebrow}
+        </p>
+        <AllLink
+          href={item.allHref}
+          label={item.allLabel}
+          onClick={onNavigate}
+        />
+      </div>
       <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {item.items.map((t) => (
           <li key={t.href}>
@@ -476,13 +486,22 @@ function SwatchesPanel({
   return (
     <div className="flex flex-wrap items-center justify-between gap-8 gap-x-12 py-2">
       <div className="max-w-[320px]">
-        <p className="m-0 mb-2 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
-          {item.eyebrow}
-        </p>
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <p className="m-0 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
+            {item.eyebrow}
+          </p>
+        </div>
         <p className="m-0 font-display font-light text-bark text-[clamp(1.6rem,2vw,1.8rem)] leading-[1.2]">
           {item.titleMain}{" "}
           <em className="italic">{item.titleItalic}</em>
         </p>
+        <div className="mt-3">
+          <AllLink
+            href={item.allHref}
+            label={item.allLabel}
+            onClick={onNavigate}
+          />
+        </div>
       </div>
       <nav aria-label="Nach Farbe" className="flex flex-wrap gap-x-9 gap-y-6">
         {item.items.map((c) => {
@@ -513,36 +532,36 @@ function SwatchesPanel({
   );
 }
 
-function PanelFooter({
-  allHref,
-  allLabel,
+function AllLink({
+  href,
+  label,
+  onClick,
 }: {
-  allHref: string;
-  allLabel: string;
+  href: string;
+  label: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="border-t border-mist bg-[#F6F0E8]">
-      <div className="max-w-7xl mx-auto px-8 py-3.5 flex items-center justify-end text-[14px]">
-        <Link
-          href={allHref}
-          className="inline-flex items-center gap-2 font-semibold text-bark hover:text-rose transition-colors"
-        >
-          {allLabel}
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden
-          >
-            <path d="M5 12h14M13 6l6 6-6 6" />
-          </svg>
-        </Link>
-      </div>
-    </div>
+    <Link
+      href={href}
+      onClick={onClick}
+      className="group inline-flex items-center gap-1.5 text-[13px] font-semibold text-rose hover:underline"
+    >
+      {label}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden
+        className="transition-transform duration-200 group-hover:translate-x-0.5"
+      >
+        <path d="M5 12h14M13 6l6 6-6 6" />
+      </svg>
+    </Link>
   );
 }
 
