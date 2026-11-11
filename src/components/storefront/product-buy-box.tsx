@@ -87,10 +87,7 @@ export function ProductBuyBox({
       {/* ---- 01 Grösse ---- */}
       {variants.length > 1 ? (
         <fieldset className="border-0 p-0 m-0 min-w-0 border-b border-[#E8DED3] py-7">
-          <legend className="float-left w-full mb-4 p-0 inline-flex items-baseline gap-3">
-            <span className="font-display text-[14px] text-rose min-w-[20px]">
-              01
-            </span>
+          <legend className="float-left w-full mb-4 p-0">
             <span className="text-[15px] font-semibold text-bark">
               Wie gross darf es sein?
             </span>
