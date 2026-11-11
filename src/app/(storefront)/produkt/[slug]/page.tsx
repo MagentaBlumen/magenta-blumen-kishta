@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PdpSlotHint } from "@/components/storefront/pdp-slot-hint";
+import { PdpDeliveryTimeline } from "@/components/storefront/pdp-delivery-timeline";
+import { ProductBuyBox } from "@/components/storefront/product-buy-box";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductGallery } from "@/components/storefront/product-gallery";
-import { ProductVariantPicker } from "@/components/storefront/product-variant-picker";
 import { largeUrl } from "@/lib/image-urls";
 import { minPrice } from "@/lib/money";
 import {
@@ -162,111 +162,88 @@ export default async function ProductDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Delivery-slot hint — informational, not a picker. Only on
-              enquiry != true since the slot flow doesn't apply to
-              enquiry products. */}
-          {p.pricingMode !== "enquiry" && <PdpSlotHint />}
+          {/* Inline colour dots — colour is a product-level facet in
+              our schema, so no selection UX. Showing what colours are
+              IN the arrangement, below the title. */}
+          {colours.length > 0 && p.pricingMode !== "enquiry" && (
+            <span className="inline-flex items-center gap-2.5 text-[13px] text-sage">
+              <span
+                aria-hidden
+                className="inline-flex"
+              >
+                {colours.map((c, i) => (
+                  <span
+                    key={c.value}
+                    className={`inline-block w-3.5 h-3.5 rounded-full border-2 border-ivory ${i > 0 ? "-ml-1.5" : ""}`}
+                    style={{
+                      background:
+                        c.hex ??
+                        "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)",
+                    }}
+                  />
+                ))}
+              </span>
+              {colours.map((c) => c.nameDe).join(", ")}
+            </span>
+          )}
 
-          {/* Buy box or enquiry hint */}
+          {/* Delivery timeline — horizontal, informational. Real slot
+              selection happens at /kasse/lieferung under FOR UPDATE. */}
+          {p.pricingMode !== "enquiry" && <PdpDeliveryTimeline />}
+
+          {/* Buy box (numbered steps + dark summary) or enquiry hint */}
           {p.pricingMode === "enquiry" ? (
             <EnquiryBlock />
           ) : (
-            <ProductVariantPicker productId={p.id} variants={variants} />
+            <ProductBuyBox productId={p.id} variants={variants} />
           )}
-
-          {/* Colours: our schema stores colour as a product-level
-              facet (a product has N colours attached). We render
-              swatches in the mockup's radio-selectable style for
-              visual density, with the first one marked as the
-              "primary" look. Selection is purely cosmetic — picking a
-              different swatch doesn't change the product, because
-              there's only one row in the catalogue for this item. */}
-          {colours.length > 0 && p.pricingMode !== "enquiry" && (
-            <fieldset className="border-0 p-0 m-0 min-w-0">
-              <legend className="text-[0.78rem] font-semibold text-bark mb-3">
-                Farbton{" "}
-                <span className="font-normal text-sage">
-                  — {colours.map((c) => c.nameDe).join(", ")}
-                </span>
-              </legend>
-              <div className="flex flex-wrap gap-3">
-                {colours.map((c, i) => {
-                  const isPrimary = i === 0;
-                  const background =
-                    c.hex ??
-                    "conic-gradient(from 0deg, #F5F0E6, #E8A0BF, #C1272D, #E8853B, #F2C744, #6A8F4F, #6B5B95, #E4D9E8, #F5F0E6)";
-                  return (
-                    <span
-                      key={c.value}
-                      title={c.nameDe}
-                      className={`block w-12 h-12 rounded-full ${
-                        isPrimary
-                          ? "border-2 border-bark p-1"
-                          : "border border-bark/25 p-[5px]"
-                      }`}
-                    >
-                      <span className="sr-only">{c.nameDe}</span>
-                      <span
-                        aria-hidden
-                        className="block w-full h-full rounded-full"
-                        style={{ background }}
-                      />
-                    </span>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
-
-          {/* Trust row */}
-          {p.pricingMode !== "enquiry" && <TrustRow />}
-
-          {/* Accordions */}
-          <div className="flex flex-col">
-            {p.descriptionDe && (
-              <Accordion label="Beschreibung" defaultOpen>
-                <p className="text-[15px] text-bark/70 leading-[1.7] whitespace-pre-line m-0">
-                  {p.descriptionDe}
-                </p>
-              </Accordion>
-            )}
-            <Accordion label="Lieferung">
-              <p className="text-[15px] text-bark/70 leading-[1.7] m-0">
-                Zwei Touren täglich um 10:00 und 16:00 — auch am Sonntag.
-                Bestellschluss jeweils drei Stunden vor der Tour. Lieferung
-                mit unserem eigenen Van in 27 Aargauer Postleitzahlen,
-                ab CHF 12, gratis ab CHF 120.
-              </p>
-            </Accordion>
-            <Accordion label="Pflegehinweise">
-              <ul className="space-y-1.5 pl-4 list-disc marker:text-sage m-0">
-                {CARE_STEPS.map((step) => (
-                  <li
-                    key={step}
-                    className="text-[15px] text-bark/70 leading-[1.6]"
-                  >
-                    {step}
-                  </li>
-                ))}
-              </ul>
-            </Accordion>
-            <Accordion label="Herkunft">
-              <dl className="m-0 space-y-2.5">
-                {ORIGIN_FACTS.map(([k, v]) => (
-                  <div key={k} className="flex gap-3">
-                    <dt className="text-[0.68rem] tracking-[0.08em] uppercase font-semibold text-bark w-[110px] flex-shrink-0 pt-0.5">
-                      {k}
-                    </dt>
-                    <dd className="text-[15px] text-bark/70 leading-[1.55]">
-                      {v}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </Accordion>
-          </div>
         </div>
       </div>
+
+      {/* ---------- Gut zu wissen (replaces accordions) ---------- */}
+      {p.pricingMode !== "enquiry" && (
+        <section
+          aria-label="Gut zu wissen"
+          className="border-t border-mist mt-8 pt-16 pb-6 grid gap-10 gap-x-14 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]"
+        >
+          {p.descriptionDe && (
+            <div>
+              <h2 className="m-0 mb-3 font-display text-[26px] font-normal text-bark">
+                Was drin ist
+              </h2>
+              <p className="m-0 text-[15px] leading-[1.7] text-bark/70 whitespace-pre-line">
+                {p.descriptionDe}
+              </p>
+            </div>
+          )}
+          <div>
+            <h2 className="m-0 mb-3 font-display text-[26px] font-normal text-bark">
+              Lieferung
+            </h2>
+            <p className="m-0 text-[15px] leading-[1.7] text-bark/70">
+              Zwei Touren täglich um 10:00 und 16:00 — auch am Sonntag.
+              Bestellschluss jeweils drei Stunden vor der Tour. Lieferung
+              mit unserem eigenen Van in 27 Aargauer Postleitzahlen,
+              ab CHF 12, gratis ab CHF 120.
+            </p>
+          </div>
+          <div>
+            <h2 className="m-0 mb-3 font-display text-[26px] font-normal text-bark">
+              Pflege
+            </h2>
+            <ul className="m-0 pl-4 list-disc marker:text-sage space-y-1.5">
+              {CARE_STEPS.map((step) => (
+                <li
+                  key={step}
+                  className="text-[15px] text-bark/70 leading-[1.6]"
+                >
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* ---------- Related ---------- */}
       {related.length > 0 && firstCategory && (
@@ -304,69 +281,6 @@ function AvailabilityChip() {
   );
 }
 
-function TrustRow() {
-  return (
-    <ul className="m-0 p-5 list-none border-y border-mist grid grid-cols-1 sm:grid-cols-3 gap-3 text-[13px] leading-[1.4] text-bark/70">
-      <li className="flex flex-col gap-1.5">
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-rose"
-          aria-hidden
-        >
-          <path d="M2 7h11v9H2z" />
-          <path d="M13 10h4l3 3v3h-7z" />
-          <circle cx="6" cy="18" r="2" />
-          <circle cx="17" cy="18" r="2" />
-        </svg>
-        Eigener Van, kein Kurier
-      </li>
-      <li className="flex flex-col gap-1.5">
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-rose"
-          aria-hidden
-        >
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        Auch am Sonntag
-      </li>
-      <li className="flex flex-col gap-1.5">
-        <svg
-          width="22"
-          height="22"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-rose"
-          aria-hidden
-        >
-          <rect x="2" y="5" width="20" height="14" rx="2" />
-          <path d="M2 10h20" />
-        </svg>
-        TWINT &amp; Karte
-      </li>
-    </ul>
-  );
-}
-
 function EnquiryBlock() {
   return (
     <div className="border-y border-mist py-5 space-y-2">
@@ -385,34 +299,6 @@ function EnquiryBlock() {
         .
       </p>
     </div>
-  );
-}
-
-function Accordion({
-  label,
-  defaultOpen = false,
-  children,
-}: {
-  label: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <details
-      open={defaultOpen}
-      className="group border-b border-mist [&_summary::-webkit-details-marker]:hidden"
-    >
-      <summary className="flex items-center justify-between py-4 cursor-pointer list-none text-[15px] font-semibold text-bark hover:text-rose transition-colors">
-        {label}
-        <span
-          aria-hidden
-          className="text-[1.25rem] leading-none text-sage transition-transform group-open:rotate-45"
-        >
-          +
-        </span>
-      </summary>
-      <div className="pb-5">{children}</div>
-    </details>
   );
 }
 
@@ -452,12 +338,6 @@ const CARE_STEPS = [
   "Alle zwei Tage Wasser wechseln",
   "Kühl und vor direkter Sonne geschützt aufstellen",
   "Welke Blätter entfernen",
-];
-
-const ORIGIN_FACTS: [string, string][] = [
-  ["Werkstatt", "Magenta Blumen, Neuenhof AG"],
-  ["Bindung", "Jeder Strauss von der Inhaberin persönlich gebunden"],
-  ["Bezug", "Regional und über Schweizer Grosshandel eingekauft"],
 ];
 
 // ------------------------------------------------------------------
