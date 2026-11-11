@@ -12,23 +12,17 @@ type Variant = {
   isAvailable: boolean;
 };
 
-/**
- * New PDP buy box — numbered steps + visual size tiles + dark
- * summary slab with live total and free-shipping progress bar.
- *
- * Grusskarte and Extras steps from the mockup are DEFERRED — they
- * need cart/cookie plumbing that's bigger than this visual port. If
- * a product has a single variant the step title still reads "01" so
- * the flow visually matches when more steps are added later.
- */
+// Grusskarte + Extras live in /kasse, not here. They're order-level
+// concerns (one card per delivery, addons apply to the whole order),
+// so pricing/plumbing stays server-side where the real total is known.
+// Progress toward CHF 120 free shipping also belongs on the cart /
+// checkout side for the same reason — PDP only knows this one line.
 export function ProductBuyBox({
   productId,
   variants,
-  freeShippingThreshold = 120,
 }: {
   productId: number;
   variants: Variant[];
-  freeShippingThreshold?: number;
 }) {
   const firstAvailableIdx = variants.findIndex((v) => v.isAvailable);
   const initialIdx = firstAvailableIdx >= 0 ? firstAvailableIdx : 0;
@@ -55,11 +49,6 @@ export function ProductBuyBox({
   }
 
   const canBuy = selected.isAvailable && !isPending;
-  const progressPct = Math.min(
-    100,
-    Math.round((totalNum / freeShippingThreshold) * 100),
-  );
-  const shortfall = Math.max(0, freeShippingThreshold - totalNum);
 
   function handleSelect(i: number) {
     if (!variants[i]?.isAvailable) return;
@@ -132,24 +121,24 @@ export function ProductBuyBox({
                   <span className="h-[84px] flex items-end justify-center">
                     <span
                       aria-hidden
-                      className="transition-colors duration-150"
+                      className="transition-colors duration-150 rounded-full"
                       style={{
                         width: size,
                         height: size,
-                        borderRadius: "50% 50% 46% 46%",
-                        background: isSelected ? "#6D52A8" : "#DCCFC2",
-                        boxShadow: isSelected
-                          ? "inset -6px -6px 0 rgba(0,0,0,0.12)"
-                          : undefined,
+                        background: isSelected
+                          ? "var(--color-rose)"
+                          : "#B8916A",
                       }}
                     />
                   </span>
-                  <span className="text-[14px] font-semibold text-bark">
+                  <span className="font-display text-[19px] leading-[1.1] text-bark">
                     {v.sizeLabelDe || "Standard"}
                   </span>
                   <span
-                    className={`font-display text-[19px] ${
-                      isSelected ? "text-bark" : "text-sage"
+                    className={`text-[14px] ${
+                      isSelected
+                        ? "text-bark font-semibold"
+                        : "text-sage"
                     }`}
                   >
                     {price}
@@ -162,17 +151,17 @@ export function ProductBuyBox({
       ) : null}
 
       {/* ---- Dark summary slab ---- */}
-      <div className="bg-bark text-ivory p-6 flex flex-col gap-[18px] mt-7">
+      <div className="mb-wood p-6 flex flex-col gap-[18px] mt-7">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5 min-w-0">
-            <span className="text-[13px] text-[#CBBDB2]">
+            <span className="text-[13px] text-[#D9C4A8]">
               {qty} × {selected.sizeLabelDe || "Standard"}
             </span>
             <span className="font-display text-[36px] leading-none text-ivory tabular-nums">
               {formatChf(totalNum.toFixed(2))}
             </span>
           </div>
-          <div className="flex items-center border border-[#5C4A46] h-11">
+          <div className="flex items-center border border-[#6E5440] h-11">
             <button
               type="button"
               onClick={() => handleQty(-1)}
@@ -225,26 +214,6 @@ export function ProductBuyBox({
                 : "In den Warenkorb"}
         </button>
 
-        {/* Free-shipping progress bar */}
-        {selected.isAvailable && (
-          <div className="flex flex-col gap-2">
-            <div className="h-1 bg-[#4A3A37] overflow-hidden">
-              <div
-                className="h-full bg-emerald-400 transition-[width] duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <span
-              aria-live="polite"
-              className="text-[13px] text-[#E9DFD5]"
-            >
-              {totalNum >= freeShippingThreshold
-                ? "Gratis-Lieferung inklusive"
-                : `Noch ${formatChf(shortfall.toFixed(2))} bis zur Gratis-Lieferung`}
-            </span>
-          </div>
-        )}
-
         {feedback === "error" && errorMsg && (
           <p className="text-[13px] text-rose">{errorMsg}</p>
         )}
@@ -255,6 +224,8 @@ export function ProductBuyBox({
         <span>Eigener Van, kein Kurier</span>
         <span aria-hidden>·</span>
         <span>Auch am Sonntag</span>
+        <span aria-hidden>·</span>
+        <span>Gratis-Lieferung ab CHF 120</span>
         <span aria-hidden>·</span>
         <span>TWINT &amp; Karte</span>
       </p>

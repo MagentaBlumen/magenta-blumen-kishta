@@ -100,7 +100,7 @@ export function PdpDeliveryTimeline() {
         {/* Connecting line behind the dots on >= sm */}
         <span
           aria-hidden
-          className="hidden sm:block absolute left-[6px] right-[6px] top-[6px] h-[2px] bg-[#DCCFC2]"
+          className="hidden sm:block absolute left-[6px] right-[6px] top-[6px] h-[2px] bg-[#B8916A]"
         />
         {slots.map((s, i) => (
           <li
