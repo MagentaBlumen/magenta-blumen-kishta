@@ -293,7 +293,7 @@ export function SiteHeader({
               id={currentItem.id}
               role="region"
               aria-label={currentItem.label}
-              className="hidden lg:block absolute left-0 right-0 top-full z-10 bg-ivory border-b border-mist shadow-[0_24px_48px_rgba(43,29,27,0.18)] animate-in fade-in slide-in-from-top-1 duration-200"
+              className="hidden lg:block absolute left-0 right-0 top-full z-10 bg-ivory border-b border-mist shadow-[0_40px_80px_-10px_rgba(43,29,27,0.35),0_16px_32px_-8px_rgba(43,29,27,0.22)] animate-in fade-in slide-in-from-top-1 duration-200"
             >
               <div className="max-w-7xl mx-auto px-8 py-9">
                 {currentItem.kind === "list" && (
@@ -522,11 +522,7 @@ function PanelFooter({
 }) {
   return (
     <div className="border-t border-mist bg-[#F6F0E8]">
-      <div className="max-w-7xl mx-auto px-8 py-3.5 flex flex-wrap items-center justify-between gap-2 text-[14px]">
-        <span className="inline-flex items-center gap-2.5 text-sage">
-          <span aria-hidden className="w-2 h-2 rounded-full bg-emerald-600" />
-          Zwei Touren täglich · 10:00 &amp; 16:00
-        </span>
+      <div className="max-w-7xl mx-auto px-8 py-3.5 flex items-center justify-end text-[14px]">
         <Link
           href={allHref}
           className="inline-flex items-center gap-2 font-semibold text-bark hover:text-rose transition-colors"
