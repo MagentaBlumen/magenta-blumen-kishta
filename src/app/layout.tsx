@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-// Fonts (Cormorant + DM Sans) loaded via CSS @import in globals.css.
+// Fonts (Fraunces + Instrument Sans + Kaushan Script) loaded via CSS @import in globals.css.
 //
 // Would prefer next/font/google (self-hosted, no external request,
 // zero layout shift), but Next.js 16.3.x + Turbopack has a bug with

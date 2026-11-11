@@ -1,10 +1,11 @@
-/* Google Fonts must be the first @import - CSS spec requires @import
+/* Google Fonts must be the first @import — CSS spec requires @import
    rules before all other rules. Loading:
-     Cormorant  - display serif, weights 300/400/500/600 + italic 300/400
-     DM Sans    - body sans, weights 300/400/500
+     Fraunces         - display serif with optical sizing + italic
+     Instrument Sans  - body sans
+     Kaushan Script   - logo-only (handwritten script)
    display=swap: use fallback font first, swap when custom loads.
    See layout.tsx for why we're using CSS @import instead of next/font. */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Instrument+Sans:wght@400;500;600&family=Kaushan+Script&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -13,43 +14,50 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------
-   Design tokens - Magenta Blumen
+   Design tokens — Magenta Blumen
    ---------------------------------------------------------------------
-   Palette from the Figma design (warm florist palette with a magenta
-   brand accent - literally "Magenta" fitting the shop name).
+   Warm-wood palette: walnut + oak tones as the material base, magenta
+   as the brand accent (literally "Magenta" fitting the shop name).
 
-     cream    #f9f6f1   soft warm section background
-     ivory    #fdfcf9   base page background (near-white, warm tint)
-     bark     #2a1f1a   primary text (dark warm brown, not black)
-     sage     #8a9e8c   muted secondary text / eyebrow labels
-     blush    #e8d5c8   soft warm highlight
-     rose     #a0185a   brand accent - hover, badges, focus
-     charcoal #1c1c1c   near-black (rarely used)
-     mist     #ede9e3   borders, subtle grouping
+     ivory    #FFFFFF   pure white page background
+     cream    #F6F3EF   subtle warm section background (sand)
+     bark     #3A2719   primary text / dark surfaces (walnut)
+     sage     #72573D   muted secondary text / eyebrow labels (warm brown)
+     blush    #E8D5C0   soft warm highlight
+     rose     #A3165F   brand accent — hover, badges, focus (magenta)
+     charcoal #1A0F08   near-black (rarely used)
+     mist     #E1D5C7   borders, subtle grouping (oak-light)
+     walnut   #3A2719   dark surfaces (summary slab, footer, announcement)
+     oak      #A67C52   lines, details — richer than mist
 
    Fonts:
-     Cormorant  - serif for headings, uses italic for emphasis
-     DM Sans    - body sans
+     Fraunces         - display serif (headings, prices, quotes)
+     Instrument Sans  - body sans
+     Kaushan Script   - logo-only script
    ---------------------------------------------------------------------- */
 
 @theme inline {
   /* Fonts (defined in :root below, loaded via Google Fonts @import above) */
   --font-body: var(--font-body);
   --font-display: var(--font-display);
+  --font-logo: var(--font-logo);
   --font-sans: var(--font-body);
   --font-mono: var(--font-body);
 
   /* Named palette colours - available as bg-cream, text-rose, etc. */
-  --color-cream: #f9f6f1;
-  --color-ivory: #fdfcf9;
-  --color-bark: #2a1f1a;
-  /* Sage is used for eyebrows, hints, muted labels. Deeper hue for
-     better legibility on ivory (WCAG-safe against the background). */
-  --color-sage: #4f6752;
-  --color-blush: #e8d5c8;
-  --color-rose: #a0185a;
-  --color-charcoal: #1c1c1c;
-  --color-mist: #ede9e3;
+  --color-cream: #F6F3EF;
+  --color-ivory: #FFFFFF;
+  --color-bark: #3A2719;
+  /* "Sage" is kept as a token name for backward compat, but the hue is
+     now warm walnut-brown to blend with the wood palette. All existing
+     text-sage / border-sage usages inherit the new hue automatically. */
+  --color-sage: #72573D;
+  --color-blush: #E8D5C0;
+  --color-rose: #A3165F;
+  --color-charcoal: #1A0F08;
+  --color-mist: #E1D5C7;
+  --color-walnut: #3A2719;
+  --color-oak: #A67C52;
 
   /* shadcn semantic aliases - existing components (Button, Input, Card,
      Badge, Table) reference these. Mapped to the palette above. */
@@ -99,53 +107,68 @@
   /* Font families (referenced by @theme above). system-ui + serif
      fallbacks kick in during the display=swap window before Google
      Fonts finishes loading, and permanently if the request fails. */
-  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
-  --font-display: 'Cormorant', Georgia, 'Times New Roman', serif;
+  --font-body: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-logo: 'Kaushan Script', 'Fraunces', cursive;
 
-  --background: #fdfcf9;          /* ivory */
-  --foreground: #2a1f1a;          /* bark */
-  --card: #fdfcf9;                /* ivory */
-  --card-foreground: #2a1f1a;
-  --popover: #fdfcf9;
-  --popover-foreground: #2a1f1a;
+  --background: #FFFFFF;          /* ivory */
+  --foreground: #3A2719;          /* bark (walnut) */
+  --card: #FFFFFF;                /* ivory */
+  --card-foreground: #3A2719;
+  --popover: #FFFFFF;
+  --popover-foreground: #3A2719;
 
-  /* Primary = bark. Matches Figma's black-brown "Jetzt shoppen" button. */
-  --primary: #2a1f1a;
-  --primary-foreground: #fdfcf9;
+  /* Primary = walnut-bark. Replaces the previous black-brown. */
+  --primary: #3A2719;
+  --primary-foreground: #FFFFFF;
 
-  --secondary: #f9f6f1;           /* cream - subtle grouped sections */
-  --secondary-foreground: #2a1f1a;
+  --secondary: #F6F3EF;           /* cream (sand) — subtle grouped sections */
+  --secondary-foreground: #3A2719;
 
-  --muted: #ede9e3;               /* mist - inputs, subtle bg */
-  --muted-foreground: #4f6752;    /* sage - secondary / eyebrow text */
+  --muted: #E1D5C7;               /* mist (oak-light) — inputs, subtle bg */
+  --muted-foreground: #72573D;    /* sage (warm brown) — secondary / eyebrow text */
 
-  --accent: #e8d5c8;              /* blush - hover backgrounds */
-  --accent-foreground: #2a1f1a;
+  --accent: #E8D5C0;              /* blush — hover backgrounds */
+  --accent-foreground: #3A2719;
 
   /* Destructive stays a distinct warm red so it can't be confused with
      the rose brand accent, which is used positively (badges, hover). */
   --destructive: oklch(0.577 0.245 27.325);
 
-  --border: #ede9e3;              /* mist */
-  --input: #ede9e3;
-  --ring: #a0185a;                /* rose - focus outline */
+  --border: #E1D5C7;              /* mist */
+  --input: #E1D5C7;
+  --ring: #A3165F;                /* rose - focus outline */
 
-  --chart-1: #a0185a;             /* rose */
-  --chart-2: #4f6752;             /* sage */
-  --chart-3: #e8d5c8;             /* blush */
-  --chart-4: #2a1f1a;             /* bark */
-  --chart-5: #f9f6f1;             /* cream */
+  --chart-1: #A3165F;             /* rose */
+  --chart-2: #72573D;             /* sage */
+  --chart-3: #E8D5C0;             /* blush */
+  --chart-4: #3A2719;             /* bark */
+  --chart-5: #F6F3EF;             /* cream */
 
   --radius: 0.375rem;
 
-  --sidebar: #fdfcf9;
-  --sidebar-foreground: #2a1f1a;
-  --sidebar-primary: #2a1f1a;
-  --sidebar-primary-foreground: #fdfcf9;
-  --sidebar-accent: #f9f6f1;
-  --sidebar-accent-foreground: #2a1f1a;
-  --sidebar-border: #ede9e3;
-  --sidebar-ring: #a0185a;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #3A2719;
+  --sidebar-primary: #3A2719;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F6F3EF;
+  --sidebar-accent-foreground: #3A2719;
+  --sidebar-border: #E1D5C7;
+  --sidebar-ring: #A3165F;
+}
+
+/* ---------- .mb-wood — dark walnut surface utility ----------
+   Use for: summary slabs, announcement bar, dark buttons, selected
+   chips, "Trost & Trauer" tile, footer. Starts as solid walnut +
+   a very subtle grain-like gradient. Drop in /public/images/wood-walnut.jpg
+   later and swap the `background:` for `background: var(--color-walnut) url('/images/wood-walnut.jpg') center / cover;`. */
+.mb-wood {
+  background: var(--color-walnut);
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%),
+    linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.25) 100%),
+    repeating-linear-gradient(90deg, rgba(166,124,82,0.04) 0 2px, transparent 2px 7px);
+  color: #FFFFFF;
 }
 
 /* ---------- Dark palette (opt-in via <html class="dark">) ---------- */
