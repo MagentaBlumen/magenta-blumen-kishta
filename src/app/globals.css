@@ -19,7 +19,7 @@
    Warm-wood palette: walnut + oak tones as the material base, magenta
    as the brand accent (literally "Magenta" fitting the shop name).
 
-     ivory    #FFFFFF   pure white page background
+     ivory    #fdfcf9   pure white page background
      cream    #F6F3EF   subtle warm section background (sand)
      bark     #3A2719   primary text / dark surfaces (walnut)
      sage     #72573D   muted secondary text / eyebrow labels (warm brown)
@@ -46,7 +46,7 @@
 
   /* Named palette colours - available as bg-cream, text-rose, etc. */
   --color-cream: #F6F3EF;
-  --color-ivory: #FFFFFF;
+  --color-ivory: #fdfcf9;
   --color-bark: #3A2719;
   /* "Sage" is kept as a token name for backward compat, but the hue is
      now warm walnut-brown to blend with the wood palette. All existing
@@ -111,16 +111,16 @@
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-logo: 'Kaushan Script', 'Fraunces', cursive;
 
-  --background: #FFFFFF;          /* ivory */
+  --background: #fdfcf9;          /* ivory */
   --foreground: #3A2719;          /* bark (walnut) */
-  --card: #FFFFFF;                /* ivory */
+  --card: #fdfcf9;                /* ivory */
   --card-foreground: #3A2719;
-  --popover: #FFFFFF;
+  --popover: #fdfcf9;
   --popover-foreground: #3A2719;
 
   /* Primary = walnut-bark. Replaces the previous black-brown. */
   --primary: #3A2719;
-  --primary-foreground: #FFFFFF;
+  --primary-foreground: #fdfcf9;
 
   --secondary: #F6F3EF;           /* cream (sand) — subtle grouped sections */
   --secondary-foreground: #3A2719;
@@ -147,10 +147,10 @@
 
   --radius: 0.375rem;
 
-  --sidebar: #FFFFFF;
+  --sidebar: #fdfcf9;
   --sidebar-foreground: #3A2719;
   --sidebar-primary: #3A2719;
-  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-primary-foreground: #fdfcf9;
   --sidebar-accent: #F6F3EF;
   --sidebar-accent-foreground: #3A2719;
   --sidebar-border: #E1D5C7;
@@ -168,7 +168,7 @@
     linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%),
     linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.25) 100%),
     repeating-linear-gradient(90deg, rgba(166,124,82,0.04) 0 2px, transparent 2px 7px);
-  color: #FFFFFF;
+  color: #fdfcf9;
 }
 
 /* ---------- Dark palette (opt-in via <html class="dark">) ---------- */
