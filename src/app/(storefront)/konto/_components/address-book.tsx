@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { CustomerAddressRow } from "@/lib/customer-auth/addresses";
+import type { SuggestedAddress } from "@/lib/customer-auth/suggested-address";
 import {
   addCustomerAddressAction,
   deleteCustomerAddressAction,
@@ -10,204 +11,291 @@ import {
 
 type Props = {
   addresses: CustomerAddressRow[];
+  suggestion: SuggestedAddress | null;
 };
 
-type EditingState =
-  | { mode: "list" }
-  | { mode: "add" }
-  | { mode: "edit"; id: number };
+type Mode =
+  | { kind: "grid" }
+  | { kind: "add" }
+  | { kind: "edit"; id: number };
 
-/**
- * Address book for repeat senders. One of three UI states:
- *   - list: shows cards for each address with Bearbeiten / Löschen
- *   - add: blank form
- *   - edit: form prefilled with a row's current values
- */
-export function AddressBook({ addresses }: Props) {
-  const [state, setState] = useState<EditingState>({ mode: "list" });
+export function AddressBook({ addresses, suggestion }: Props) {
+  const [mode, setMode] = useState<Mode>({ kind: "grid" });
   const [isPending, startTransition] = useTransition();
 
-  function save(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     startTransition(async () => {
-      if (state.mode === "add") {
+      if (mode.kind === "add") {
         await addCustomerAddressAction(form);
-      } else if (state.mode === "edit") {
-        await updateCustomerAddressAction(state.id, form);
+      } else if (mode.kind === "edit") {
+        await updateCustomerAddressAction(mode.id, form);
       }
-      setState({ mode: "list" });
+      setMode({ kind: "grid" });
     });
   }
 
-  function remove(id: number) {
-    if (!window.confirm("Diese Adresse wirklich löschen?")) return;
+  function handleRemove(id: number) {
+    if (!window.confirm("Diese Adresse wirklich entfernen?")) return;
     startTransition(async () => {
       await deleteCustomerAddressAction(id);
     });
   }
 
-  if (state.mode !== "list") {
-    const editing = state.mode === "edit"
-      ? addresses.find((a) => a.id === state.id) ?? null
-      : null;
+  function handleSaveSuggestion() {
+    if (!suggestion) return;
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("recipientName", suggestion.recipientName);
+      fd.set("street", suggestion.street);
+      fd.set("plz", suggestion.plz);
+      fd.set("city", suggestion.city);
+      if (suggestion.phone) fd.set("phone", suggestion.phone);
+      await addCustomerAddressAction(fd);
+    });
+  }
+
+  if (mode.kind !== "grid") {
+    const editing =
+      mode.kind === "edit"
+        ? addresses.find((a) => a.id === mode.id) ?? null
+        : null;
     return (
-      <section className="rounded-lg border border-mist bg-card p-6 space-y-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[0.72rem] tracking-[0.16em] uppercase text-sage font-medium">
-            {state.mode === "add" ? "Neue Adresse" : "Adresse bearbeiten"}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setState({ mode: "list" })}
-            className="text-xs text-sage hover:text-bark transition-colors"
-          >
-            Abbrechen
-          </button>
-        </div>
-
-        <form onSubmit={save} className="space-y-4">
-          <Field
-            label="Bezeichnung (optional)"
-            name="labelDe"
-            defaultValue={editing?.labelDe ?? ""}
-            placeholder="z. B. Büro, Oma, Partner"
-          />
-          <Field
-            label="Empfänger"
-            name="recipientName"
-            defaultValue={editing?.recipientName}
-            required
-            autoComplete="name"
-          />
-          <Field
-            label="Strasse"
-            name="street"
-            defaultValue={editing?.street}
-            required
-            autoComplete="street-address"
-          />
-          <div className="grid grid-cols-[100px_1fr] gap-4">
-            <Field
-              label="PLZ"
-              name="plz"
-              defaultValue={editing?.plz ?? ""}
-              required
-              inputMode="numeric"
-              pattern="\d{4}"
-              maxLength={4}
-              autoComplete="postal-code"
-            />
-            <Field
-              label="Ort"
-              name="city"
-              defaultValue={editing?.city}
-              required
-              autoComplete="address-level2"
-            />
-          </div>
-          <Field
-            label="Telefon (optional)"
-            name="phone"
-            type="tel"
-            defaultValue={editing?.phone ?? ""}
-            autoComplete="tel"
-          />
-          <Field
-            label="Hinweise (optional)"
-            name="notes"
-            defaultValue={editing?.notes ?? ""}
-            placeholder="z. B. Klingel geht nicht, bitte hinten lassen"
-          />
-
-          <button
-            type="submit"
-            disabled={isPending}
-            className="group inline-flex items-center gap-2 bg-bark text-ivory px-5 py-2 text-[0.72rem] tracking-[0.14em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200 disabled:opacity-50"
-          >
-            {isPending ? "Speichert…" : "Speichern"}
-            {!isPending && (
-              <span className="transition-transform duration-200 group-hover:translate-x-1">
-                →
-              </span>
-            )}
-          </button>
-        </form>
-      </section>
+      <AddressForm
+        editing={editing}
+        isNew={mode.kind === "add"}
+        isPending={isPending}
+        onSubmit={handleSubmit}
+        onCancel={() => setMode({ kind: "grid" })}
+      />
     );
   }
 
   return (
-    <section className="rounded-lg border border-mist bg-card p-6 space-y-4">
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
+      {addresses.map((a) => (
+        <SavedCard
+          key={a.id}
+          address={a}
+          onEdit={() => setMode({ kind: "edit", id: a.id })}
+          onRemove={() => handleRemove(a.id)}
+          disabled={isPending}
+        />
+      ))}
+      {suggestion && (
+        <SuggestionCard
+          suggestion={suggestion}
+          onSave={handleSaveSuggestion}
+          disabled={isPending}
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => setMode({ kind: "add" })}
+        className="min-h-[170px] border border-dashed border-[#B8916A] flex flex-col items-center justify-center gap-2.5 text-[15px] font-semibold text-bark hover:border-rose hover:text-rose transition-colors"
+      >
+        <span
+          aria-hidden
+          className="w-11 h-11 bg-cream grid place-items-center"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </span>
+        Neue Adresse
+      </button>
+    </div>
+  );
+}
+
+function SavedCard({
+  address,
+  onEdit,
+  onRemove,
+  disabled,
+}: {
+  address: CustomerAddressRow;
+  onEdit: () => void;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="border border-[#E1D5C7] p-[22px] flex flex-col gap-1 text-[14px] leading-[1.5]">
+      {address.labelDe && (
+        <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
+          {address.labelDe}
+        </span>
+      )}
+      <span className="font-display text-[20px] text-bark">
+        {address.recipientName}
+      </span>
+      <span className="text-bark">
+        {address.street}, {address.plz} {address.city}
+      </span>
+      {address.phone && (
+        <span className="text-sage tabular-nums">{address.phone}</span>
+      )}
+      {address.notes && (
+        <span className="text-[13px] text-sage italic">{address.notes}</span>
+      )}
+      <div className="flex gap-4 mt-2.5">
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={disabled}
+          className="underline text-[13px] text-sage hover:text-rose transition-colors disabled:opacity-50"
+        >
+          Bearbeiten
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          className="underline text-[13px] text-sage hover:text-rose transition-colors disabled:opacity-50"
+        >
+          Entfernen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionCard({
+  suggestion,
+  onSave,
+  disabled,
+}: {
+  suggestion: SuggestedAddress;
+  onSave: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="border border-rose shadow-[0_0_0_1px_var(--color-rose)] p-[22px] flex flex-col gap-3 text-[14px] leading-[1.5]">
+      <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-rose">
+        Vorschlag
+      </span>
+      <div className="flex flex-col gap-0.5">
+        <span className="font-display text-[20px] text-bark">
+          {suggestion.recipientName}
+        </span>
+        <span className="text-bark">
+          {suggestion.street}, {suggestion.plz} {suggestion.city}
+        </span>
+        <span className="text-[13px] text-sage">
+          aus Ihrer letzten Bestellung
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={disabled}
+        className="self-start inline-flex items-center gap-2 h-11 px-4 bg-rose text-ivory text-[14px] font-semibold hover:brightness-110 transition-[filter] disabled:opacity-50"
+      >
+        {disabled ? "Speichert…" : "Speichern"}
+      </button>
+    </div>
+  );
+}
+
+function AddressForm({
+  editing,
+  isNew,
+  isPending,
+  onSubmit,
+  onCancel,
+}: {
+  editing: CustomerAddressRow | null;
+  isNew: boolean;
+  isPending: boolean;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <section className="border border-[#E1D5C7] p-6 flex flex-col gap-5">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[0.72rem] tracking-[0.16em] uppercase text-sage font-medium">
-          Adressen
+        <h2 className="m-0 font-display text-[22px] text-bark">
+          {isNew ? "Neue Adresse" : "Adresse bearbeiten"}
         </h2>
         <button
           type="button"
-          onClick={() => setState({ mode: "add" })}
-          className="text-xs text-rose hover:underline"
+          onClick={onCancel}
+          className="text-[13px] text-sage hover:text-bark transition-colors"
         >
-          Neue Adresse
+          Abbrechen
         </button>
       </div>
 
-      {addresses.length === 0 ? (
-        <p className="text-[0.85rem] text-bark/70">
-          Noch keine gespeicherten Adressen. Fügen Sie eine hinzu, damit sie
-          beim nächsten Bestellen vorausgefüllt werden kann.
-        </p>
-      ) : (
-        <ul className="divide-y divide-mist border-y border-mist">
-          {addresses.map((a) => (
-            <li
-              key={a.id}
-              className="grid grid-cols-[1fr_auto] gap-3 py-3 items-start"
-            >
-              <div className="min-w-0">
-                {a.labelDe && (
-                  <div className="text-[0.68rem] tracking-[0.14em] uppercase text-sage font-medium">
-                    {a.labelDe}
-                  </div>
-                )}
-                <div className="text-[0.9rem] text-bark font-medium">
-                  {a.recipientName}
-                </div>
-                <div className="text-[0.82rem] text-bark/75">
-                  {a.street}, {a.plz} {a.city}
-                </div>
-                {a.phone && (
-                  <div className="text-[0.75rem] text-sage mt-0.5 tabular-nums">
-                    {a.phone}
-                  </div>
-                )}
-                {a.notes && (
-                  <div className="text-[0.72rem] text-sage/80 mt-1 italic">
-                    {a.notes}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => setState({ mode: "edit", id: a.id })}
-                  className="text-xs text-rose hover:underline"
-                >
-                  Bearbeiten
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(a.id)}
-                  disabled={isPending}
-                  className="text-xs text-sage hover:text-rose transition-colors disabled:opacity-50"
-                >
-                  Löschen
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <Field
+          label="Bezeichnung (optional)"
+          name="labelDe"
+          defaultValue={editing?.labelDe ?? ""}
+          placeholder="z. B. Büro, Oma, Partner"
+        />
+        <Field
+          label="Empfänger"
+          name="recipientName"
+          defaultValue={editing?.recipientName}
+          required
+          autoComplete="name"
+        />
+        <Field
+          label="Strasse"
+          name="street"
+          defaultValue={editing?.street}
+          required
+          autoComplete="street-address"
+        />
+        <div className="grid grid-cols-[100px_1fr] gap-4">
+          <Field
+            label="PLZ"
+            name="plz"
+            defaultValue={editing?.plz ?? ""}
+            required
+            inputMode="numeric"
+            pattern="\d{4}"
+            maxLength={4}
+            autoComplete="postal-code"
+          />
+          <Field
+            label="Ort"
+            name="city"
+            defaultValue={editing?.city}
+            required
+            autoComplete="address-level2"
+          />
+        </div>
+        <Field
+          label="Telefon (optional)"
+          name="phone"
+          type="tel"
+          defaultValue={editing?.phone ?? ""}
+          autoComplete="tel"
+        />
+        <Field
+          label="Hinweise (optional)"
+          name="notes"
+          defaultValue={editing?.notes ?? ""}
+          placeholder="z. B. Klingel geht nicht, bitte hinten lassen"
+        />
+
+        <button
+          type="submit"
+          disabled={isPending}
+          className="self-start inline-flex items-center gap-2 h-11 px-5 bg-rose text-ivory text-[14px] font-semibold hover:brightness-110 transition-[filter] disabled:opacity-50"
+        >
+          {isPending ? "Speichert…" : "Speichern"}
+        </button>
+      </form>
     </section>
   );
 }
@@ -236,10 +324,10 @@ function Field({
   maxLength?: number;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <label
         htmlFor={name}
-        className="block text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium"
+        className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage"
       >
         {label}
       </label>
@@ -254,7 +342,7 @@ function Field({
         inputMode={inputMode}
         pattern={pattern}
         maxLength={maxLength}
-        className="w-full border border-mist bg-ivory px-3 py-2.5 text-[0.95rem] text-bark focus:border-rose focus:ring-2 focus:ring-rose/15 focus:outline-none transition-colors"
+        className="w-full border border-[#E1D5C7] bg-ivory px-3 py-2.5 text-[15px] text-bark focus:border-rose focus:outline-none focus:ring-2 focus:ring-rose/15 transition-colors"
       />
     </div>
   );
