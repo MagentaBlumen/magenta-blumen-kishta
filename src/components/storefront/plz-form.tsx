@@ -18,14 +18,9 @@ import {
  *
  * "single" writes the whole (plz, ort, zid) to the cookie server-side
  * and the layout revalidation causes the server component above to
- * re-render with the resolved-zone card. This client component then
- * only lives for the "enter PLZ" phase.
+ * re-render with the resolved-zone card.
  */
-export function PlzForm({
-  initialPlz = "",
-}: {
-  initialPlz?: string;
-}) {
+export function PlzForm({ initialPlz = "" }: { initialPlz?: string }) {
   const [plz, setPlz] = useState(initialPlz);
   const [result, setResult] = useState<SubmitPlzResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +36,7 @@ export function PlzForm({
         setResult(r);
         if (r.kind === "none") {
           setError(
-            "Wir liefern leider nicht an diese Postleitzahl. Bitte kommen Sie im Laden vorbei oder rufen Sie uns an: 056 556 56 09.",
+            "Dorthin liefern wir leider nicht. Sie können Ihre Blumen aber in unserer Werkstatt in Neuenhof abholen. (056 556 56 09)",
           );
         }
       } catch (err) {
@@ -55,9 +50,6 @@ export function PlzForm({
     startTransition(async () => {
       try {
         await submitOrtschaftAction(plz, ortschaft);
-        // The server action revalidates the page; the parent server
-        // component will re-render with the resolved zone. No local
-        // state to clear - this component unmounts.
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unbekannter Fehler");
       }
@@ -65,9 +57,13 @@ export function PlzForm({
   }
 
   return (
-    <div className="space-y-5">
-      <form onSubmit={handleSubmit} className="flex gap-3">
+    <div className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2.5">
+        <label htmlFor="co-plz" className="sr-only">
+          Postleitzahl
+        </label>
         <input
+          id="co-plz"
           type="text"
           inputMode="numeric"
           pattern="[0-9]{4}"
@@ -75,50 +71,49 @@ export function PlzForm({
           required
           value={plz}
           onChange={(e) => setPlz(e.target.value.replace(/\D/g, "").slice(0, 4))}
-          placeholder="PLZ (z.B. 5432)"
+          placeholder="Postleitzahl, z. B. 5432"
           aria-label="Postleitzahl"
-          className="flex-1 h-[50px] px-4 border border-mist bg-ivory text-bark text-[0.95rem] focus:outline-none focus:border-bark tabular-nums"
+          className="flex-1 min-w-0 max-w-[300px] h-[52px] px-4 border border-[#B8916A] bg-ivory text-bark text-[17px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15 tabular-nums"
         />
         <button
           type="submit"
           disabled={isPending || plz.length !== 4}
-          className="h-[50px] px-8 bg-bark text-ivory text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="h-[52px] px-6 bg-bark text-ivory text-[15px] font-semibold hover:brightness-125 transition-[filter] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isPending ? "Prüfen ..." : "Prüfen"}
+          {isPending ? "Prüfen…" : "Prüfen"}
         </button>
       </form>
 
       {error && (
-        <p className="px-4 py-3 border border-rose/30 bg-rose/5 text-[0.85rem] text-bark leading-[1.55]">
-          {error}
-        </p>
+        <p className="m-0 text-[15px] text-[#8A2E1E] leading-[1.5]">{error}</p>
       )}
 
       {result?.kind === "picker" && (
-        <div className="space-y-3">
-          <p className="text-[0.85rem] text-bark leading-[1.55]">
-            Für die PLZ <span className="tabular-nums font-medium">{plz}</span>{" "}
-            gibt es zwei Ortschaften. Bitte wählen Sie die richtige aus:
+        <div className="flex flex-col gap-3">
+          <p className="m-0 text-[14px] text-sage leading-[1.5]">
+            Für die PLZ{" "}
+            <span className="tabular-nums font-semibold text-bark">{plz}</span>{" "}
+            gibt es mehrere Ortschaften. Bitte wählen Sie die richtige aus.
           </p>
-          <div className="grid gap-2">
+          <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]">
             {result.options.map((o) => (
               <button
                 key={o.ortschaft}
                 type="button"
                 onClick={() => handlePickOrtschaft(o.ortschaft)}
                 disabled={isPending}
-                className="text-left px-4 py-3 border border-mist hover:border-bark hover:bg-cream transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-left px-4 py-3.5 border border-[#E1D5C7] bg-white hover:border-[#B8916A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="flex justify-between items-baseline gap-4">
-                  <span className="text-[0.95rem] text-bark font-medium">
+                  <span className="text-[15px] font-semibold text-bark">
                     {o.ortschaft}
                   </span>
-                  <span className="text-[0.85rem] tabular-nums text-bark">
+                  <span className="text-[14px] tabular-nums text-bark">
                     {formatChf(o.feeGross)}
                   </span>
                 </div>
-                <div className="text-[0.72rem] text-sage mt-1">
-                  Zone {o.zoneNameDe} · Mindestbestellwert {formatChf(o.minOrderGross)}
+                <div className="text-[13px] text-sage mt-1">
+                  Zone {o.zoneNameDe} · Mindest {formatChf(o.minOrderGross)}
                 </div>
               </button>
             ))}

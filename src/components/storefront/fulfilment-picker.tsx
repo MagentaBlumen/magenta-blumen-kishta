@@ -3,12 +3,9 @@
 import { useTransition } from "react";
 import { selectFulfilmentAction } from "@/lib/checkout/actions";
 
-/**
- * Radio pair: van delivery vs timed (funeral / wedding / event).
- * Pickup is an intentional future addition - the user's plan for 5d
- * focuses on run + timed, both of which need capacity guarantees;
- * pickup has neither and can land later.
- */
+// Radio pair: van delivery vs timed (funeral / wedding / event).
+// Pickup is deliberately deferred — it needs no capacity guarantee and
+// can land later without affecting run/timed logic.
 export function FulfilmentPicker({
   value,
 }: {
@@ -24,61 +21,67 @@ export function FulfilmentPicker({
   }
 
   return (
-    <section className="space-y-3">
-      <p className="text-[0.68rem] tracking-[0.16em] uppercase text-bark font-medium">
-        Liefermethode
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <FulfilmentButton
-          isSelected={value === "run"}
-          isPending={isPending}
-          onClick={() => pick("run")}
-          title="Standardlieferung"
-          body="Zwei Zeitfenster täglich: 10.12 oder 16.18 Uhr. Auch am Sonntag."
-        />
-        <FulfilmentButton
-          isSelected={value === "timed"}
-          isPending={isPending}
-          onClick={() => pick("timed")}
-          title="Trauer- / Event-Lieferung"
-          body="Genauer Zeitpunkt (z.B. Beisetzung). Wir liefern ca. eine Stunde vor der Zeremonie."
-        />
-      </div>
-    </section>
+    <div
+      role="radiogroup"
+      aria-label="Liefermethode"
+      className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]"
+    >
+      <Tile
+        isSelected={value === "run"}
+        isPending={isPending}
+        onClick={() => pick("run")}
+        title="Standardlieferung"
+        sub="Zwei Zeitfenster täglich: 10–12 oder 16–18 Uhr. Auch am Sonntag."
+      />
+      <Tile
+        isSelected={value === "timed"}
+        isPending={isPending}
+        onClick={() => pick("timed")}
+        title="Trauer- oder Event-Lieferung"
+        sub="Genauer Zeitpunkt, z. B. vor einer Abdankung oder Feier."
+      />
+    </div>
   );
 }
 
-function FulfilmentButton({
+function Tile({
   isSelected,
   isPending,
   onClick,
   title,
-  body,
+  sub,
 }: {
   isSelected: boolean;
   isPending: boolean;
   onClick: () => void;
   title: string;
-  body: string;
+  sub: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={isPending}
-      aria-pressed={isSelected}
-      className={`text-left px-4 py-4 border transition-colors ${
+      role="radio"
+      aria-checked={isSelected}
+      className={`text-left h-full px-4 py-[15px] border bg-white flex gap-3.5 items-start transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
         isSelected
-          ? "border-bark bg-bark text-ivory"
-          : "border-mist bg-ivory text-bark hover:border-bark"
-      } disabled:opacity-50 disabled:cursor-not-allowed`}
+          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
+          : "border-[#E1D5C7] hover:border-[#B8916A]"
+      }`}
     >
-      <div className={`text-[0.85rem] font-medium ${isSelected ? "text-ivory" : "text-bark"}`}>
-        {title}
-      </div>
-      <p className={`text-[0.75rem] mt-1 leading-[1.55] ${isSelected ? "text-cream/80" : "text-sage"}`}>
-        {body}
-      </p>
+      <span
+        aria-hidden
+        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
+          isSelected
+            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
+            : "border-[1.5px] border-[#B8916A]"
+        }`}
+      />
+      <span className="flex flex-col gap-1 min-w-0">
+        <span className="text-[15px] font-semibold text-bark">{title}</span>
+        <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
+      </span>
     </button>
   );
 }

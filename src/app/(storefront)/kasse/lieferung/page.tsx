@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CheckoutProgress } from "@/components/storefront/checkout-progress";
 import { FulfilmentPicker } from "@/components/storefront/fulfilment-picker";
 import { PlzForm } from "@/components/storefront/plz-form";
 import { ResetCheckoutButton } from "@/components/storefront/reset-checkout-button";
@@ -10,10 +11,15 @@ import { readCheckoutCookie } from "@/lib/checkout/cookie";
 import {
   getAvailableRunSlots,
   getAvailableTimedSlots,
+  type RunSlotDay,
+  type TimedSlotDay,
 } from "@/lib/checkout/slots";
 import { lookupPlz, resolveZoneByPlzOrtschaft } from "@/lib/checkout/zones";
 import { hydrateCart } from "@/lib/cart/hydrate";
+import { thumbUrl } from "@/lib/image-urls";
 import { formatChf } from "@/lib/money";
+import type { CheckoutCookie, ResolvedZone } from "@/lib/checkout/types";
+import type { HydratedCart } from "@/lib/cart/types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +28,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/**
- * Checkout step 1: PLZ resolution.
- *
- * Empty cart -> back to /warenkorb (nothing to check out).
- * No PLZ yet -> PLZ input.
- * PLZ set but ambiguous (5415) and no Ortschaft -> re-render the picker
- *   from a fresh lookup, so a reload doesn't lose the customer's spot.
- * Zone resolved -> show the resolved-zone card + slot-picker placeholder
- *   (5d-part-2 lands the slot picker once Luxon is approved).
- */
+// Checkout step 1: PLZ resolution + slot pick.
+//
+// Empty cart -> back to /warenkorb.
+// No PLZ -> PLZ input.
+// PLZ set but ambiguous (5415) and no Ortschaft -> picker.
+// Zone resolved -> resolved card + fulfilment radio + slot picker.
 export default async function KasseLieferungPage() {
   const cart = await hydrateCart();
   if (cart.lines.length === 0) {
@@ -40,287 +42,426 @@ export default async function KasseLieferungPage() {
 
   const checkout = await readCheckoutCookie();
 
-  // Resolve current state into one of three view modes.
   let mode: "enter-plz" | "pick-ortschaft" | "zone-resolved";
   let pickerOptions: Awaited<ReturnType<typeof lookupPlz>> | null = null;
-  let resolvedZone: Awaited<
-    ReturnType<typeof resolveZoneByPlzOrtschaft>
-  > | null = null;
+  let resolvedZone: ResolvedZone | null = null;
 
   if (checkout.plz && checkout.ort && checkout.zid) {
-    // Re-fetch the zone so a stale zid (zone renamed / fee changed)
-    // shows current data. Cheap query, cached upstream in practice.
     resolvedZone = await resolveZoneByPlzOrtschaft(checkout.plz, checkout.ort);
-    if (!resolvedZone) {
-      // Cookie references something that no longer exists - start over.
-      mode = "enter-plz";
-    } else {
-      mode = "zone-resolved";
-    }
+    mode = resolvedZone ? "zone-resolved" : "enter-plz";
   } else if (checkout.plz) {
-    // PLZ typed but Ortschaft not chosen yet - re-render the picker.
     pickerOptions = await lookupPlz(checkout.plz);
-    if (pickerOptions.kind !== "picker") {
-      // Shouldn't happen (submit action would have committed a single),
-      // but degrade gracefully.
-      mode = "enter-plz";
-    } else {
-      mode = "pick-ortschaft";
-    }
+    mode = pickerOptions.kind === "picker" ? "pick-ortschaft" : "enter-plz";
   } else {
     mode = "enter-plz";
   }
 
+  const runSlotDays =
+    mode === "zone-resolved" && checkout.ful === "run"
+      ? await getAvailableRunSlots()
+      : null;
+  const timedSlotDays =
+    mode === "zone-resolved" && checkout.ful === "timed"
+      ? await getAvailableTimedSlots()
+      : null;
+
+  const slotChosen = isSlotChosen(checkout);
+
   return (
-    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-10 lg:py-14">
-      <CheckoutStepHeader step={1} />
+    <main className="max-w-[1200px] mx-auto px-4 lg:px-8 py-8 lg:py-10 pb-24 flex flex-col gap-8">
+      <CheckoutProgress current="lieferung" />
 
-      <div className="mt-10 space-y-8">
-        {mode === "enter-plz" && <EnterPlzBlock />}
+      <div className="flex flex-col gap-2.5">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
+          Kasse
+        </p>
+        <h1 className="m-0 font-display font-light text-bark text-[clamp(36px,4vw,52px)] leading-[1.05] tracking-[-0.025em]">
+          Wohin und <em className="italic text-rose">wann?</em>
+        </h1>
+      </div>
 
-        {mode === "pick-ortschaft" &&
-          pickerOptions?.kind === "picker" && (
-            <PickOrtschaftBlock
-              plz={checkout.plz!}
-              options={pickerOptions.options}
-            />
+      <div className="flex flex-col lg:flex-row flex-wrap gap-10 lg:gap-14 items-start">
+        <div className="w-full lg:flex-[7_1_520px] min-w-0 flex flex-col gap-4">
+          <Box
+            number={1}
+            title="Wohin geht die Lieferung?"
+            hint="Wir liefern selbst – in 27 Postleitzahlen im Aargau."
+          >
+            {mode === "enter-plz" && <PlzForm />}
+            {mode === "pick-ortschaft" &&
+              pickerOptions?.kind === "picker" && (
+                <PlzForm initialPlz={checkout.plz!} />
+              )}
+            {mode === "zone-resolved" && resolvedZone && (
+              <ResolvedZoneBody
+                zone={resolvedZone}
+                cartSubtotalGross={cart.subtotalGross}
+              />
+            )}
+          </Box>
+
+          {mode === "zone-resolved" && resolvedZone && (
+            <Box
+              number={2}
+              title="Wann sollen die Blumen ankommen?"
+              hint="Zuerst die Lieferart wählen, dann das Zeitfenster."
+            >
+              <FulfilmentPicker
+                value={checkout.ful === "pickup" ? undefined : checkout.ful}
+              />
+              {checkout.ful === "run" && runSlotDays && (
+                <SlotSection
+                  label="Verfügbare Termine"
+                  description="Zwei Touren täglich mit unserem eigenen Van. Cutoff 3 Stunden vor Beginn (dienstags 24 Stunden)."
+                >
+                  <RunSlotPicker
+                    days={runSlotDays}
+                    selectedRunId={checkout.rid}
+                  />
+                </SlotSection>
+              )}
+              {checkout.ful === "timed" && timedSlotDays && (
+                <SlotSection
+                  label="Zeitpunkt wählen"
+                  description="Für Abdankungen, Hochzeiten und Anlässe mit fester Uhrzeit. Wir liefern rechtzeitig vor dem Termin."
+                >
+                  <TimedSlotPicker
+                    days={timedSlotDays}
+                    selectedIso={checkout.rda}
+                  />
+                </SlotSection>
+              )}
+            </Box>
           )}
 
-        {mode === "zone-resolved" && resolvedZone && (
-          <>
-            <ResolvedZoneCard
-              plz={resolvedZone.plz}
-              ortschaft={resolvedZone.ortschaft}
-              zoneNameDe={resolvedZone.zoneNameDe}
-              feeGross={resolvedZone.feeGross}
-              minOrderGross={resolvedZone.minOrderGross}
-              freeOverGross={resolvedZone.freeOverGross}
-              cartSubtotalGross={cart.subtotalGross}
-            />
-
-            <FulfilmentPicker value={checkout.ful === "pickup" ? undefined : checkout.ful} />
-
-            {checkout.ful === "run" && <RunSlotSection selectedRunId={checkout.rid} />}
-            {checkout.ful === "timed" && (
-              <TimedSlotSection selectedIso={checkout.rda} />
-            )}
-
-            {/* Continue button appears once a slot is chosen; the next
-                step collects buyer + recipient details. */}
-            {isSlotChosen(checkout) && (
-              <div className="pt-2">
-                <Link
-                  href="/kasse/lieferdaten"
-                  className="block text-center h-[52px] leading-[52px] bg-rose text-ivory text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-[#831249] transition-colors"
+          <div className="flex flex-col gap-3.5 pt-2">
+            {slotChosen && (
+              <Link
+                href="/kasse/lieferdaten"
+                className="flex items-center justify-center gap-2.5 h-14 bg-rose text-ivory text-[16px] font-semibold tracking-[0.02em] hover:brightness-110 transition-[filter]"
+              >
+                Weiter zu Ihren Angaben
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden
                 >
-                  Weiter zu Ihren Daten
-                </Link>
-              </div>
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </Link>
             )}
-          </>
-        )}
-      </div>
+            <Link
+              href="/warenkorb"
+              className="self-start inline-flex items-center gap-2 text-[14px] font-semibold text-bark hover:text-rose transition-colors"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden
+              >
+                <path d="M19 12H5M11 18l-6-6 6-6" />
+              </svg>
+              Zurück zum Warenkorb
+            </Link>
+          </div>
+        </div>
 
-      <div className="mt-10 flex items-center justify-between">
-        <Link
-          href="/warenkorb"
-          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
-        >
-          ← Zurück zum Warenkorb
-        </Link>
+        <KasseSummary cart={cart} zone={resolvedZone} checkout={checkout} />
       </div>
-    </div>
+    </main>
   );
 }
 
-function isSlotChosen(c: Awaited<ReturnType<typeof readCheckoutCookie>>): boolean {
+function isSlotChosen(c: CheckoutCookie): boolean {
   if (c.ful === "run") return c.rid !== undefined;
   if (c.ful === "timed") return c.rda !== undefined;
   return false;
 }
 
-async function RunSlotSection({ selectedRunId }: { selectedRunId: number | undefined }) {
-  const days = await getAvailableRunSlots();
-  return (
-    <section className="space-y-3">
-      <p className="text-[0.68rem] tracking-[0.16em] uppercase text-bark font-medium">
-        Verfügbare Termine
-      </p>
-      <RunSlotPicker days={days} selectedRunId={selectedRunId} />
-    </section>
-  );
-}
-
-async function TimedSlotSection({ selectedIso }: { selectedIso: string | undefined }) {
-  const days = await getAvailableTimedSlots();
-  return (
-    <section className="space-y-3">
-      <p className="text-[0.68rem] tracking-[0.16em] uppercase text-bark font-medium">
-        Zeitpunkt wählen
-      </p>
-      <TimedSlotPicker days={days} selectedIso={selectedIso} />
-    </section>
-  );
-}
-
-// ------------------------------------------------------------------
-
-function CheckoutStepHeader({ step }: { step: 1 | 2 | 3 }) {
-  const steps = [
-    { n: 1, label: "Lieferung" },
-    { n: 2, label: "Ihre Daten" },
-    { n: 3, label: "Bestätigen" },
-  ];
-  return (
-    <>
-      <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium mb-2">
-        Kasse . Schritt {step} von 3
-      </p>
-      <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
-        Wohin dürfen wir liefern?
-      </h1>
-      <ol className="mt-6 flex gap-4 text-[0.72rem] tracking-[0.1em] uppercase font-medium">
-        {steps.map((s) => (
-          <li
-            key={s.n}
-            className={`flex items-center gap-2 ${s.n === step ? "text-bark" : "text-sage"}`}
-          >
-            <span
-              className={`inline-flex items-center justify-center w-6 h-6 border ${s.n === step ? "border-bark bg-bark text-ivory" : "border-mist text-sage"}`}
-            >
-              {s.n}
-            </span>
-            <span>{s.label}</span>
-          </li>
-        ))}
-      </ol>
-    </>
-  );
-}
-
-function EnterPlzBlock() {
-  return (
-    <section className="space-y-5">
-      <p className="text-[0.9rem] text-bark leading-[1.7]">
-        Wir liefern in 27 Postleitzahlen im Aargau (und einigen angrenzenden
-        Zürcher Gemeinden) mit unserem eigenen Van. Bitte prüfen Sie zuerst,
-        ob Ihre PLZ dabei ist.
-      </p>
-      <PlzForm />
-    </section>
-  );
-}
-
-function PickOrtschaftBlock({
-  plz,
-  options,
+function Box({
+  number,
+  title,
+  hint,
+  children,
 }: {
-  plz: string;
-  options: {
-    ortschaft: string;
-    zoneNameDe: string;
-    feeGross: string;
-    minOrderGross: string;
-  }[];
+  number: number;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-5">
-      <p className="text-[0.9rem] text-bark leading-[1.7]">
-        Für die PLZ <span className="tabular-nums font-medium">{plz}</span> gibt
-        es mehrere Ortschaften mit unterschiedlichen Preisen. Bitte wählen Sie
-        die richtige aus.
-      </p>
-      {/* The PlzForm client component handles the picker interaction
-          when it's mounted right after a submit. On a reload we render
-          the picker as a fresh PlzForm with initialPlz so the customer
-          doesn't lose their spot. */}
-      <PlzForm initialPlz={plz} />
-      {/* Hint list for reloads - the client picker only appears after
-          submit; showing options inline as read-only lets someone with
-          a stale page still see what they're picking between. */}
-      <details className="text-[0.8rem] text-sage">
-        <summary className="cursor-pointer hover:text-bark">
-          Verfügbare Ortschaften anzeigen
-        </summary>
-        <ul className="mt-2 space-y-1 pl-4 list-disc">
-          {options.map((o) => (
-            <li key={o.ortschaft}>
-              {o.ortschaft} . {formatChf(o.feeGross)} . Mindestbestellwert{" "}
-              {formatChf(o.minOrderGross)}
-            </li>
-          ))}
-        </ul>
-      </details>
+    <section className="border border-[#E1D5C7] bg-ivory p-6 lg:p-7 flex flex-col gap-5">
+      <div className="flex gap-3.5 items-start">
+        <span
+          aria-hidden
+          className="w-7 h-7 mt-0.5 bg-bark text-ivory grid place-items-center font-display text-[15px] shrink-0"
+        >
+          {number}
+        </span>
+        <div className="flex flex-col gap-1">
+          <h2 className="m-0 font-display font-normal text-[22px] lg:text-[24px] leading-[1.2] text-bark">
+            {title}
+          </h2>
+          {hint && (
+            <p className="m-0 text-[14px] leading-[1.5] text-sage">{hint}</p>
+          )}
+        </div>
+      </div>
+      <div className="pt-5 border-t border-[#E6DDD2] flex flex-col gap-4">
+        {children}
+      </div>
     </section>
   );
 }
 
-function ResolvedZoneCard({
-  plz,
-  ortschaft,
-  zoneNameDe,
-  feeGross,
-  minOrderGross,
-  freeOverGross,
+function SlotSection({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <p className="m-0 text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
+        {label}
+      </p>
+      {children}
+      <p className="m-0 text-[12px] leading-[1.5] text-sage">{description}</p>
+    </section>
+  );
+}
+
+function ResolvedZoneBody({
+  zone,
   cartSubtotalGross,
 }: {
-  plz: string;
-  ortschaft: string;
-  zoneNameDe: string;
-  feeGross: string;
-  minOrderGross: string;
-  freeOverGross: string | null;
+  zone: ResolvedZone;
   cartSubtotalGross: string;
 }) {
   const subtotalNum = Number(cartSubtotalGross);
-  const minNum = Number(minOrderGross);
-  const freeNum = freeOverGross != null ? Number(freeOverGross) : null;
+  const minNum = Number(zone.minOrderGross);
+  const freeNum = zone.freeOverGross != null ? Number(zone.freeOverGross) : null;
   const belowMin = subtotalNum < minNum;
-  const qualifiesFreeDelivery = freeNum != null && subtotalNum >= freeNum;
+  const qualifiesFree = freeNum != null && subtotalNum >= freeNum;
 
   return (
-    <section className="border border-mist bg-cream p-6 space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[0.68rem] tracking-[0.16em] uppercase text-sage font-medium mb-1">
-            Ihre Lieferadresse
-          </p>
-          <p className="font-display text-[1.3rem] text-bark leading-tight">
-            {plz} {ortschaft}
-          </p>
-          <p className="text-[0.78rem] text-sage mt-1">Zone {zoneNameDe}</p>
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="w-[22px] h-[22px] bg-[#2F7A45] text-ivory grid place-items-center text-[12px] font-bold shrink-0"
+          >
+            ✓
+          </span>
+          <div>
+            <p className="m-0 text-[15px] leading-[1.4] text-bark">
+              Wir liefern nach{" "}
+              <strong className="font-semibold">
+                {zone.plz} {zone.ortschaft}
+              </strong>{" "}
+              –{" "}
+              <span>
+                {qualifiesFree
+                  ? "die Lieferung ist gratis."
+                  : `die Lieferung kostet ${formatChf(zone.feeGross)}.`}
+              </span>
+            </p>
+            <p className="m-0 text-[13px] text-sage mt-0.5">
+              Zone {zone.zoneNameDe}
+            </p>
+          </div>
         </div>
         <ResetCheckoutButton label="PLZ ändern" />
       </div>
 
-      <dl className="grid gap-2 text-[0.85rem] pt-3 border-t border-mist">
-        <div className="flex justify-between">
-          <dt className="text-sage">Lieferung</dt>
-          <dd className="text-bark tabular-nums font-medium">
-            {qualifiesFreeDelivery ? "gratis" : formatChf(feeGross)}
-          </dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-sage">Mindestbestellwert</dt>
-          <dd className="text-bark tabular-nums">{formatChf(minOrderGross)}</dd>
-        </div>
-        {freeOverGross && (
-          <div className="flex justify-between text-[0.78rem]">
-            <dt className="text-sage">Gratis-Lieferung ab</dt>
-            <dd className="text-sage tabular-nums">
-              {formatChf(freeOverGross)}
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[13px] pt-3 border-t border-[#E6DDD2]">
+        <dt className="text-sage">Mindestbestellwert</dt>
+        <dd className="m-0 text-bark tabular-nums text-right">
+          {formatChf(zone.minOrderGross)}
+        </dd>
+        {zone.freeOverGross && (
+          <>
+            <dt className="text-sage">Gratis ab</dt>
+            <dd className="m-0 text-bark tabular-nums text-right">
+              {formatChf(zone.freeOverGross)}
             </dd>
-          </div>
+          </>
         )}
       </dl>
 
       {belowMin && (
-        <p className="px-3 py-2 bg-rose/10 border border-rose/30 text-[0.8rem] text-bark leading-[1.55]">
+        <p className="m-0 px-3 py-2 bg-rose/10 border border-rose/30 text-[13px] text-bark leading-[1.5]">
           Ihre Zwischensumme ({formatChf(cartSubtotalGross)}) liegt unter dem
-          Mindestbestellwert dieser Zone ({formatChf(minOrderGross)}). Bitte
-          erhöhen Sie den Bestellwert oder wählen Sie eine andere Zone.
+          Mindestbestellwert dieser Zone ({formatChf(zone.minOrderGross)}).
+          Bitte erhöhen Sie den Bestellwert oder wählen Sie eine andere Zone.
         </p>
       )}
-    </section>
+    </div>
   );
 }
+
+function KasseSummary({
+  cart,
+  zone,
+  checkout,
+}: {
+  cart: HydratedCart;
+  zone: ResolvedZone | null;
+  checkout: CheckoutCookie;
+}) {
+  const subtotalNum = Number(cart.subtotalGross);
+  const freeNum = zone?.freeOverGross != null ? Number(zone.freeOverGross) : null;
+  const qualifiesFree = zone != null && freeNum != null && subtotalNum >= freeNum;
+  const feeNum = zone == null ? null : qualifiesFree ? 0 : Number(zone.feeGross);
+  const totalNum = zone == null ? subtotalNum : subtotalNum + (feeNum ?? 0);
+
+  const whenText = slotWhenText(checkout);
+  const placeText = zone ? `${zone.plz} ${zone.ortschaft}` : null;
+
+  return (
+    <aside
+      aria-label="Ihre Bestellung"
+      className="w-full lg:flex-[4_1_320px] min-w-0 lg:sticky lg:top-6"
+    >
+      <div className="mb-wood p-6 lg:p-7 flex flex-col gap-4">
+        <div className="flex justify-between items-baseline gap-3">
+          <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-[#EBDDC9]">
+            Ihre Bestellung
+          </p>
+          <Link
+            href="/warenkorb"
+            className="text-[12px] underline text-[#EBDDC9] hover:text-ivory transition-colors"
+          >
+            Bearbeiten
+          </Link>
+        </div>
+
+        <ul className="m-0 p-0 list-none flex flex-col gap-3">
+          {cart.lines.map((l) => (
+            <li
+              key={`${l.productId}:${l.variantId}`}
+              className="flex items-center gap-3"
+            >
+              {l.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbUrl(l.imageUrl)}
+                  alt=""
+                  className="w-11 h-[54px] object-cover shrink-0"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-11 h-[54px] bg-ivory/15 shrink-0" />
+              )}
+              <span className="flex-1 min-w-0 flex flex-col gap-0.5 text-[14px]">
+                <span className="truncate">{l.productNameDe}</span>
+                <span className="text-[12px] text-[#D9C4A8]">
+                  {l.qty} × {l.variantLabelDe ?? "Standard"}
+                </span>
+              </span>
+              <span className="text-[14px] tabular-nums whitespace-nowrap">
+                {formatChf(l.lineTotalGross)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="pt-4 border-t border-white/20 flex flex-col gap-1.5">
+          <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-[#EBDDC9] inline-flex items-center gap-2">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M2 7h11v9H2z" />
+              <path d="M13 10h4l3 3v3h-7z" />
+              <circle cx="6" cy="18" r="2" />
+              <circle cx="17" cy="18" r="2" />
+            </svg>
+            Lieferung
+          </p>
+          <span className="text-[14px] text-ivory">
+            {whenText ?? "Tag noch offen"}
+          </span>
+          <span className="text-[14px] text-[#EBDDC9]">
+            {placeText ?? "Postleitzahl noch offen"}
+          </span>
+        </div>
+
+        <dl className="m-0 pt-4 border-t border-white/20 flex flex-col gap-2.5 text-[14px]">
+          <div className="flex justify-between gap-3">
+            <dt className="text-[#EBDDC9]">Zwischensumme</dt>
+            <dd className="m-0 tabular-nums">
+              {formatChf(cart.subtotalGross)}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-[#EBDDC9]">Lieferung</dt>
+            <dd
+              className={`m-0 ${
+                qualifiesFree ? "text-[#9BE3A8] font-semibold" : "tabular-nums"
+              }`}
+            >
+              {zone == null
+                ? "nach PLZ"
+                : qualifiesFree
+                  ? "Gratis"
+                  : formatChf((feeNum ?? 0).toFixed(2))}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="flex justify-between items-baseline gap-3 pt-4 border-t border-white/20">
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-[15px] font-semibold">Total</strong>
+            <span className="text-[12px] text-[#D9C4A8]">inkl. MwSt.</span>
+          </span>
+          <span className="font-display text-[32px] leading-none whitespace-nowrap tabular-nums">
+            {formatChf(totalNum.toFixed(2))}
+          </span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+// Builds the human-readable "when" line from the checkout cookie for
+// the summary slab. Returns null when nothing is chosen yet.
+function slotWhenText(c: CheckoutCookie): string | null {
+  if (c.ful === "run" && c.rid) {
+    // We don't have the run_date on the cookie; a full render would
+    // join on delivery_run. For now the resolved summary just signals
+    // "Zeitfenster gewählt" and the full "Montag, 16. November ·
+    // 10–12 Uhr" line lands on the bestaetigen page.
+    return "Zeitfenster gewählt";
+  }
+  if (c.ful === "timed" && c.rda) {
+    // ISO string — crude label without pulling Luxon into a server
+    // helper. Final formatting happens on bestaetigen.
+    return c.rda.slice(0, 10);
+  }
+  return null;
+}
+
+// Keep the helper exports around for the slot section typing
+export type { RunSlotDay, TimedSlotDay };
