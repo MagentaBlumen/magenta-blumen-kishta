@@ -8,6 +8,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import type { Appearance } from "@stripe/stripe-js";
+import { CoTile } from "@/components/storefront/co-tile";
 import { reserveOrderAction } from "@/lib/checkout/actions";
 import { getStripe } from "@/lib/checkout/stripe-browser";
 
@@ -95,25 +96,25 @@ export function BestaetigenForm() {
         aria-label="Zahlungsart"
         className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]"
       >
-        <MethodTile
+        <PayTile
           selected={method === "card"}
           onClick={() => setMethod("card")}
           title="Karte"
           sub="Visa, Mastercard, American Express – sicher über Stripe."
         />
-        <MethodTile
+        <PayTile
           selected={method === "twint"}
           onClick={() => setMethod("twint")}
           title="TWINT"
           sub="Mit der TWINT-App auf Ihrem Handy."
         />
-        <MethodTile
+        <PayTile
           selected={method === "invoice"}
           onClick={() => setMethod("invoice")}
           title="Rechnung"
           sub="Per E-Mail, zahlbar innert 30 Tagen."
         />
-        <MethodTile
+        <PayTile
           selected={method === "cash"}
           onClick={() => setMethod("cash")}
           title="Barzahlung"
@@ -218,7 +219,7 @@ function StripeConfirmPanel({
   );
 }
 
-function MethodTile({
+function PayTile({
   selected,
   onClick,
   title,
@@ -230,30 +231,10 @@ function MethodTile({
   sub: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      role="radio"
-      aria-checked={selected}
-      className={`text-left h-full px-4 py-[15px] bg-white border flex gap-3.5 items-start transition-colors ${
-        selected
-          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
-          : "border-[#E1D5C7] hover:border-[#B8916A]"
-      }`}
-    >
-      <span
-        aria-hidden
-        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
-          selected
-            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
-            : "border-[1.5px] border-[#B8916A]"
-        }`}
-      />
-      <span className="flex flex-col gap-1 min-w-0">
-        <span className="text-[15px] font-semibold text-bark">{title}</span>
-        <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
-      </span>
-    </button>
+    <CoTile selected={selected} onClick={onClick}>
+      <span className="text-[15px] font-semibold text-bark">{title}</span>
+      <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
+    </CoTile>
   );
 }
 

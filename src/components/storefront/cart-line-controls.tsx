@@ -41,7 +41,7 @@ export function CartLineControls({
       <div
         role="group"
         aria-label="Menge"
-        className="flex items-center border border-[#E1D5C7] h-10"
+        className="flex items-center border border-mist h-10"
       >
         <button
           type="button"

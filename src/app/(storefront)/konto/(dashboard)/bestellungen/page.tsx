@@ -24,7 +24,7 @@ export default async function KontoOrders() {
       {orders.length === 0 ? (
         <EmptyOrders />
       ) : (
-        <div className="border border-[#E1D5C7] divide-y divide-[#E6DDD2]">
+        <div className="border border-mist divide-y divide-hair">
           {orders.map((o) => (
             <OrderRow key={o.orderNumber} order={o} />
           ))}
@@ -84,7 +84,7 @@ function StatusChip({ status }: { status: CustomerOrderRow["status"] }) {
 
 function EmptyOrders() {
   return (
-    <div className="border border-dashed border-[#B8916A] p-10 text-center flex flex-col gap-4 items-center">
+    <div className="border border-dashed border-oak p-10 text-center flex flex-col gap-4 items-center">
       <p className="text-[15px] text-bark m-0">
         Noch keine Bestellungen auf diesem Konto.
       </p>

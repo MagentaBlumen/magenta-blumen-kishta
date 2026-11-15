@@ -194,7 +194,7 @@ function ReviewRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap gap-4 py-4 border-t border-[#E6DDD2] first:border-t-0 first:pt-0">
+    <div className="flex flex-wrap gap-4 py-4 border-t border-hair first:border-t-0 first:pt-0">
       <span className="w-[120px] shrink-0 pt-0.5 text-[12px] font-semibold tracking-[0.1em] uppercase text-sage">
         {label}
       </span>

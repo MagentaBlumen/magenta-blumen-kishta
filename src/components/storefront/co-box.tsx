@@ -13,7 +13,7 @@ export function CoBox({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-[#E1D5C7] bg-ivory p-6 lg:p-7 flex flex-col gap-5">
+    <section className="border border-mist bg-ivory p-6 lg:p-7 flex flex-col gap-5">
       <div className="flex gap-3.5 items-start">
         <span
           aria-hidden
@@ -30,7 +30,7 @@ export function CoBox({
           )}
         </div>
       </div>
-      <div className="pt-5 border-t border-[#E6DDD2] flex flex-col gap-4">
+      <div className="pt-5 border-t border-hair flex flex-col gap-4">
         {children}
       </div>
     </section>

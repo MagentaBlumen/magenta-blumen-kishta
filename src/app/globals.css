@@ -56,8 +56,12 @@
   --color-rose: #A3165F;
   --color-charcoal: #1A0F08;
   --color-mist: #E1D5C7;
+  --color-hair: #E6DDD2;
   --color-walnut: #3A2719;
-  --color-oak: #A67C52;
+  /* Oak: warm mid-brown used for radio-dot borders, calendar outlines,
+     and dashed-add-card accents. Was #A67C52 pre-redesign; lifted to
+     the mockup's #B8916A which reads better against the ivory base. */
+  --color-oak: #B8916A;
 
   /* shadcn semantic aliases - existing components (Button, Input, Card,
      Badge, Table) reference these. Mapped to the palette above. */

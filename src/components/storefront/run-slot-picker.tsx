@@ -138,7 +138,7 @@ export function RunSlotPicker({
   return (
     <div className="space-y-3">
       {error && (
-        <p className="px-4 py-3 border border-rose/30 bg-rose/5 text-[0.85rem] text-bark">
+        <p className="px-4 py-3 border border-rose/40 bg-rose/5 text-[0.85rem] text-bark">
           {error}
         </p>
       )}
@@ -154,7 +154,7 @@ export function RunSlotPicker({
             aria-expanded={calendarOpen}
             aria-haspopup="dialog"
             onClick={() => setCalendarOpen((o) => !o)}
-            className={`w-full h-[46px] px-3 border bg-ivory text-[0.9rem] text-left flex items-center justify-between transition-colors ${
+            className={`w-full h-[52px] px-3 border bg-ivory text-[0.9rem] text-left flex items-center justify-between transition-colors ${
               calendarOpen ? "border-bark" : "border-mist hover:border-bark"
             } ${pickedDate ? "text-bark" : "text-sage"}`}
           >
@@ -200,7 +200,7 @@ export function RunSlotPicker({
                       onClick={() => handleWindowPick(s.runId)}
                       disabled={isPending}
                       aria-pressed={isSelected}
-                      className={`h-[46px] px-4 text-[0.78rem] tracking-[0.06em] font-medium border transition-colors ${
+                      className={`h-[52px] px-4 text-[0.78rem] tracking-[0.06em] font-medium border transition-colors ${
                         isSelected
                           ? "border-rose bg-rose text-ivory"
                           : "border-mist text-bark hover:border-bark hover:bg-cream"
@@ -213,7 +213,7 @@ export function RunSlotPicker({
               )}
             </div>
           ) : (
-            <div className="h-[46px] flex items-center px-3 border border-dashed border-mist text-[0.8rem] text-sage">
+            <div className="h-[52px] flex items-center px-3 border border-dashed border-mist text-[0.8rem] text-sage">
               Zuerst Datum wählen.
             </div>
           )}

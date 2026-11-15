@@ -250,7 +250,7 @@ function ResolvedZoneBody({
         <ResetCheckoutButton label="PLZ ändern" />
       </div>
 
-      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[13px] pt-3 border-t border-[#E6DDD2]">
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[13px] pt-3 border-t border-hair">
         <dt className="text-sage">Mindestbestellwert</dt>
         <dd className="m-0 text-bark tabular-nums text-right">
           {formatChf(zone.minOrderGross)}

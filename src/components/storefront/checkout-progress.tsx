@@ -24,7 +24,7 @@ export function CheckoutProgress({ current }: { current: CheckoutStep }) {
             <li
               key={`sep-${step.key}`}
               aria-hidden
-              className="w-10 h-px bg-[#E1D5C7]"
+              className="w-10 h-px bg-mist"
             />,
           );
         }
@@ -40,7 +40,7 @@ export function CheckoutProgress({ current }: { current: CheckoutStep }) {
               className={`w-6 h-6 grid place-items-center text-[12px] ${
                 isActive
                   ? "bg-rose border border-rose text-ivory"
-                  : "border border-[#E1D5C7]"
+                  : "border border-mist"
               }`}
             >
               {i + 1}

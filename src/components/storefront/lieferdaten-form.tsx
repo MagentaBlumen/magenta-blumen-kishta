@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { CoBox } from "@/components/storefront/co-box";
+import { CoTile } from "@/components/storefront/co-tile";
 import { submitDetailsAction } from "@/lib/checkout/actions";
 import type { CustomerAddressRow } from "@/lib/customer-auth/addresses";
 import type {
@@ -118,7 +119,7 @@ export function LieferdatenForm({
         {!forSelf &&
           savedAddresses.length === 0 &&
           totalSavedCount > 0 && (
-            <p className="m-0 px-3 py-2.5 bg-cream border border-[#E6DDD2] text-[13px] text-sage leading-[1.5]">
+            <p className="m-0 px-3 py-2.5 bg-cream border border-hair text-[13px] text-sage leading-[1.5]">
               Sie haben {totalSavedCount}{" "}
               {totalSavedCount === 1
                 ? "gespeicherte Adresse"
@@ -297,7 +298,7 @@ export function LieferdatenForm({
             defaultValue={defaults.cm}
             onInput={(e) => setCardLen(e.currentTarget.value.length)}
             placeholder="Ihre Nachricht"
-            className="w-full px-4 py-3.5 border border-[#E1D5C7] bg-cream text-bark font-display italic text-[17px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+            className="w-full px-4 py-3.5 border border-mist bg-cream text-bark font-display italic text-[17px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
           />
           <span className="self-end text-[12px] text-sage tabular-nums">
             {cardLen} / 200
@@ -346,7 +347,7 @@ export function LieferdatenForm({
             maxLength={500}
             defaultValue={defaults.di}
             placeholder="z. B. beim Nachbarn abgeben, Code am Eingang"
-            className="w-full px-4 py-3 border border-[#E1D5C7] bg-ivory text-bark text-[15px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+            className="w-full px-4 py-3 border border-mist bg-ivory text-bark text-[15px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
           />
         </div>
       </CoBox>
@@ -476,7 +477,7 @@ function Field({
         defaultValue={defaultValue ?? ""}
         autoComplete={autoComplete}
         placeholder={placeholder}
-        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+        className="w-full h-[52px] px-3.5 border border-mist bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
       />
       {hint && <span className="text-[12px] text-sage">{hint}</span>}
     </div>
@@ -528,7 +529,7 @@ function ControlledField({
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
         placeholder={placeholder}
-        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+        className="w-full h-[52px] px-3.5 border border-mist bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
       />
       {hint && <span className="text-[12px] text-sage">{hint}</span>}
     </div>
@@ -545,42 +546,22 @@ function SavedAddressTile({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      role="radio"
-      aria-checked={selected}
-      className={`text-left h-full px-4 py-3 bg-white border flex gap-3 items-start transition-colors ${
-        selected
-          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
-          : "border-[#E1D5C7] hover:border-[#B8916A]"
-      }`}
-    >
-      <span
-        aria-hidden
-        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
-          selected
-            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
-            : "border-[1.5px] border-[#B8916A]"
-        }`}
-      />
-      <span className="flex flex-col gap-0.5 min-w-0">
-        {address.labelDe && (
-          <span className="text-[11px] font-semibold tracking-[0.14em] uppercase text-sage">
-            {address.labelDe}
-          </span>
-        )}
-        <span className="font-display text-[17px] leading-[1.2] text-bark truncate">
-          {address.recipientName}
+    <CoTile selected={selected} onClick={onSelect}>
+      {address.labelDe && (
+        <span className="text-[11px] font-semibold tracking-[0.14em] uppercase text-sage">
+          {address.labelDe}
         </span>
-        <span className="text-[13px] text-bark truncate">{address.street}</span>
-        {address.phone && (
-          <span className="text-[12px] text-sage tabular-nums">
-            {address.phone}
-          </span>
-        )}
+      )}
+      <span className="font-display text-[17px] leading-[1.2] text-bark truncate">
+        {address.recipientName}
       </span>
-    </button>
+      <span className="text-[13px] text-bark truncate">{address.street}</span>
+      {address.phone && (
+        <span className="text-[12px] text-sage tabular-nums">
+          {address.phone}
+        </span>
+      )}
+    </CoTile>
   );
 }
 
@@ -592,7 +573,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
         type="text"
         readOnly
         value={value}
-        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-cream text-bark text-[16px]"
+        className="w-full h-[52px] px-3.5 border border-mist bg-cream text-bark text-[16px]"
       />
     </div>
   );
@@ -611,31 +592,13 @@ function ContextTile({
   title: string;
   sub: string;
 }) {
-  const isSelected = current === value;
   return (
-    <button
-      type="button"
+    <CoTile
+      selected={current === value}
       onClick={() => onSelect(value)}
-      role="radio"
-      aria-checked={isSelected}
-      className={`text-left h-full px-4 py-[15px] bg-white border flex gap-3.5 items-start transition-colors ${
-        isSelected
-          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
-          : "border-[#E1D5C7] hover:border-[#B8916A]"
-      }`}
     >
-      <span
-        aria-hidden
-        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
-          isSelected
-            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
-            : "border-[1.5px] border-[#B8916A]"
-        }`}
-      />
-      <span className="flex flex-col gap-1 min-w-0">
-        <span className="text-[15px] font-semibold text-bark">{title}</span>
-        <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
-      </span>
-    </button>
+      <span className="text-[15px] font-semibold text-bark">{title}</span>
+      <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
+    </CoTile>
   );
 }

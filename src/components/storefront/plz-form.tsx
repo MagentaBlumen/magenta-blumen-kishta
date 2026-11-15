@@ -73,7 +73,7 @@ export function PlzForm({ initialPlz = "" }: { initialPlz?: string }) {
           onChange={(e) => setPlz(e.target.value.replace(/\D/g, "").slice(0, 4))}
           placeholder="Postleitzahl, z. B. 5432"
           aria-label="Postleitzahl"
-          className="flex-1 min-w-0 max-w-[300px] h-[52px] px-4 border border-[#B8916A] bg-ivory text-bark text-[17px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15 tabular-nums"
+          className="flex-1 min-w-0 max-w-[300px] h-[52px] px-4 border border-oak bg-ivory text-bark text-[17px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15 tabular-nums"
         />
         <button
           type="submit"
@@ -102,7 +102,7 @@ export function PlzForm({ initialPlz = "" }: { initialPlz?: string }) {
                 type="button"
                 onClick={() => handlePickOrtschaft(o.ortschaft)}
                 disabled={isPending}
-                className="text-left px-4 py-3.5 border border-[#E1D5C7] bg-white hover:border-[#B8916A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-left px-4 py-3.5 border border-mist bg-white hover:border-oak transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="flex justify-between items-baseline gap-4">
                   <span className="text-[15px] font-semibold text-bark">

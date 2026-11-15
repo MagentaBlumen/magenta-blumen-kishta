@@ -58,7 +58,7 @@ export default async function CartPage() {
 
       <div className="flex flex-col lg:flex-row flex-wrap gap-10 lg:gap-16 items-start">
         <div className="w-full lg:flex-[7_1_520px] min-w-0 flex flex-col">
-          <ul className="m-0 p-0 list-none border-t border-[#E6DDD2]">
+          <ul className="m-0 p-0 list-none border-t border-hair">
             {cart.lines.map((l) => (
               <CartLineRow key={`${l.productId}:${l.variantId}`} line={l} />
             ))}
@@ -122,7 +122,7 @@ function CartTitle({ itemCount }: { itemCount: number }) {
 
 function CartLineRow({ line: l }: { line: HydratedCart["lines"][number] }) {
   return (
-    <li className="flex gap-4 lg:gap-6 py-7 border-b border-[#E6DDD2]">
+    <li className="flex gap-4 lg:gap-6 py-7 border-b border-hair">
       <Link
         href={`/produkt/${l.productSlug}`}
         className="block shrink-0 bg-cream w-[88px] lg:w-[120px]"
@@ -307,10 +307,10 @@ function CartSummary({
 
       <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4 px-0.5 text-[12px] text-sage">
         <span className="flex gap-1.5">
-          <span className="h-7 px-2.5 border border-[#E1D5C7] inline-flex items-center font-semibold">
+          <span className="h-7 px-2.5 border border-mist inline-flex items-center font-semibold">
             TWINT
           </span>
-          <span className="h-7 px-2.5 border border-[#E1D5C7] inline-flex items-center font-semibold">
+          <span className="h-7 px-2.5 border border-mist inline-flex items-center font-semibold">
             Karte
           </span>
         </span>
@@ -322,7 +322,7 @@ function CartSummary({
 
 function EmptyCart() {
   return (
-    <div className="border border-[#E6DDD2] px-6 py-14 flex flex-col items-center gap-4 text-center">
+    <div className="border border-hair px-6 py-14 flex flex-col items-center gap-4 text-center">
       <p className="m-0 font-display text-[26px] text-bark">
         Ihr Warenkorb ist leer
       </p>
@@ -345,7 +345,7 @@ function EmptyCart() {
 
 function DroppedBanner({ count }: { count: number }) {
   return (
-    <div className="px-4 py-3 bg-cream border border-[#E6DDD2] text-[13px] text-bark">
+    <div className="px-4 py-3 bg-cream border border-hair text-[13px] text-bark">
       {count === 1
         ? "1 Artikel wurde aus dem Warenkorb entfernt, weil er nicht mehr verfügbar ist."
         : `${count} Artikel wurden aus dem Warenkorb entfernt, weil sie nicht mehr verfügbar sind.`}

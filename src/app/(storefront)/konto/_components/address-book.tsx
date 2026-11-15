@@ -93,7 +93,7 @@ export function AddressBook({ addresses, suggestion }: Props) {
       <button
         type="button"
         onClick={() => setMode({ kind: "add" })}
-        className="min-h-[170px] border border-dashed border-[#B8916A] flex flex-col items-center justify-center gap-2.5 text-[15px] font-semibold text-bark hover:border-rose hover:text-rose transition-colors"
+        className="min-h-[170px] border border-dashed border-oak flex flex-col items-center justify-center gap-2.5 text-[15px] font-semibold text-bark hover:border-rose hover:text-rose transition-colors"
       >
         <span
           aria-hidden
@@ -129,7 +129,7 @@ function SavedCard({
   disabled: boolean;
 }) {
   return (
-    <div className="border border-[#E1D5C7] p-[22px] flex flex-col gap-1 text-[14px] leading-[1.5]">
+    <div className="border border-mist p-[22px] flex flex-col gap-1 text-[14px] leading-[1.5]">
       {address.labelDe && (
         <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
           {address.labelDe}
@@ -220,7 +220,7 @@ function AddressForm({
   onCancel: () => void;
 }) {
   return (
-    <section className="border border-[#E1D5C7] p-6 flex flex-col gap-5">
+    <section className="border border-mist p-6 flex flex-col gap-5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="m-0 font-display text-[22px] text-bark">
           {isNew ? "Neue Adresse" : "Adresse bearbeiten"}
@@ -342,7 +342,7 @@ function Field({
         inputMode={inputMode}
         pattern={pattern}
         maxLength={maxLength}
-        className="w-full border border-[#E1D5C7] bg-ivory px-3 py-2.5 text-[15px] text-bark focus:border-rose focus:outline-none focus:ring-2 focus:ring-rose/15 transition-colors"
+        className="w-full border border-mist bg-ivory px-3 py-2.5 text-[15px] text-bark focus:border-rose focus:outline-none focus:ring-2 focus:ring-rose/15 transition-colors"
       />
     </div>
   );

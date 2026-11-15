@@ -76,8 +76,8 @@ function LastOrderCard({ order: o }: { order: CustomerOrderRow }) {
       : `Unterwegs zu ${o.recipientName}`;
 
   return (
-    <article className="border border-[#E1D5C7]">
-      <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-b border-[#E6DDD2]">
+    <article className="border border-mist">
+      <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-b border-hair">
         <div className="flex items-center gap-3.5">
           <span
             aria-hidden
@@ -199,7 +199,7 @@ function AddressSuggestionTile({ recipientName }: { recipientName: string }) {
   return (
     <Link
       href="/konto/adressen"
-      className="min-h-[168px] p-6 border border-[#E1D5C7] bg-white text-bark hover:border-[#B8916A] transition-colors flex flex-col justify-between gap-5"
+      className="min-h-[168px] p-6 border border-mist bg-white text-bark hover:border-oak transition-colors flex flex-col justify-between gap-5"
     >
       <div className="flex flex-col gap-1.5">
         <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
@@ -235,7 +235,7 @@ function BrowseCategoryTile() {
   return (
     <Link
       href="/bestellung-finden"
-      className="min-h-[168px] p-6 border border-[#E1D5C7] bg-white text-bark hover:border-[#B8916A] transition-colors flex flex-col justify-between gap-5"
+      className="min-h-[168px] p-6 border border-mist bg-white text-bark hover:border-oak transition-colors flex flex-col justify-between gap-5"
     >
       <div className="flex flex-col gap-1.5">
         <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">

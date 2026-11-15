@@ -63,7 +63,7 @@ export function TimedSlotPicker({
   return (
     <div className="space-y-4">
       {error && (
-        <p className="px-4 py-3 border border-rose/30 bg-rose/5 text-[0.85rem] text-bark">
+        <p className="px-4 py-3 border border-rose/40 bg-rose/5 text-[0.85rem] text-bark">
           {error}
         </p>
       )}
