@@ -27,44 +27,43 @@ export function KontoSidebar({
         >
           {initials}
         </span>
-        <div className="flex flex-col gap-0.5 min-w-0">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="font-display text-[19px] leading-[1.2] text-bark truncate">
             {fullName}
           </span>
           <span className="text-[13px] text-sage break-all">{email}</span>
         </div>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/" });
+          }}
+        >
+          <button
+            type="submit"
+            aria-label="Abmelden"
+            className="inline-flex items-center gap-1.5 shrink-0 h-9 px-2.5 text-[13px] text-sage hover:text-rose transition-colors"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M9 21H5V3h4" />
+              <path d="M16 17l5-5-5-5M21 12H9" />
+            </svg>
+            <span className="hidden sm:inline">Abmelden</span>
+          </button>
+        </form>
       </div>
 
       <KontoNav orderCount={orderCount} addressCount={addressCount} />
-
-      <form
-        action={async () => {
-          "use server";
-          await signOut({ redirectTo: "/" });
-        }}
-        className="lg:pl-[17px]"
-      >
-        <button
-          type="submit"
-          className="inline-flex items-center gap-2 text-[14px] text-sage hover:text-rose transition-colors"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M9 21H5V3h4" />
-            <path d="M16 17l5-5-5-5M21 12H9" />
-          </svg>
-          Abmelden
-        </button>
-      </form>
     </aside>
   );
 }
