@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { CoBox } from "@/components/storefront/co-box";
 import { submitDetailsAction } from "@/lib/checkout/actions";
+import type { CustomerAddressRow } from "@/lib/customer-auth/addresses";
 import type {
   CheckoutCookie,
   DeliveryContextCookie,
@@ -23,9 +24,11 @@ import type {
 export function LieferdatenForm({
   defaults,
   zone,
+  savedAddresses = [],
 }: {
   defaults: CheckoutCookie;
   zone: ResolvedZone;
+  savedAddresses?: CustomerAddressRow[];
 }) {
   const [context, setContext] = useState<DeliveryContextCookie>(
     defaults.dc ?? "residential",
@@ -34,6 +37,21 @@ export function LieferdatenForm({
   const [cardLen, setCardLen] = useState(defaults.cm?.length ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Recipient fields are controlled so picking a saved address can fill
+  // them in-place. Picking tracks selected id for the picker's visual
+  // state; manual edits clear it so the "picked" highlight goes away.
+  const [recipientName, setRecipientName] = useState(defaults.rn ?? "");
+  const [recipientPhone, setRecipientPhone] = useState(defaults.rp ?? "");
+  const [street, setStreet] = useState(defaults.st ?? "");
+  const [pickedAddressId, setPickedAddressId] = useState<number | null>(null);
+
+  function pickSavedAddress(addr: CustomerAddressRow) {
+    setRecipientName(addr.recipientName);
+    setRecipientPhone(addr.phone ?? "");
+    setStreet(addr.street);
+    setPickedAddressId(addr.id);
+  }
 
   async function onSubmit(formData: FormData) {
     setError(null);
@@ -69,6 +87,32 @@ export function LieferdatenForm({
         title="Wer bekommt die Blumen?"
         hint="Name und Adresse der Person, die die Blumen erhält."
       >
+        {!forSelf && savedAddresses.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-semibold text-bark">
+              Aus dem Adressbuch wählen
+            </span>
+            <div
+              role="radiogroup"
+              aria-label="Gespeicherte Adresse wählen"
+              className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]"
+            >
+              {savedAddresses.map((a) => (
+                <SavedAddressTile
+                  key={a.id}
+                  address={a}
+                  selected={pickedAddressId === a.id}
+                  onSelect={() => pickSavedAddress(a)}
+                />
+              ))}
+            </div>
+            <span className="text-[12px] text-sage">
+              Nur Adressen mit PLZ {zone.plz} werden angezeigt. Sie können
+              die Felder unten jederzeit anpassen.
+            </span>
+          </div>
+        )}
+
         <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
@@ -89,30 +133,42 @@ export function LieferdatenForm({
 
         {!forSelf && (
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-            <Field
+            <ControlledField
               name="rn"
               label="Name der empfangenden Person"
               required
-              defaultValue={defaults.rn}
+              value={recipientName}
+              onChange={(v) => {
+                setRecipientName(v);
+                setPickedAddressId(null);
+              }}
               autoComplete="off"
             />
-            <Field
+            <ControlledField
               name="rp"
               label="Telefon der empfangenden Person"
               optional
               type="tel"
-              defaultValue={defaults.rp}
+              value={recipientPhone}
+              onChange={(v) => {
+                setRecipientPhone(v);
+                setPickedAddressId(null);
+              }}
               hint="Nur für die Zustellung. Wir rufen nie ohne Grund an."
             />
           </div>
         )}
 
         <div className="grid gap-4 [grid-template-columns:2fr_1fr] max-[640px]:grid-cols-1">
-          <Field
+          <ControlledField
             name="st"
             label="Strasse und Hausnummer"
             required
-            defaultValue={defaults.st}
+            value={street}
+            onChange={(v) => {
+              setStreet(v);
+              setPickedAddressId(null);
+            }}
             autoComplete="street-address"
           />
           <ReadOnlyField
@@ -402,6 +458,107 @@ function Field({
       />
       {hint && <span className="text-[12px] text-sage">{hint}</span>}
     </div>
+  );
+}
+
+function ControlledField({
+  name,
+  label,
+  required = false,
+  optional = false,
+  value,
+  onChange,
+  hint,
+  type = "text",
+  autoComplete,
+  placeholder,
+}: {
+  name: string;
+  label: string;
+  required?: boolean;
+  optional?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  hint?: string;
+  type?: string;
+  autoComplete?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <label htmlFor={name} className="text-[13px] font-semibold text-bark">
+        {label}{" "}
+        {required && (
+          <span className="text-rose" aria-hidden>
+            *
+          </span>
+        )}
+        {optional && (
+          <span className="font-normal text-sage">(optional)</span>
+        )}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+      />
+      {hint && <span className="text-[12px] text-sage">{hint}</span>}
+    </div>
+  );
+}
+
+function SavedAddressTile({
+  address,
+  selected,
+  onSelect,
+}: {
+  address: CustomerAddressRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      role="radio"
+      aria-checked={selected}
+      className={`text-left h-full px-4 py-3 bg-white border flex gap-3 items-start transition-colors ${
+        selected
+          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
+          : "border-[#E1D5C7] hover:border-[#B8916A]"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
+          selected
+            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
+            : "border-[1.5px] border-[#B8916A]"
+        }`}
+      />
+      <span className="flex flex-col gap-0.5 min-w-0">
+        {address.labelDe && (
+          <span className="text-[11px] font-semibold tracking-[0.14em] uppercase text-sage">
+            {address.labelDe}
+          </span>
+        )}
+        <span className="font-display text-[17px] leading-[1.2] text-bark truncate">
+          {address.recipientName}
+        </span>
+        <span className="text-[13px] text-bark truncate">{address.street}</span>
+        {address.phone && (
+          <span className="text-[12px] text-sage tabular-nums">
+            {address.phone}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 

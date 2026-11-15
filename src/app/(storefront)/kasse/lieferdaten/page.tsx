@@ -7,6 +7,7 @@ import { LieferdatenForm } from "@/components/storefront/lieferdaten-form";
 import { hydrateCart } from "@/lib/cart/hydrate";
 import { readCheckoutCookie } from "@/lib/checkout/cookie";
 import { resolveZoneByPlzOrtschaft } from "@/lib/checkout/zones";
+import { fetchCustomerAddresses } from "@/lib/customer-auth/addresses";
 import { fetchCustomerPrefill } from "@/lib/customer-auth/profile";
 
 export const dynamic = "force-dynamic";
@@ -38,18 +39,26 @@ export default async function KasseLieferdatenPage() {
   const zone = await resolveZoneByPlzOrtschaft(checkout.plz!, checkout.ort!);
   if (!zone) redirect("/kasse/lieferung");
 
-  // Logged-in customer? Prefill buyer fields from their profile. Cookie
-  // values still take precedence — a shopper buying for someone else
-  // may want to type a different buyer email and we won't fight them.
+  // Logged-in customer? Prefill buyer fields from their profile +
+  // offer saved addresses matching the picked PLZ. Cookie values still
+  // win over profile — a shopper buying for someone else may want to
+  // type a different buyer email and we won't fight them.
   const session = await auth();
   const defaults = { ...checkout };
+  let savedAddresses: Awaited<ReturnType<typeof fetchCustomerAddresses>> = [];
   if (session?.user?.role === "customer" && session.user.customerId) {
-    const profile = await fetchCustomerPrefill(session.user.customerId);
+    const [profile, addrs] = await Promise.all([
+      fetchCustomerPrefill(session.user.customerId),
+      fetchCustomerAddresses(session.user.customerId),
+    ]);
     if (profile) {
       if (!defaults.bn) defaults.bn = profile.name;
       if (!defaults.be) defaults.be = profile.email;
       if (!defaults.bp && profile.phone) defaults.bp = profile.phone;
     }
+    // Filter to zone's PLZ — a different-PLZ address would collide
+    // with the already-resolved zone in step 1.
+    savedAddresses = addrs.filter((a) => a.plz === zone.plz);
   }
 
   return (
@@ -67,7 +76,11 @@ export default async function KasseLieferdatenPage() {
 
       <div className="flex flex-col lg:flex-row flex-wrap gap-10 lg:gap-14 items-start">
         <div className="w-full lg:flex-[7_1_520px] min-w-0">
-          <LieferdatenForm defaults={defaults} zone={zone} />
+          <LieferdatenForm
+            defaults={defaults}
+            zone={zone}
+            savedAddresses={savedAddresses}
+          />
         </div>
 
         <KasseSummary cart={cart} zone={zone} checkout={checkout} />
