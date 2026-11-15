@@ -506,6 +506,42 @@ export async function updateProduct(id: number, formData: FormData) {
  * Called from the produkte list's multi-select bar. Takes a direction
  * so one action handles both "Archivieren" and "Wiederherstellen".
  */
+// Fast single-field toggle for the Heute-style "Ausverkauft" checkbox
+// on the produkte list. Flips product.is_available without touching
+// the rest of the form. Image + variant edits still go through the
+// heavier updateProduct() flow.
+export async function toggleProductAvailabilityAction(
+  id: number,
+  isAvailable: boolean,
+): Promise<void> {
+  await requireAdmin();
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Ungültige Produkt-ID");
+
+  const [row] = await db
+    .select({ id: product.id, slug: product.slug })
+    .from(product)
+    .where(eq(product.id, id))
+    .limit(1);
+  if (!row) throw new Error("Produkt nicht gefunden");
+
+  const categoryLinks = await db
+    .select({ categoryId: productCategory.categoryId })
+    .from(productCategory)
+    .where(eq(productCategory.productId, id));
+
+  await db
+    .update(product)
+    .set({ isAvailable })
+    .where(eq(product.id, id));
+
+  revalidatePath("/admin/produkte");
+  await revalidateStorefrontForProduct(
+    row.id,
+    row.slug,
+    categoryLinks.map((l) => l.categoryId),
+  );
+}
+
 export async function archiveProductsAction(
   ids: number[],
   archive: boolean,

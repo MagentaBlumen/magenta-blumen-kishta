@@ -1,28 +1,28 @@
+import Link from "next/link";
 import { asc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { product, productImage, productVariant } from "@/db/schema/catalogue";
-import { ProdukteList } from "./_components/produkte-list";
+import {
+  ProdukteGrid,
+  type Counts,
+  type ProduktRow,
+} from "@/components/admin/produkte-grid";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ tab?: string }>;
 };
 
-/**
- * Produkte overview. Server component loads rows + a thumbnail for
- * each; the ProdukteList client component owns the selection state
- * and the bulk-archive bar.
- *
- * Filter is URL-driven (`?filter=aktiv|archiviert|ausverkauft`) so the
- * active-tab state survives a hard reload.
- *
- * No pagination yet - at florist scale the catalogue is under a few
- * hundred rows. If this grows beyond ~500, add it then.
- */
+// Produkte overview. Server loads rows + thumbnail + variants; the
+// grid is a client component owning the local search box + the
+// "Ausverkauft" quick toggle (toggleProductAvailabilityAction).
+//
+// Tab is URL-driven (`?tab=sold|archived`) so the active view survives
+// hard reloads. No pagination — florist scale.
 export default async function ProdukteListPage({ searchParams }: PageProps) {
-  const { filter: rawFilter } = await searchParams;
-  const filter = normaliseFilter(rawFilter);
+  const { tab: rawTab } = await searchParams;
+  const tab = normaliseTab(rawTab);
 
   const products = await db
     .select({
@@ -39,38 +39,13 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
     .orderBy(asc(product.isArchived), asc(product.sortOrder), asc(product.nameDe));
 
   const productIds = products.map((p) => p.id);
+  const [images, variants] =
+    productIds.length === 0
+      ? [[] as Awaited<ReturnType<typeof fetchImages>>, [] as Awaited<ReturnType<typeof fetchVariants>>]
+      : await Promise.all([fetchImages(productIds), fetchVariants(productIds)]);
 
-  // Pull images + variants in two bulk queries, group in JS. Correlated
-  // subqueries from a `sql` template were unreliable in this version of
-  // Drizzle - the outer-table column reference didn't always rewrite
-  // right inside the inner SELECT.
-  const [images, variants] = productIds.length === 0
-    ? [[], []]
-    : await Promise.all([
-        db
-          .select({
-            productId: productImage.productId,
-            variantId: productImage.variantId,
-            url: productImage.url,
-            altDe: productImage.altDe,
-            sortOrder: productImage.sortOrder,
-            id: productImage.id,
-          })
-          .from(productImage)
-          .where(inArray(productImage.productId, productIds)),
-        db
-          .select({
-            productId: productVariant.productId,
-            priceGross: productVariant.priceGross,
-            salePriceGross: productVariant.salePriceGross,
-            isAvailable: productVariant.isAvailable,
-          })
-          .from(productVariant)
-          .where(inArray(productVariant.productId, productIds)),
-      ]);
-
-  // Primary image per product: prefer variant_id IS NULL (product-level),
-  // then lowest sort_order, then lowest id.
+  // Primary image per product: variant_id IS NULL first, then lowest
+  // sort_order, then lowest id. Matches storefront logic.
   const imageByProduct = new Map<number, { url: string; alt: string | null }>();
   const sorted = [...images].sort((a, b) => {
     const aPrim = a.variantId === null ? 0 : 1;
@@ -85,71 +60,97 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
     }
   }
 
-  const variantsByProduct = new Map<
-    number,
-    { prices: string[]; variantCount: number; anyAvailable: boolean }
-  >();
+  const pricesByProduct = new Map<number, string[]>();
   for (const v of variants) {
-    const bucket = variantsByProduct.get(v.productId) ?? {
-      prices: [],
-      variantCount: 0,
-      anyAvailable: false,
-    };
-    const effective = v.salePriceGross ?? v.priceGross;
-    bucket.prices.push(effective);
-    bucket.variantCount += 1;
-    if (v.isAvailable) bucket.anyAvailable = true;
-    variantsByProduct.set(v.productId, bucket);
+    const bucket = pricesByProduct.get(v.productId) ?? [];
+    bucket.push(v.salePriceGross ?? v.priceGross);
+    pricesByProduct.set(v.productId, bucket);
   }
 
-  const rows = products.map((p) => {
-    const vs = variantsByProduct.get(p.id);
-    const img = imageByProduct.get(p.id);
-    return {
-      id: p.id,
-      slug: p.slug,
-      nameDe: p.nameDe,
-      pricingMode: p.pricingMode,
-      isAvailable: p.isAvailable,
-      isOnlineOrderable: p.isOnlineOrderable,
-      isArchived: p.isArchived,
-      sortOrder: p.sortOrder,
-      imageUrl: img?.url ?? null,
-      imageAlt: img?.alt ?? null,
-      prices: vs?.prices ?? [],
-      variantCount: vs?.variantCount ?? 0,
-    };
-  });
+  const rows: ProduktRow[] = products.map((p) => ({
+    id: p.id,
+    slug: p.slug,
+    nameDe: p.nameDe,
+    pricingMode: p.pricingMode,
+    isAvailable: p.isAvailable,
+    isOnlineOrderable: p.isOnlineOrderable,
+    isArchived: p.isArchived,
+    imageUrl: imageByProduct.get(p.id)?.url ?? null,
+    imageAlt: imageByProduct.get(p.id)?.alt ?? null,
+    prices: pricesByProduct.get(p.id) ?? [],
+  }));
 
-  const counts = {
-    all: rows.length,
-    aktiv: rows.filter((r) => !r.isArchived && r.isAvailable).length,
-    archiviert: rows.filter((r) => r.isArchived).length,
-    ausverkauft: rows.filter((r) => !r.isAvailable && !r.isArchived).length,
+  const counts: Counts = {
+    all: rows.filter((r) => !r.isArchived).length,
+    sold: rows.filter((r) => !r.isAvailable && !r.isArchived).length,
+    archived: rows.filter((r) => r.isArchived).length,
   };
 
   const filtered = rows.filter((r) => {
-    switch (filter) {
-      case "aktiv":
-        return !r.isArchived && r.isAvailable;
-      case "archiviert":
-        return r.isArchived;
-      case "ausverkauft":
-        return !r.isAvailable && !r.isArchived;
-      case "alle":
-      default:
-        return true;
-    }
+    if (tab === "archived") return r.isArchived;
+    if (tab === "sold") return !r.isAvailable && !r.isArchived;
+    return !r.isArchived; // 'all' excludes archived
   });
 
-  return <ProdukteList rows={filtered} filter={filter} counts={counts} />;
+  const subline = `${counts.all} ${counts.all === 1 ? "Produkt" : "Produkte"}`;
+
+  return (
+    <>
+      <div className="adm-head">
+        <div className="adm-head__text">
+          <h1 className="adm-title">Produkte</h1>
+          <p className="adm-sub">{subline}</p>
+        </div>
+        <Link className="btn btn--main" href="/admin/produkte/neu">
+          <svg
+            className="icon"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Neues Produkt
+        </Link>
+      </div>
+
+      <ProdukteGrid rows={filtered} counts={counts} tab={tab} />
+    </>
+  );
 }
 
-function normaliseFilter(
-  raw: string | undefined,
-): "alle" | "aktiv" | "archiviert" | "ausverkauft" {
-  if (raw === "aktiv" || raw === "archiviert" || raw === "ausverkauft") {
-    return raw;
-  }
-  return "alle";
+function fetchImages(productIds: number[]) {
+  return db
+    .select({
+      productId: productImage.productId,
+      variantId: productImage.variantId,
+      url: productImage.url,
+      altDe: productImage.altDe,
+      sortOrder: productImage.sortOrder,
+      id: productImage.id,
+    })
+    .from(productImage)
+    .where(inArray(productImage.productId, productIds));
+}
+
+function fetchVariants(productIds: number[]) {
+  return db
+    .select({
+      productId: productVariant.productId,
+      priceGross: productVariant.priceGross,
+      salePriceGross: productVariant.salePriceGross,
+    })
+    .from(productVariant)
+    .where(inArray(productVariant.productId, productIds));
+}
+
+function normaliseTab(raw: string | undefined): "all" | "sold" | "archived" {
+  if (raw === "sold" || raw === "archived") return raw;
+  return "all";
 }
