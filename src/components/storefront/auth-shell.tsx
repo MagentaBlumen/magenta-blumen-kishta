@@ -77,7 +77,7 @@ export function AuthShell({
       {/* ===== Visual side ===== */}
       <aside
         aria-label="Vorteile eines Kontos"
-        className="relative min-w-0 min-h-[360px] sm:min-h-[460px] lg:min-h-screen overflow-hidden text-ivory bg-bark"
+        className="hidden sm:block relative min-w-0 min-h-[460px] lg:min-h-screen overflow-hidden text-ivory bg-bark"
       >
         {/* Background photo. object-cover + object-center keeps the
             roses framed regardless of the container's aspect ratio. */}

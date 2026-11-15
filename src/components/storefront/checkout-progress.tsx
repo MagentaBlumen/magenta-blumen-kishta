@@ -24,7 +24,7 @@ export function CheckoutProgress({ current }: { current: CheckoutStep }) {
             <li
               key={`sep-${step.key}`}
               aria-hidden
-              className="w-10 h-px bg-mist"
+              className="w-4 sm:w-10 h-px bg-mist"
             />,
           );
         }
@@ -45,7 +45,12 @@ export function CheckoutProgress({ current }: { current: CheckoutStep }) {
             >
               {i + 1}
             </span>
-            {step.label}
+            {/* Hide non-current step labels on phones to prevent the
+                row wrapping onto two lines; current step always shows
+                its label. */}
+            <span className={isActive ? "" : "hidden sm:inline"}>
+              {step.label}
+            </span>
           </li>,
         );
         return nodes;

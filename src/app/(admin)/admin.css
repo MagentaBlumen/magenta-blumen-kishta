@@ -21,6 +21,42 @@
   --a-body: "Instrument Sans", system-ui, sans-serif;
 }
 
+/* ---------- Mobile / cross-browser baseline (admin-scoped) ---------- */
+.adm {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.adm img { max-width: 100%; }
+.adm input[type="text"],
+.adm input[type="email"],
+.adm input[type="tel"],
+.adm input[type="search"],
+.adm input[type="password"],
+.adm input[type="number"],
+.adm input:not([type]),
+.adm textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.adm input[type="search"]::-webkit-search-decoration,
+.adm input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+.adm a,
+.adm button,
+.adm label,
+.adm summary,
+.adm input,
+.adm select,
+.adm textarea {
+  touch-action: manipulation;
+}
+@media (max-width: 900px) {
+  .adm input,
+  .adm textarea,
+  .adm select { font-size: 16px; }
+}
+
 /* ---------- Root reset (scoped) ---------- */
 .adm, .adm * { box-sizing: border-box; }
 .adm {

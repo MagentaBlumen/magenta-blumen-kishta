@@ -23,7 +23,11 @@ export function KontoNav({
   return (
     <nav
       aria-label="Mein Konto"
-      className="flex overflow-x-auto lg:flex-col lg:overflow-visible lg:border-t lg:border-hair border-b lg:border-b-0"
+      // Phones: 2x2 grid of outlined cards. Desktop: left-rail with
+      // hair-line separators. The two layouts share no border/padding
+      // classes so a single utility string can't express both — split
+      // per-breakpoint via the array-join.
+      className="grid grid-cols-2 gap-1.5 lg:flex lg:flex-col lg:gap-0 lg:border-t lg:border-hair"
     >
       {items.map((item) => {
         const isActive =
@@ -36,12 +40,13 @@ export function KontoNav({
             href={item.href}
             aria-current={isActive ? "page" : undefined}
             className={[
-              "flex items-center justify-between gap-3 shrink-0 text-[15px] transition-colors",
-              "h-11 lg:h-[52px] px-3.5 lg:pr-3.5 lg:border-b lg:border-hair",
-              "border-b-2 lg:border-l-[3px]",
+              "flex items-center justify-between gap-3 text-[15px] transition-colors",
+              "h-12 lg:h-[52px] px-3.5",
+              "border lg:border-0 lg:border-b lg:border-hair",
+              "lg:border-l-[3px]",
               isActive
-                ? "border-b-rose lg:border-b-hair lg:border-l-rose lg:bg-cream text-bark font-semibold lg:pl-[14px]"
-                : "border-b-transparent lg:border-l-transparent text-sage hover:text-bark hover:lg:bg-cream lg:pl-[17px]",
+                ? "border-rose bg-ivory shadow-[0_0_0_1px_var(--color-rose)] lg:bg-cream lg:shadow-none lg:border-l-rose lg:pl-[14px] text-bark font-semibold"
+                : "border-mist text-sage hover:text-bark hover:bg-cream lg:border-l-transparent lg:pl-[17px]",
             ].join(" ")}
           >
             <span>{item.label}</span>

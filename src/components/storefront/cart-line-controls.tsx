@@ -54,7 +54,7 @@ export function CartLineControls({
         </button>
         <span
           aria-live="polite"
-          className={`w-8 text-center text-[15px] font-semibold text-bark tabular-nums ${
+          className={`w-8 text-center text-[16px] font-semibold text-bark tabular-nums ${
             isPending ? "opacity-40" : ""
           }`}
         >

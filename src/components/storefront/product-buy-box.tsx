@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { formatChf } from "@/lib/money";
 import { addToCartAction } from "@/lib/cart/actions";
 
@@ -31,6 +31,25 @@ export function ProductBuyBox({
   const [feedback, setFeedback] = useState<"idle" | "added" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [stickyVisible, setStickyVisible] = useState(false);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
+
+  // Mobile sticky buy bar — shows once the dark summary slab scrolls out
+  // of view so the customer can always see the total and reach "In den
+  // Warenkorb" with their thumb.
+  useEffect(() => {
+    const el = summaryRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        setStickyVisible(!first.isIntersecting);
+      },
+      { threshold: 0.01 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const selected = variants[selectedIdx] ?? variants[0];
 
@@ -148,7 +167,10 @@ export function ProductBuyBox({
       ) : null}
 
       {/* ---- Dark summary slab ---- */}
-      <div className="mb-wood p-6 flex flex-col gap-[18px] mt-7">
+      <div
+        ref={summaryRef}
+        className="mb-wood p-6 flex flex-col gap-[18px] mt-7"
+      >
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1.5 min-w-0">
             <span className="text-[13px] text-[#D9C4A8]">
@@ -178,7 +200,7 @@ export function ProductBuyBox({
                 setQty(Number.isFinite(n) ? Math.max(1, Math.min(99, n)) : 1);
               }}
               aria-label="Menge"
-              className="w-8 text-center text-[15px] font-semibold text-ivory tabular-nums bg-transparent border-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-8 text-center text-[16px] font-semibold text-ivory tabular-nums bg-transparent border-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <button
               type="button"
@@ -214,6 +236,30 @@ export function ProductBuyBox({
         {feedback === "error" && errorMsg && (
           <p className="text-[13px] text-rose">{errorMsg}</p>
         )}
+      </div>
+
+      {/* ---- Mobile sticky buy bar — appears when summary scrolls off ---- */}
+      <div
+        aria-hidden={!stickyVisible}
+        className={`lg:hidden fixed inset-x-0 bottom-0 z-30 mb-wood flex items-center gap-3 px-4 py-2.5 transition-transform duration-200 ${
+          stickyVisible ? "translate-y-0" : "translate-y-full"
+        } motion-reduce:transition-none`}
+        style={{
+          paddingBottom: "calc(10px + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
+        <span className="flex-1 min-w-0 font-display text-[22px] leading-none whitespace-nowrap text-ivory tabular-nums">
+          {formatChf(totalNum.toFixed(2))}
+        </span>
+        <button
+          type="button"
+          tabIndex={stickyVisible ? 0 : -1}
+          onClick={handleAdd}
+          disabled={!canBuy}
+          className="h-12 px-5 bg-rose text-ivory text-[16px] font-semibold whitespace-nowrap hover:brightness-110 transition-[filter] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {feedback === "added" ? "✓ Hinzugefügt" : "In den Warenkorb"}
+        </button>
       </div>
 
       {/* ---- Trust line ---- */}
