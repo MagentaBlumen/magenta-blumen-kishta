@@ -1,38 +1,32 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { CheckoutProgress } from "@/components/storefront/checkout-progress";
+import { KasseSummary } from "@/components/storefront/kasse-summary";
 import { LieferdatenForm } from "@/components/storefront/lieferdaten-form";
 import { hydrateCart } from "@/lib/cart/hydrate";
 import { readCheckoutCookie } from "@/lib/checkout/cookie";
 import { resolveZoneByPlzOrtschaft } from "@/lib/checkout/zones";
 import { fetchCustomerPrefill } from "@/lib/customer-auth/profile";
-import { formatChf } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Kasse . Ihre Daten",
+  title: "Kasse . Ihre Angaben",
   robots: { index: false, follow: false },
 };
 
-/**
- * Checkout step 2: buyer + recipient + delivery-context form.
- *
- * Gates:
- *   - Empty cart -> /warenkorb
- *   - No zone or no slot picked yet -> /kasse/lieferung
- *
- * Form submission goes to submitDetailsAction which redirects to
- * /kasse/bestaetigen on success.
- */
+// Checkout step 2: buyer + recipient + delivery-context form.
+//
+// Gates:
+//   - Empty cart -> /warenkorb
+//   - No zone or no slot picked yet -> /kasse/lieferung
 export default async function KasseLieferdatenPage() {
   const cart = await hydrateCart();
   if (cart.lines.length === 0) redirect("/warenkorb");
 
   const checkout = await readCheckoutCookie();
 
-  // Step 1 must be complete before step 2.
   const step1Done =
     checkout.plz &&
     checkout.ort &&
@@ -41,12 +35,12 @@ export default async function KasseLieferdatenPage() {
     (checkout.rid !== undefined || checkout.rda !== undefined);
   if (!step1Done) redirect("/kasse/lieferung");
 
-  // Show a summary line of what step 1 resolved to.
   const zone = await resolveZoneByPlzOrtschaft(checkout.plz!, checkout.ort!);
+  if (!zone) redirect("/kasse/lieferung");
 
   // Logged-in customer? Prefill buyer fields from their profile. Cookie
-  // values still take precedence - a shopper buying for someone else
-  // may want to type a different buyer email, and we won't fight them.
+  // values still take precedence — a shopper buying for someone else
+  // may want to type a different buyer email and we won't fight them.
   const session = await auth();
   const defaults = { ...checkout };
   if (session?.user?.role === "customer" && session.user.customerId) {
@@ -59,84 +53,25 @@ export default async function KasseLieferdatenPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 lg:px-6 py-10 lg:py-14">
-      <CheckoutStepHeader step={2} />
+    <main className="max-w-[1200px] mx-auto px-4 lg:px-8 py-8 lg:py-10 pb-24 flex flex-col gap-8">
+      <CheckoutProgress current="angaben" />
 
-      {zone && (
-        <div className="mt-8 flex items-start justify-between gap-4 border border-mist bg-cream px-4 py-3">
-          <div className="text-[0.85rem] text-bark leading-[1.55]">
-            Lieferung an{" "}
-            <span className="font-medium">
-              {zone.plz} {zone.ortschaft}
-            </span>{" "}
-            . Gebühr {formatChf(zone.feeGross)}
-          </div>
-          <Link
-            href="/kasse/lieferung"
-            className="inline-block px-3 py-1 border border-rose text-rose text-[0.65rem] tracking-[0.1em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors flex-shrink-0"
-          >
-            Ändern
-          </Link>
+      <div className="flex flex-col gap-2.5">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
+          Kasse
+        </p>
+        <h1 className="m-0 font-display font-light text-bark text-[clamp(36px,4vw,52px)] leading-[1.05] tracking-[-0.025em]">
+          Ihre <em className="italic text-rose">Angaben</em>
+        </h1>
+      </div>
+
+      <div className="flex flex-col lg:flex-row flex-wrap gap-10 lg:gap-14 items-start">
+        <div className="w-full lg:flex-[7_1_520px] min-w-0">
+          <LieferdatenForm defaults={defaults} zone={zone} />
         </div>
-      )}
 
-      <div className="mt-8">
-        <LieferdatenForm defaults={defaults} />
+        <KasseSummary cart={cart} zone={zone} checkout={checkout} />
       </div>
-
-      <div className="mt-10">
-        <Link
-          href="/kasse/lieferung"
-          className="inline-block px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors"
-        >
-          ← Zurück zur Lieferung
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function CheckoutStepHeader({ step }: { step: 1 | 2 | 3 }) {
-  const steps = [
-    { n: 1, label: "Lieferung" },
-    { n: 2, label: "Ihre Daten" },
-    { n: 3, label: "Bestätigen" },
-  ];
-  return (
-    <>
-      <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium mb-2">
-        Kasse . Schritt {step} von 3
-      </p>
-      <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
-        Ihre Angaben
-      </h1>
-      <ol className="mt-6 flex gap-4 text-[0.72rem] tracking-[0.1em] uppercase font-medium">
-        {steps.map((s) => {
-          const isCurrent = s.n === step;
-          const isPast = s.n < step;
-          return (
-            <li
-              key={s.n}
-              className={`flex items-center gap-2 ${
-                isCurrent ? "text-bark" : isPast ? "text-bark/60" : "text-sage"
-              }`}
-            >
-              <span
-                className={`inline-flex items-center justify-center w-6 h-6 border ${
-                  isCurrent
-                    ? "border-bark bg-bark text-ivory"
-                    : isPast
-                      ? "border-bark/40 text-bark/60"
-                      : "border-mist text-sage"
-                }`}
-              >
-                {s.n}
-              </span>
-              <span>{s.label}</span>
-            </li>
-          );
-        })}
-      </ol>
-    </>
+    </main>
   );
 }

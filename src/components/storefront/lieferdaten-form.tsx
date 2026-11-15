@@ -1,24 +1,37 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
+import { CoBox } from "@/components/storefront/co-box";
 import { submitDetailsAction } from "@/lib/checkout/actions";
-import type { CheckoutCookie, DeliveryContextCookie } from "@/lib/checkout/types";
+import type {
+  CheckoutCookie,
+  DeliveryContextCookie,
+  ResolvedZone,
+} from "@/lib/checkout/types";
 
-/**
- * Buyer + recipient + delivery-context form.
- *
- * Uncontrolled inputs with defaultValue from the cookie - the SERVER
- * action reads FormData and re-validates every field. Only the delivery
- * context radio drives client state, because it toggles which
- * conditional fields are visible.
- *
- * Submission uses useTransition so errors from the action surface as
- * an inline banner instead of a full-page throw.
- */
-export function LieferdatenForm({ defaults }: { defaults: CheckoutCookie }) {
+// Buyer + recipient + delivery-context form, laid out as three numbered
+// boxes (Wer bekommt / Karte & Hinweise / Ihre Angaben). Uncontrolled
+// inputs with defaultValue from the cookie; the server action re-reads
+// FormData and re-validates every field.
+//
+// Client state drives three visibility toggles:
+//   - `context`: which conditional fields (hospital ward, funeral family)
+//   - `forSelf`: hides recipient-person fields; buyer gets copied into
+//     recipient_name / recipient_phone at submit
+//   - `cardLen`: live char counter on the Grusskarte textarea
+export function LieferdatenForm({
+  defaults,
+  zone,
+}: {
+  defaults: CheckoutCookie;
+  zone: ResolvedZone;
+}) {
   const [context, setContext] = useState<DeliveryContextCookie>(
     defaults.dc ?? "residential",
   );
+  const [forSelf, setForSelf] = useState(false);
+  const [cardLen, setCardLen] = useState(defaults.cm?.length ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -26,9 +39,13 @@ export function LieferdatenForm({ defaults }: { defaults: CheckoutCookie }) {
     setError(null);
     startTransition(async () => {
       try {
-        // Ensure the current context radio value goes to the action
-        // even if the field name is duplicated by other inputs.
         formData.set("dc", context);
+        if (forSelf) {
+          const bn = formData.get("bn");
+          const bp = formData.get("bp");
+          if (typeof bn === "string") formData.set("rn", bn);
+          if (typeof bp === "string" && bp) formData.set("rp", bp);
+        }
         await submitDetailsAction(formData);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unbekannter Fehler");
@@ -37,186 +54,301 @@ export function LieferdatenForm({ defaults }: { defaults: CheckoutCookie }) {
   }
 
   return (
-    <form action={onSubmit} className="space-y-8">
+    <form action={onSubmit} className="flex flex-col gap-4">
       {error && (
-        <p className="px-4 py-3 border border-rose/30 bg-rose/5 text-[0.85rem] text-bark">
+        <p
+          role="alert"
+          className="m-0 px-4 py-3 border border-rose/40 bg-rose/5 text-[13px] text-bark leading-[1.5]"
+        >
           {error}
         </p>
       )}
 
-      {/* ------------ Buyer ------------ */}
-      <Section title="Ihre Angaben (Rechnungsempfänger)">
-        <TwoCol>
-          <Field label="Name" name="bn" required defaultValue={defaults.bn} autoComplete="name" />
+      <CoBox
+        number={1}
+        title="Wer bekommt die Blumen?"
+        hint="Name und Adresse der Person, die die Blumen erhält."
+      >
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={forSelf}
+            onChange={(e) => setForSelf(e.target.checked)}
+            className="w-5 h-5 mt-0.5 accent-rose shrink-0"
+          />
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-[15px] font-semibold text-bark">
+              Die Blumen sind für mich
+            </strong>
+            <span className="text-[13px] text-sage">
+              Wir füllen Empfänger-Name und -Telefon aus Ihren Angaben
+              weiter unten.
+            </span>
+          </span>
+        </label>
+
+        {!forSelf && (
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+            <Field
+              name="rn"
+              label="Name der empfangenden Person"
+              required
+              defaultValue={defaults.rn}
+              autoComplete="off"
+            />
+            <Field
+              name="rp"
+              label="Telefon der empfangenden Person"
+              optional
+              type="tel"
+              defaultValue={defaults.rp}
+              hint="Nur für die Zustellung. Wir rufen nie ohne Grund an."
+            />
+          </div>
+        )}
+
+        <div className="grid gap-4 [grid-template-columns:2fr_1fr] max-[640px]:grid-cols-1">
           <Field
-            label="Telefon"
-            name="bp"
+            name="st"
+            label="Strasse und Hausnummer"
             required
-            defaultValue={defaults.bp}
-            autoComplete="tel"
-            type="tel"
-            hint="Für Rückfragen bei Lieferproblemen."
+            defaultValue={defaults.st}
+            autoComplete="street-address"
           />
-        </TwoCol>
-        <Field
-          label="E-Mail"
-          name="be"
-          required
-          defaultValue={defaults.be}
-          autoComplete="email"
-          type="email"
-        />
-      </Section>
-
-      {/* ------------ Recipient + address ------------ */}
-      <Section title="Empfänger und Adresse">
-        <Field
-          label="Name der empfangenden Person"
-          name="rn"
-          required
-          defaultValue={defaults.rn}
-          autoComplete="off"
-          hint="Wer soll die Blumen erhalten?"
-        />
-        <Field
-          label="Strasse und Hausnummer"
-          name="st"
-          required
-          defaultValue={defaults.st}
-          autoComplete="address-line1"
-        />
-        <Field
-          label="Telefon der empfangenden Person (optional)"
-          name="rp"
-          defaultValue={defaults.rp}
-          autoComplete="off"
-          type="tel"
-          hint="Nur für die Zustellung. Wir rufen nie ohne Grund an."
-        />
-      </Section>
-
-      {/* ------------ Delivery context ------------ */}
-      <Section title="Wohin liefern wir?">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <ContextRadio
-            value="residential"
-            current={context}
-            onChange={setContext}
-            title="Privatadresse"
-            body="Standardlieferung an ein Zuhause."
-          />
-          <ContextRadio
-            value="business"
-            current={context}
-            onChange={setContext}
-            title="Firma / Büro"
-            body="Rezeption oder Empfang."
-          />
-          <ContextRadio
-            value="hospital"
-            current={context}
-            onChange={setContext}
-            title="Spital"
-            body="Wir liefern nur an Stationen, nicht auf die Intensivstation."
-          />
-          <ContextRadio
-            value="funeral"
-            current={context}
-            onChange={setContext}
-            title="Trauerort"
-            body="Kirche, Friedhof oder Abdankungshalle."
+          <ReadOnlyField
+            label="PLZ / Ort"
+            value={`${zone.plz} ${zone.ortschaft}`}
           />
         </div>
 
+        <div className="flex flex-col gap-2">
+          <span className="text-[13px] font-semibold text-bark">
+            Art der Adresse
+          </span>
+          <div
+            role="radiogroup"
+            aria-label="Art der Adresse"
+            className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(230px,1fr))]"
+          >
+            <ContextTile
+              value="residential"
+              current={context}
+              onSelect={setContext}
+              title="Privatadresse"
+              sub="Nach Hause."
+            />
+            <ContextTile
+              value="business"
+              current={context}
+              onSelect={setContext}
+              title="Firma / Büro"
+              sub="An Rezeption oder Empfang."
+            />
+            <ContextTile
+              value="hospital"
+              current={context}
+              onSelect={setContext}
+              title="Spital"
+              sub="An die Station – nicht auf die Intensivstation."
+            />
+            <ContextTile
+              value="funeral"
+              current={context}
+              onSelect={setContext}
+              title="Trauerort"
+              sub="Kirche, Friedhof oder Abdankungshalle."
+            />
+          </div>
+        </div>
+
         {context === "hospital" && (
-          <div className="pt-3 space-y-3">
-            <TwoCol>
-              <Field
-                label="Abteilung / Station"
-                name="dw"
-                required
-                defaultValue={defaults.dw}
-              />
-              <Field
-                label="Zimmer (optional)"
-                name="dm"
-                defaultValue={defaults.dm}
-              />
-            </TwoCol>
-            <p className="text-[0.72rem] text-sage leading-[1.55]">
-              Viele Schweizer Spitäler nehmen nur Sträusse an (keine Erde,
-              kein Steckschaum) und nichts für die Intensivstation.
-            </p>
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+            <Field
+              name="dw"
+              label="Station"
+              required
+              defaultValue={defaults.dw}
+            />
+            <Field
+              name="dm"
+              label="Zimmer"
+              optional
+              defaultValue={defaults.dm}
+            />
           </div>
         )}
 
         {context === "funeral" && (
-          <div className="pt-3 space-y-3">
+          <>
             <Field
-              label="Name der verstorbenen Person"
               name="dn"
+              label="Name der verstorbenen Person"
               required
               defaultValue={defaults.dn}
             />
             <Field
-              label="Telefon einer Familienperson"
               name="fc"
+              label="Telefon einer Familienperson"
               required
-              defaultValue={defaults.fc}
               type="tel"
+              defaultValue={defaults.fc}
               hint="Für Rückfragen. Nicht öffentlich sichtbar."
             />
-          </div>
+          </>
         )}
-      </Section>
+      </CoBox>
 
-      {/* ------------ Card + delivery instructions ------------ */}
-      <Section title="Karte und Hinweise">
-        <TextArea
-          label="Kartentext (optional)"
-          name="cm"
-          defaultValue={defaults.cm}
-          maxLength={500}
-          rows={4}
-          hint="Handgeschrieben auf einer beiliegenden Karte."
-        />
-        <label className="flex items-start gap-2 text-[0.8rem] text-bark">
+      <CoBox
+        number={2}
+        title="Karte & Hinweise"
+        hint="Wir schreiben Ihre Karte von Hand."
+      >
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="co-card"
+            className="text-[13px] font-semibold text-bark"
+          >
+            Text der Grusskarte{" "}
+            <span className="font-normal text-sage">(optional)</span>
+          </label>
+          <textarea
+            id="co-card"
+            name="cm"
+            rows={3}
+            maxLength={200}
+            defaultValue={defaults.cm}
+            onInput={(e) => setCardLen(e.currentTarget.value.length)}
+            placeholder="Ihre Nachricht"
+            className="w-full px-4 py-3.5 border border-[#E1D5C7] bg-cream text-bark font-display italic text-[17px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+          />
+          <span className="self-end text-[12px] text-sage tabular-nums">
+            {cardLen} / 200
+          </span>
+        </div>
+
+        <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
             name="ca"
             defaultChecked={defaults.ca === true}
-            className="mt-1 h-4 w-4 border border-mist accent-rose"
+            className="w-5 h-5 mt-0.5 accent-rose shrink-0"
           />
-          Anonym senden (kein Absender auf der Karte)
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-[15px] font-semibold text-bark">
+              Anonym senden
+            </strong>
+            <span className="text-[13px] text-sage">
+              Kein Absendername auf der Karte.
+            </span>
+          </span>
         </label>
 
         {context === "funeral" && (
           <Field
-            label="Trauerband-Text (optional)"
             name="rt"
+            label="Trauerband-Text"
+            optional
             defaultValue={defaults.rt}
             hint="Wird auf ein Band gedruckt. Kurz halten."
           />
         )}
 
-        <TextArea
-          label="Hinweise zur Lieferung (optional)"
-          name="di"
-          defaultValue={defaults.di}
-          maxLength={500}
-          rows={3}
-          hint="Z.B. beim Nachbarn abgeben oder ein Sicherheitscode am Eingang."
-        />
-      </Section>
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="co-notes"
+            className="text-[13px] font-semibold text-bark"
+          >
+            Hinweise zur Lieferung{" "}
+            <span className="font-normal text-sage">(optional)</span>
+          </label>
+          <textarea
+            id="co-notes"
+            name="di"
+            rows={2}
+            maxLength={500}
+            defaultValue={defaults.di}
+            placeholder="z. B. beim Nachbarn abgeben, Code am Eingang"
+            className="w-full px-4 py-3 border border-[#E1D5C7] bg-ivory text-bark text-[15px] leading-[1.5] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
+          />
+        </div>
+      </CoBox>
 
-      <div className="pt-2">
+      <CoBox
+        number={3}
+        title="Ihre Angaben"
+        hint="Für die Rechnung und für Rückfragen."
+      >
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+          <Field
+            name="bn"
+            label="Ihr Name"
+            required
+            defaultValue={defaults.bn}
+            autoComplete="name"
+          />
+          <Field
+            name="bp"
+            label="Telefon"
+            required
+            type="tel"
+            defaultValue={defaults.bp}
+            autoComplete="tel"
+            placeholder="079 123 45 67"
+            hint="Für Rückfragen bei Lieferproblemen."
+          />
+        </div>
+        <Field
+          name="be"
+          label="E-Mail"
+          required
+          type="email"
+          defaultValue={defaults.be}
+          autoComplete="email"
+          placeholder="name@beispiel.ch"
+          hint="Für die Bestellbestätigung."
+        />
+      </CoBox>
+
+      <div className="flex flex-col gap-3.5 pt-2">
         <button
           type="submit"
           disabled={isPending}
-          className="w-full h-[52px] bg-rose text-ivory text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-[#831249] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2.5 h-14 bg-rose text-ivory text-[16px] font-semibold tracking-[0.02em] hover:brightness-110 transition-[filter] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isPending ? "Bitte warten ..." : "Weiter zur Bestätigung"}
+          {isPending ? "Bitte warten…" : "Weiter zur Übersicht"}
+          {!isPending && (
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          )}
         </button>
+        <Link
+          href="/kasse/lieferung"
+          className="self-start inline-flex items-center gap-2 text-[14px] font-semibold text-bark hover:text-rose transition-colors"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M19 12H5M11 18l-6-6 6-6" />
+          </svg>
+          Zurück zur Lieferung
+        </Link>
       </div>
     </form>
   );
@@ -224,126 +356,107 @@ export function LieferdatenForm({ defaults }: { defaults: CheckoutCookie }) {
 
 // ---------------- Building blocks ----------------
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-[0.72rem] tracking-[0.16em] uppercase font-medium text-bark">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function TwoCol({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
-}
-
 function Field({
-  label,
   name,
+  label,
   required = false,
+  optional = false,
   defaultValue,
   hint,
   type = "text",
   autoComplete,
+  placeholder,
 }: {
-  label: string;
   name: string;
+  label: string;
   required?: boolean;
+  optional?: boolean;
   defaultValue?: string;
   hint?: string;
   type?: string;
   autoComplete?: string;
+  placeholder?: string;
 }) {
   return (
-    <label className="block space-y-1">
-      <span className="text-[0.72rem] text-bark">
-        {label}
-        {required && <span className="text-rose ml-0.5" aria-hidden>*</span>}
-      </span>
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <label htmlFor={name} className="text-[13px] font-semibold text-bark">
+        {label}{" "}
+        {required && (
+          <span className="text-rose" aria-hidden>
+            *
+          </span>
+        )}
+        {optional && (
+          <span className="font-normal text-sage">(optional)</span>
+        )}
+      </label>
       <input
+        id={name}
+        name={name}
         type={type}
-        name={name}
         required={required}
-        defaultValue={defaultValue}
+        defaultValue={defaultValue ?? ""}
         autoComplete={autoComplete}
-        className="w-full h-[42px] px-3 border border-mist bg-ivory text-[0.9rem] text-bark focus:outline-none focus:border-bark"
+        placeholder={placeholder}
+        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-ivory text-bark text-[16px] focus:outline-none focus:border-rose focus:ring-2 focus:ring-rose/15"
       />
-      {hint && <span className="block text-[0.7rem] text-sage">{hint}</span>}
-    </label>
+      {hint && <span className="text-[12px] text-sage">{hint}</span>}
+    </div>
   );
 }
 
-function TextArea({
-  label,
-  name,
-  defaultValue,
-  hint,
-  maxLength,
-  rows = 3,
-}: {
-  label: string;
-  name: string;
-  defaultValue?: string;
-  hint?: string;
-  maxLength?: number;
-  rows?: number;
-}) {
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <label className="block space-y-1">
-      <span className="text-[0.72rem] text-bark">{label}</span>
-      <textarea
-        name={name}
-        defaultValue={defaultValue}
-        rows={rows}
-        maxLength={maxLength}
-        className="w-full px-3 py-2 border border-mist bg-ivory text-[0.9rem] text-bark focus:outline-none focus:border-bark resize-y"
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <span className="text-[13px] font-semibold text-bark">{label}</span>
+      <input
+        type="text"
+        readOnly
+        value={value}
+        className="w-full h-[52px] px-3.5 border border-[#E1D5C7] bg-cream text-bark text-[16px]"
       />
-      {hint && <span className="block text-[0.7rem] text-sage">{hint}</span>}
-    </label>
+    </div>
   );
 }
 
-function ContextRadio({
+function ContextTile({
   value,
   current,
-  onChange,
+  onSelect,
   title,
-  body,
+  sub,
 }: {
   value: DeliveryContextCookie;
   current: DeliveryContextCookie;
-  onChange: (v: DeliveryContextCookie) => void;
+  onSelect: (v: DeliveryContextCookie) => void;
   title: string;
-  body: string;
+  sub: string;
 }) {
   const isSelected = current === value;
   return (
     <button
       type="button"
-      onClick={() => onChange(value)}
-      aria-pressed={isSelected}
-      className={`text-left px-4 py-3 border transition-colors ${
+      onClick={() => onSelect(value)}
+      role="radio"
+      aria-checked={isSelected}
+      className={`text-left h-full px-4 py-[15px] bg-white border flex gap-3.5 items-start transition-colors ${
         isSelected
-          ? "border-bark bg-bark text-ivory"
-          : "border-mist text-bark hover:border-bark"
+          ? "border-rose shadow-[0_0_0_1px_var(--color-rose)]"
+          : "border-[#E1D5C7] hover:border-[#B8916A]"
       }`}
     >
-      <div className={`text-[0.85rem] font-medium ${isSelected ? "text-ivory" : "text-bark"}`}>
-        {title}
-      </div>
-      <p
-        className={`text-[0.72rem] mt-1 leading-[1.55] ${isSelected ? "text-cream/80" : "text-sage"}`}
-      >
-        {body}
-      </p>
+      <span
+        aria-hidden
+        className={`shrink-0 w-[18px] h-[18px] mt-0.5 box-border ${
+          isSelected
+            ? "border-0 bg-rose bg-[linear-gradient(#fff,#fff)] bg-center bg-no-repeat [background-size:6px_6px]"
+            : "border-[1.5px] border-[#B8916A]"
+        }`}
+      />
+      <span className="flex flex-col gap-1 min-w-0">
+        <span className="text-[15px] font-semibold text-bark">{title}</span>
+        <span className="text-[13px] leading-[1.5] text-sage">{sub}</span>
+      </span>
     </button>
   );
 }
