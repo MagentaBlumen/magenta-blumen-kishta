@@ -25,10 +25,12 @@ export function LieferdatenForm({
   defaults,
   zone,
   savedAddresses = [],
+  totalSavedCount = 0,
 }: {
   defaults: CheckoutCookie;
   zone: ResolvedZone;
   savedAddresses?: CustomerAddressRow[];
+  totalSavedCount?: number;
 }) {
   const [context, setContext] = useState<DeliveryContextCookie>(
     defaults.dc ?? "residential",
@@ -112,6 +114,26 @@ export function LieferdatenForm({
             </span>
           </div>
         )}
+
+        {!forSelf &&
+          savedAddresses.length === 0 &&
+          totalSavedCount > 0 && (
+            <p className="m-0 px-3 py-2.5 bg-cream border border-[#E6DDD2] text-[13px] text-sage leading-[1.5]">
+              Sie haben {totalSavedCount}{" "}
+              {totalSavedCount === 1
+                ? "gespeicherte Adresse"
+                : "gespeicherte Adressen"}
+              , aber keine davon hat PLZ {zone.plz}. Mit einer anderen
+              Lieferadresse geht es{" "}
+              <Link
+                href="/kasse/lieferung"
+                className="underline text-sage hover:text-rose"
+              >
+                über «PLZ ändern»
+              </Link>
+              .
+            </p>
+          )}
 
         <label className="flex items-start gap-3 cursor-pointer">
           <input

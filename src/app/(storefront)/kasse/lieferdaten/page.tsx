@@ -46,6 +46,7 @@ export default async function KasseLieferdatenPage() {
   const session = await auth();
   const defaults = { ...checkout };
   let savedAddresses: Awaited<ReturnType<typeof fetchCustomerAddresses>> = [];
+  let totalSavedCount = 0;
   if (session?.user?.role === "customer" && session.user.customerId) {
     const [profile, addrs] = await Promise.all([
       fetchCustomerPrefill(session.user.customerId),
@@ -56,9 +57,12 @@ export default async function KasseLieferdatenPage() {
       if (!defaults.be) defaults.be = profile.email;
       if (!defaults.bp && profile.phone) defaults.bp = profile.phone;
     }
-    // Filter to zone's PLZ — a different-PLZ address would collide
-    // with the already-resolved zone in step 1.
-    savedAddresses = addrs.filter((a) => a.plz === zone.plz);
+    totalSavedCount = addrs.length;
+    // Match on trimmed PLZ — char(4) columns can return padded via
+    // some driver paths; trimming on both sides keeps the comparison
+    // honest regardless of how pg-js returns the column.
+    const zonePlz = zone.plz.trim();
+    savedAddresses = addrs.filter((a) => a.plz.trim() === zonePlz);
   }
 
   return (
@@ -80,6 +84,7 @@ export default async function KasseLieferdatenPage() {
             defaults={defaults}
             zone={zone}
             savedAddresses={savedAddresses}
+            totalSavedCount={totalSavedCount}
           />
         </div>
 
