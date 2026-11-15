@@ -1,7 +1,8 @@
 import "server-only";
-import { and, ne, sql } from "drizzle-orm";
+import { and, asc, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { order } from "@/db/schema/order";
+import { order, orderLine } from "@/db/schema/order";
+import { productImage } from "@/db/schema/catalogue";
 import { todayZ } from "@/lib/checkout/time";
 
 /**
@@ -61,6 +62,162 @@ export type HeuteOrder = {
   paymentStatus: "pending" | "succeeded" | "failed" | "refunded" | null;
   paymentMethod: "cash" | "invoice" | "card" | "twint" | null;
 };
+
+// -------- The "Heute+" view (all actionable orders across a range) --------
+
+export type ActionableOrder = HeuteOrder & {
+  cardMessage: string | null;
+  cardIsAnonymous: boolean;
+  deliveryInstructions: string | null;
+  // First (non-add-on) line, used as the display product on the Heute
+  // card. Add-ons are hidden — they're part of their parent line.
+  firstLineProductName: string | null;
+  firstLineVariantLabel: string | null;
+  firstLineTotalGross: string | null;
+  firstLineImageUrl: string | null;
+};
+
+// All actionable orders between two ISO dates (inclusive). Used by the
+// Heute dashboard which now shows every delivery date, not just today.
+// Includes first product line + primary image + card message so the
+// mockup card has everything it needs without a second query.
+//
+// CLAUDE.md rule 1 reminder: we snapshot names/prices/addresses onto
+// order_line. The JOIN here uses order_line's SNAPSHOT fields (name,
+// variant label, line total) + a side-lookup of product_image.url
+// keyed on order_line.product_id. The image is a UI thumbnail — not
+// a pricing/accounting field — so joining to the live product_image
+// doesn't violate the snapshot rule.
+export async function fetchActionableOrdersInRange(
+  fromIso: string,
+  toIso: string,
+): Promise<ActionableOrder[]> {
+  const actionable = sql`(
+    ${order.amountDueGross} = 0
+    OR EXISTS (
+      SELECT 1 FROM payment p
+      WHERE p.order_id = ${order.id}
+        AND (p.status = 'succeeded' OR p.method IN ('cash','invoice'))
+    )
+  )`;
+
+  const rows = await db
+    .select({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      fulfilment: order.fulfilment,
+      recipientName: order.recipientName,
+      recipientPhone: order.recipientPhone,
+      buyerName: order.buyerName,
+      buyerPhone: order.buyerPhone,
+      deliveryStreet: order.deliveryStreet,
+      deliveryPlz: order.deliveryPlz,
+      deliveryCity: order.deliveryCity,
+      deliveryContext: order.deliveryContext,
+      deliveryWard: order.deliveryWard,
+      deliveryRoom: order.deliveryRoom,
+      deliveryRunId: order.deliveryRunId,
+      deliveryDate: order.deliveryDate,
+      sortTime: order.sortTime,
+      requestedDeliveryAt: order.requestedDeliveryAt,
+      routeStopOrder: order.routeStopOrder,
+      totalGross: order.totalGross,
+      printedAt: order.printedAt,
+      cardMessage: order.cardMessage,
+      cardIsAnonymous: order.cardIsAnonymous,
+      deliveryInstructions: order.deliveryInstructions,
+      itemCount: sql<number>`(SELECT COUNT(*) FROM "order_line" ol WHERE ol.order_id = ${order.id})::int`,
+      paymentStatus: sql<HeuteOrder["paymentStatus"]>`(
+        SELECT p.status FROM payment p
+        WHERE p.order_id = ${order.id}
+        ORDER BY (p.status = 'succeeded') DESC, (p.status <> 'failed') DESC
+        LIMIT 1
+      )`,
+      paymentMethod: sql<HeuteOrder["paymentMethod"]>`(
+        SELECT p.method FROM payment p
+        WHERE p.order_id = ${order.id}
+        ORDER BY (p.status = 'succeeded') DESC, (p.status <> 'failed') DESC
+        LIMIT 1
+      )`,
+    })
+    .from(order)
+    .where(
+      and(
+        actionable,
+        ne(order.status, "cancelled"),
+        gte(order.deliveryDate, fromIso),
+        lte(order.deliveryDate, toIso),
+      ),
+    )
+    .orderBy(order.deliveryDate, order.sortTime, order.routeStopOrder);
+
+  if (rows.length === 0) return [];
+
+  // Second pass: first non-add-on line per order.
+  const orderIds = rows.map((r) => r.id);
+  const firstLines = await db
+    .select({
+      orderId: orderLine.orderId,
+      lineId: orderLine.id,
+      productId: orderLine.productId,
+      productNameDe: orderLine.productNameDe,
+      variantLabelDe: orderLine.variantLabelDe,
+      lineTotalGross: orderLine.lineTotalGross,
+    })
+    .from(orderLine)
+    .where(
+      and(inArray(orderLine.orderId, orderIds), isNull(orderLine.parentLineId)),
+    )
+    .orderBy(asc(orderLine.orderId), asc(orderLine.id));
+
+  const firstByOrderId = new Map<number, (typeof firstLines)[number]>();
+  for (const l of firstLines) {
+    if (!firstByOrderId.has(l.orderId)) firstByOrderId.set(l.orderId, l);
+  }
+
+  // Third pass: primary image per referenced product (UI thumbnail only).
+  const productIds = Array.from(
+    new Set(
+      firstLines
+        .map((l) => l.productId)
+        .filter((id): id is number => id !== null),
+    ),
+  );
+  const imageByProductId = new Map<number, string>();
+  if (productIds.length > 0) {
+    const imgs = await db
+      .select({
+        productId: productImage.productId,
+        url: productImage.url,
+      })
+      .from(productImage)
+      .where(inArray(productImage.productId, productIds))
+      .orderBy(asc(productImage.sortOrder), asc(productImage.id));
+    for (const img of imgs) {
+      if (!imageByProductId.has(img.productId)) {
+        imageByProductId.set(img.productId, img.url);
+      }
+    }
+  }
+
+  return rows.map((r) => {
+    const line = firstByOrderId.get(r.id) ?? null;
+    return {
+      ...r,
+      cardMessage: r.cardMessage ?? null,
+      cardIsAnonymous: r.cardIsAnonymous ?? false,
+      deliveryInstructions: r.deliveryInstructions ?? null,
+      firstLineProductName: line?.productNameDe ?? null,
+      firstLineVariantLabel: line?.variantLabelDe ?? null,
+      firstLineTotalGross: line?.lineTotalGross ?? null,
+      firstLineImageUrl:
+        line?.productId != null
+          ? imageByProductId.get(line.productId) ?? null
+          : null,
+    } as ActionableOrder;
+  });
+}
 
 export async function fetchHeuteOrders(): Promise<HeuteOrder[]> {
   const today = todayZ();

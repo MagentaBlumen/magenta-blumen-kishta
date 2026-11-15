@@ -2,362 +2,420 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { auth } from "@/auth";
 import {
-  contextLabelDe,
-  countByStatus,
-  fetchHeuteOrders,
-  groupHeuteOrders,
-  nextHappyPathStep,
-  paymentDisplayDe,
-  statusLabelDe,
-  type HeuteOrder,
+  HeuteDayPicker,
+  type DayTab,
+} from "@/components/admin/heute-day-picker";
+import {
+  NextStepButton,
+  PrintButton,
+} from "@/components/admin/heute-actions";
+import {
+  fetchActionableOrdersInRange,
+  type ActionableOrder,
 } from "@/lib/admin/heute";
 import { formatChf } from "@/lib/money";
 import { todayZ } from "@/lib/checkout/time";
-import { QuickStepButton } from "@/components/admin/quick-step-button";
-import { RouteStopButtons } from "@/components/admin/route-stop-buttons";
+import { thumbUrl } from "@/lib/image-urls";
+import type { OrderStatus } from "@/lib/admin/order-status";
 
 export const dynamic = "force-dynamic";
 
-/**
- * The Heute dashboard - what Sandra opens every morning.
- *
- * Shows today's actionable orders grouped by run, plus any orders
- * from previous days that got stuck at ready / out_for_delivery /
- * delivery_failed. Click a row to see the full order detail (lands
- * in chunk 7b).
- *
- * Deliberately dense: Sandra prints the Bons from here and loads the
- * van, so recipient address, buyer phone, and item count need to be
- * glance-readable. Status + payment indicators are badges, not text,
- * for the same reason.
- */
-export default async function HeutePage() {
-  // Layout double-checks auth, but server actions on this page do too.
-  // No action calls here directly yet (chunks 7b-d), but belt + braces.
+// Window the Heute dashboard loads: a week back (for carryover /
+// recently delivered) and two months forward (booking horizon + buffer).
+const RANGE_PAST_DAYS = 7;
+const RANGE_FUTURE_DAYS = 60;
+
+const DOW_LONG = [
+  "Sonntag",
+  "Montag",
+  "Dienstag",
+  "Mittwoch",
+  "Donnerstag",
+  "Freitag",
+  "Samstag",
+] as const;
+const MON_LONG = [
+  "Januar",
+  "Februar",
+  "März",
+  "April",
+  "Mai",
+  "Juni",
+  "Juli",
+  "August",
+  "September",
+  "Oktober",
+  "November",
+  "Dezember",
+] as const;
+
+// -------- UI-stage mapping --------
+// DB has 8 statuses; the owner thinks in 4. The chip and the next-step
+// button both use these display stages.
+type UiStage = "neu" | "fertig" | "unterwegs" | "geliefert";
+
+function uiStageFor(s: OrderStatus): UiStage {
+  switch (s) {
+    case "new":
+    case "confirmed":
+      return "neu";
+    case "in_production":
+    case "ready":
+      return "fertig";
+    case "out_for_delivery":
+      return "unterwegs";
+    case "delivered":
+    case "delivery_failed": // still treated as "unterwegs" visually
+      return "unterwegs";
+    case "cancelled":
+      return "geliefert"; // defensive; cancelled rows are filtered out
+  }
+}
+
+const UI_STAGE_LABEL: Record<UiStage, string> = {
+  neu: "Neu",
+  fertig: "Fertig",
+  unterwegs: "Unterwegs",
+  geliefert: "Geliefert",
+};
+
+// Next single-step DB transition, as a (target, button-label) pair.
+// Returns null when the pipeline is done (delivered) or error-recovery
+// is needed (delivery_failed — admin handles on the detail page).
+function dbNext(s: OrderStatus): { target: OrderStatus; label: string } | null {
+  switch (s) {
+    case "new":
+      return { target: "confirmed", label: "Bestätigen" };
+    case "confirmed":
+      return { target: "in_production", label: "In Produktion" };
+    case "in_production":
+      return { target: "ready", label: "Strauss ist fertig" };
+    case "ready":
+      return { target: "out_for_delivery", label: "Losgefahren" };
+    case "out_for_delivery":
+      return { target: "delivered", label: "Ist geliefert" };
+    default:
+      return null;
+  }
+}
+
+// (Undo buttons are deliberately absent on Heute — the state machine
+// only moves forward. Exceptional transitions happen on the detail
+// page `/admin/bestellung/[number]`.)
+
+// -------- Tour grouping within a day --------
+const TOUR_ORDER = ["am", "event", "pm"] as const;
+type Tour = (typeof TOUR_ORDER)[number];
+
+function tourOf(o: ActionableOrder): Tour | "other" {
+  if (o.fulfilment === "timed") return "event";
+  if (o.fulfilment === "run") {
+    if (o.sortTime?.startsWith("10")) return "am";
+    if (o.sortTime?.startsWith("16")) return "pm";
+  }
+  return "other";
+}
+
+const TOUR_LABEL: Record<Tour | "other", string> = {
+  am: "Vormittag · 10–12 Uhr",
+  pm: "Nachmittag · 16–18 Uhr",
+  event: "Anlass mit fester Uhrzeit",
+  other: "Weitere Termine",
+};
+
+export default async function HeutePage(props: {
+  searchParams: Promise<{ tag?: string }>;
+}) {
   await auth();
+  const sp = await props.searchParams;
 
   const today = todayZ();
   const todayIso = today.toISODate() ?? "";
-  const rows = await fetchHeuteOrders();
-  const groups = groupHeuteOrders(rows, todayIso);
+  const fromIso =
+    today.minus({ days: RANGE_PAST_DAYS }).toISODate() ?? todayIso;
+  const toIso =
+    today.plus({ days: RANGE_FUTURE_DAYS }).toISODate() ?? todayIso;
 
-  const totalCount = rows.length;
-  const todayCount = rows.filter((r) => r.deliveryDate === todayIso).length;
-  const statusCounts = countByStatus(rows);
+  const orders = await fetchActionableOrdersInRange(fromIso, toIso);
+
+  // Group by delivery_date — one tab per date with orders.
+  const ordersByDate = new Map<string, ActionableOrder[]>();
+  for (const o of orders) {
+    const key = o.deliveryDate ?? "unbekannt";
+    const existing = ordersByDate.get(key);
+    if (existing) existing.push(o);
+    else ordersByDate.set(key, [o]);
+  }
+  const datesWithOrders = Array.from(ordersByDate.keys())
+    .filter((k) => k !== "unbekannt")
+    .sort();
+
+  // Current day: the tag param if it's present AND it has orders,
+  // otherwise today (even if today has no orders — show the empty
+  // state), otherwise the first date with orders.
+  const currentIso =
+    sp.tag && datesWithOrders.includes(sp.tag)
+      ? sp.tag
+      : datesWithOrders.includes(todayIso)
+        ? todayIso
+        : datesWithOrders[0] ?? todayIso;
+
+  // Build the day tabs: include today as a tab even when it has zero
+  // orders so Sandra can land on 'Heute' and see the empty-state copy.
+  const allDays = new Set<string>(datesWithOrders);
+  allDays.add(todayIso);
+  const days: DayTab[] = Array.from(allDays)
+    .sort()
+    .map((iso) => ({
+      iso,
+      label: shortDayLabel(iso, todayIso),
+      count: ordersByDate.get(iso)?.length ?? 0,
+    }));
+
+  const dayOrders = ordersByDate.get(currentIso) ?? [];
+  const title = longDayLabel(currentIso, todayIso);
+
+  // Group within the current day by tour.
+  const byTour: Record<Tour | "other", ActionableOrder[]> = {
+    am: [],
+    event: [],
+    pm: [],
+    other: [],
+  };
+  for (const o of dayOrders) byTour[tourOf(o)].push(o);
 
   return (
-    <div className="space-y-8">
-      <header className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">«Heute»</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {today.setLocale("de-CH").toFormat("cccc, d. LLLL yyyy")}
-          </p>
+    <>
+      <div className="adm-head">
+        <div className="adm-head__text">
+          <h1 className="adm-title">{title.short}</h1>
+          <p className="adm-sub">{title.long}</p>
         </div>
-        <div className="text-right text-sm text-muted-foreground">
-          <div>
-            <span className="text-foreground text-base font-medium tabular-nums">
-              {todayCount}
-            </span>{" "}
-            Bestellungen heute
-          </div>
-          {totalCount > todayCount && (
-            <div className="text-xs">
-              + {totalCount - todayCount} Übertrag
-            </div>
+        <PrintButton />
+      </div>
+
+      <HeuteDayPicker days={days} currentIso={currentIso} />
+
+      {dayOrders.length === 0 ? (
+        <p className="empty">
+          <strong>Keine Lieferungen.</strong>
+          Neue Bestellungen erscheinen hier automatisch.
+        </p>
+      ) : (
+        <div className="orders">
+          {TOUR_ORDER.map((tour) => {
+            const group = byTour[tour];
+            if (group.length === 0) return null;
+            return (
+              <section key={tour}>
+                <h2 className="tour">{TOUR_LABEL[tour]}</h2>
+                {group.map((o) =>
+                  o.status === "delivered" ? (
+                    <DeliveredRow key={o.id} order={o} />
+                  ) : (
+                    <OrderCard key={o.id} order={o} />
+                  ),
+                )}
+              </section>
+            );
+          })}
+          {byTour.other.length > 0 && (
+            <section>
+              <h2 className="tour">{TOUR_LABEL.other}</h2>
+              {byTour.other.map((o) =>
+                o.status === "delivered" ? (
+                  <DeliveredRow key={o.id} order={o} />
+                ) : (
+                  <OrderCard key={o.id} order={o} />
+                ),
+              )}
+            </section>
           )}
         </div>
-      </header>
-
-      {statusCounts.length > 0 && (
-        <StatusSummaryBar counts={statusCounts} />
       )}
-
-      {groups.length === 0 ? (
-        <div className="border border-dashed rounded-md p-10 text-center space-y-2">
-          <p className="text-muted-foreground">Keine Bestellungen für heute.</p>
-          <p className="text-xs text-muted-foreground">
-            Online-Bestellungen für heute erscheinen hier automatisch, sobald
-            sie eingegangen sind.
-          </p>
-        </div>
-      ) : (
-        groups.map((group) => (
-          <section key={group.key} className="space-y-3">
-            <div className="flex items-end justify-between border-b pb-2">
-              <div>
-                <h2 className="text-sm font-semibold tracking-wide uppercase">
-                  {group.labelDe}
-                </h2>
-                {group.subLabelDe && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {group.subLabelDe}
-                  </p>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {group.orders.length}{" "}
-                {group.orders.length === 1 ? "Bestellung" : "Bestellungen"}
-              </span>
-            </div>
-            <ul className="space-y-1">
-              {group.orders.map((o) => (
-                <li key={o.id}>
-                  <OrderRow order={o} isCarryover={group.key === "carryover"} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
-    </div>
+    </>
   );
 }
 
-function OrderRow({
-  order,
-  isCarryover,
-}: {
-  order: HeuteOrder;
-  isCarryover: boolean;
-}) {
-  const isDelivered = order.status === "delivered";
-  const isFuneral = order.deliveryContext === "funeral";
-  const isHospital = order.deliveryContext === "hospital";
-  const isDeliveryFailed = order.status === "delivery_failed";
+// ---------- Day labels ----------
 
-  // "Bald fällig" - a timed (funeral/event) order whose exact
-  // delivery time is within the next 2 hours. Loud enough that Sandra
-  // notices without crowding the row the rest of the day.
-  let isSoon = false;
-  if (order.fulfilment === "timed" && order.requestedDeliveryAt) {
-    const diffMin = DateTime.fromJSDate(order.requestedDeliveryAt, {
-      zone: "Europe/Zurich",
-    }).diffNow("minutes").minutes;
-    isSoon = diffMin >= 0 && diffMin <= 120;
-  }
+function shortDayLabel(iso: string, todayIso: string): string {
+  const d = DateTime.fromISO(iso, { zone: "Europe/Zurich" });
+  const t = DateTime.fromISO(todayIso, { zone: "Europe/Zurich" });
+  const diff = Math.round(d.startOf("day").diff(t.startOf("day"), "days").days);
+  if (diff === 0) return "Heute";
+  if (diff === 1) return "Morgen";
+  if (diff === -1) return "Gestern";
+  if (diff === 2) return "Übermorgen";
+  return d.setLocale("de-CH").toFormat("ccc d. LLL");
+}
 
-  const nextStep = nextHappyPathStep(order.status);
+function longDayLabel(
+  iso: string,
+  todayIso: string,
+): { short: string; long: string } {
+  const d = DateTime.fromISO(iso, { zone: "Europe/Zurich" });
+  const t = DateTime.fromISO(todayIso, { zone: "Europe/Zurich" });
+  const diff = Math.round(d.startOf("day").diff(t.startOf("day"), "days").days);
+  const short =
+    diff === 0
+      ? "Heute"
+      : diff === 1
+        ? "Morgen"
+        : diff === -1
+          ? "Gestern"
+          : diff === 2
+            ? "Übermorgen"
+            : d.setLocale("de-CH").toFormat("cccc");
+  const long = `${DOW_LONG[d.weekday % 7]}, ${d.day}. ${MON_LONG[d.month - 1]}`;
+  return { short, long };
+}
 
-  // Urgency surface:
-  //   delivery_failed -> loud rose. Overrides everything else.
-  //   funeral         -> rose left-border tint.
-  //   carryover       -> amber border + tint (set by caller).
-  //   default         -> plain border.
-  let shellClass = "";
-  if (isDeliveryFailed) {
-    shellClass = "border-rose-400 bg-rose-50 dark:bg-rose-950/20";
-  } else if (isCarryover) {
-    shellClass =
-      "border-amber-400/50 bg-amber-50/40 dark:bg-amber-950/10";
-  } else if (isFuneral) {
-    shellClass = "border-l-4 border-l-rose-400/70";
-  }
+// ---------- Order card ----------
+
+function OrderCard({ order: o }: { order: ActionableOrder }) {
+  const stage = uiStageFor(o.status);
+  const chipClass = `chip chip--${stage}`;
+  const next = dbNext(o.status);
+
+  const placeDetail =
+    o.deliveryContext === "hospital" && o.deliveryWard
+      ? `Station ${o.deliveryWard}${o.deliveryRoom ? `, Zimmer ${o.deliveryRoom}` : ""}`
+      : "";
+  const addressLine = [o.deliveryStreet, o.deliveryPlz, o.deliveryCity]
+    .filter(Boolean)
+    .join(", ");
+
+  const eventText =
+    o.fulfilment === "timed" && o.requestedDeliveryAt
+      ? `Zeremonie ${DateTime.fromJSDate(o.requestedDeliveryAt, { zone: "Europe/Zurich" }).setLocale("de-CH").toFormat("HH:mm")} Uhr`
+      : null;
+
+  const isCash = o.paymentMethod === "cash";
 
   return (
-    <Link
-      href={`/admin/bestellung/${encodeURIComponent(order.orderNumber)}`}
-      className={`block rounded-md border p-3 hover:bg-muted/60 transition-colors ${
-        isDelivered ? "opacity-60" : ""
-      } ${shellClass}`}
-    >
-      <div className="grid grid-cols-[auto_1fr_auto] gap-3 sm:gap-4 items-start">
-        {/* Left: route stop (if set) + optional reorder buttons + print indicator */}
-        <div className="flex flex-col items-center justify-start pt-0.5 w-10 flex-shrink-0">
-          <div className="text-base font-semibold tabular-nums leading-none">
-            {order.routeStopOrder ?? "·"}
-          </div>
-          {/* Reorder only applies to run orders - timed/pickup have no route. */}
-          {order.fulfilment === "run" && !isCarryover && !isDelivered && (
-            <RouteStopButtons orderNumber={order.orderNumber} />
-          )}
-          {order.printedAt && (
-            <div
-              className="mt-1 text-[10px] text-muted-foreground"
-              title="Bon gedruckt"
-              aria-label="Bon gedruckt"
-            >
-              ⎙
-            </div>
-          )}
-        </div>
-
-        {/* Middle: recipient + address + phones + items */}
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-medium text-sm">
-              {order.recipientName}
-            </span>
-            {isFuneral && <Badge tone="rose">Trauer</Badge>}
-            {isHospital && <Badge tone="amber">Spital</Badge>}
-            {order.deliveryContext === "business" && (
-              <Badge tone="slate">Firma</Badge>
-            )}
-            {isSoon && <Badge tone="amber">Bald fällig</Badge>}
-          </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {[order.deliveryStreet, order.deliveryPlz, order.deliveryCity]
-              .filter(Boolean)
-              .join(", ")}
-            {isHospital && order.deliveryWard
-              ? ` · Station ${order.deliveryWard}${order.deliveryRoom ? `, ${order.deliveryRoom}` : ""}`
-              : ""}
-          </div>
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-            <span className="font-medium tabular-nums">{order.orderNumber}</span>
-            {order.buyerPhone && (
-              <a
-                href={`tel:${order.buyerPhone}`}
-                onClick={(e) => e.stopPropagation()}
-                className="hover:text-foreground tabular-nums"
-              >
-                {order.buyerPhone}
-              </a>
-            )}
-            <span>
-              {order.itemCount} {order.itemCount === 1 ? "Artikel" : "Artikel"}
-            </span>
-            {order.fulfilment === "timed" && order.requestedDeliveryAt && (
-              <span className="tabular-nums">
-                {DateTime.fromJSDate(order.requestedDeliveryAt, {
-                  zone: "Europe/Zurich",
-                })
-                  .setLocale("de-CH")
-                  .toFormat("HH:mm")}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Right: total + status + payment + quick-step */}
-        <div className="text-right flex flex-col items-end gap-1.5">
-          <span className="font-medium tabular-nums text-sm">
-            {formatChf(order.totalGross)}
+    <article className="order" aria-label={`Bestellung ${o.orderNumber}`}>
+      <div className="order__top">
+        <Link
+          href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}`}
+          className="order__no"
+        >
+          Nr. {o.orderNumber}
+        </Link>
+        <span className={chipClass}>{UI_STAGE_LABEL[stage]}</span>
+        {isCash && (
+          <span className="chip chip--cash">
+            Bar kassieren · {formatChf(o.totalGross)}
           </span>
-          <StatusBadge status={order.status} />
-          <span className="text-[10px] text-muted-foreground">
-            {paymentDisplayDe(order.paymentStatus, order.paymentMethod)}
-          </span>
-          {nextStep && (
-            <QuickStepButton
-              orderNumber={order.orderNumber}
-              target={nextStep.target}
-              label={nextStep.labelDe}
+        )}
+        {o.status === "delivery_failed" && (
+          <span className="chip chip--neu">Lieferung fehlgeschlagen</span>
+        )}
+        <div className="order__actions">
+          {next && (
+            <NextStepButton
+              orderNumber={o.orderNumber}
+              target={next.target}
+              label={next.label}
             />
           )}
         </div>
       </div>
+      <div className="order__body">
+        <div className="order__what">
+          {o.firstLineImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thumbUrl(o.firstLineImageUrl)} alt="" />
+          ) : (
+            <div style={{ width: 56, height: 56, background: "var(--a-sand)" }} />
+          )}
+          <div>
+            <span className="order__product">
+              {o.firstLineProductName ?? "(Produkt gelöscht)"}
+            </span>
+            <span className="order__meta">
+              {o.firstLineVariantLabel
+                ? `${o.firstLineVariantLabel} · `
+                : ""}
+              {formatChf(o.totalGross)}
+              {o.itemCount > 1 ? ` · ${o.itemCount} Positionen` : ""}
+            </span>
+          </div>
+        </div>
+
+        {o.cardMessage ? (
+          <p className="order__card">
+            «{o.cardMessage}»{o.cardIsAnonymous ? " (anonym)" : ""}
+          </p>
+        ) : (
+          <span aria-hidden />
+        )}
+
+        <div className="order__to">
+          {eventText && <p className="order__event">{eventText}</p>}
+          <span className="order__name">{o.recipientName}</span>
+          {addressLine && (
+            <span className="order__addr">{addressLine}</span>
+          )}
+          {placeDetail && <span className="order__place">{placeDetail}</span>}
+          {o.recipientPhone && (
+            <a
+              className="order__tel"
+              href={`tel:${o.recipientPhone.replace(/\s/g, "")}`}
+            >
+              <svg
+                className="icon"
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z" />
+              </svg>
+              {o.recipientPhone}
+            </a>
+          )}
+          {o.deliveryInstructions && (
+            <p className="order__note">{o.deliveryInstructions}</p>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function DeliveredRow({ order: o }: { order: ActionableOrder }) {
+  return (
+    <Link
+      href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}`}
+      className="order-done"
+    >
+      <span className="order-done__ok">
+        <svg
+          className="icon"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M5 12l5 5 9-10" />
+        </svg>
+        Geliefert
+      </span>
+      <span className="order-done__text">
+        Nr. {o.orderNumber} · {o.recipientName}
+        {o.firstLineProductName ? ` · ${o.firstLineProductName}` : ""}
+      </span>
     </Link>
   );
 }
-
-function StatusSummaryBar({
-  counts,
-}: {
-  counts: { status: HeuteOrder["status"]; count: number }[];
-}) {
-  const total = counts.reduce((acc, c) => acc + c.count, 0);
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border p-3 bg-muted/30">
-      {counts.map(({ status, count }) => (
-        <SummaryPill key={status} status={status} count={count} />
-      ))}
-      <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-        {total} aktiv
-      </span>
-    </div>
-  );
-}
-
-function SummaryPill({
-  status,
-  count,
-}: {
-  status: HeuteOrder["status"];
-  count: number;
-}) {
-  const tone =
-    status === "delivered"
-      ? "slate"
-      : status === "out_for_delivery"
-        ? "sky"
-        : status === "ready"
-          ? "emerald"
-          : status === "in_production"
-            ? "amber"
-            : status === "delivery_failed"
-              ? "rose"
-              : status === "cancelled"
-                ? "slate"
-                : "stone";
-  const classes = {
-    stone:
-      "bg-stone-100 text-stone-700 border-stone-200 dark:bg-stone-800 dark:text-stone-200 dark:border-stone-700",
-    sky: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900 dark:text-sky-200 dark:border-sky-800",
-    emerald:
-      "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-200 dark:border-emerald-800",
-    amber:
-      "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900 dark:text-amber-200 dark:border-amber-800",
-    rose: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-800",
-    slate:
-      "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700",
-  }[tone];
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium border rounded-md ${classes}`}
-    >
-      <span className="tabular-nums font-semibold">{count}</span>
-      <span className="opacity-80">{statusLabelDe(status)}</span>
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: HeuteOrder["status"] }) {
-  const tone =
-    status === "delivered"
-      ? "slate"
-      : status === "out_for_delivery"
-        ? "sky"
-        : status === "ready"
-          ? "emerald"
-          : status === "in_production"
-            ? "amber"
-            : status === "delivery_failed"
-              ? "rose"
-              : status === "cancelled"
-                ? "slate"
-                : "stone";
-  return <Badge tone={tone}>{statusLabelDe(status)}</Badge>;
-}
-
-function Badge({
-  tone,
-  children,
-}: {
-  tone: "stone" | "sky" | "emerald" | "amber" | "rose" | "slate";
-  children: React.ReactNode;
-}) {
-  const classes = {
-    stone:
-      "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200 border-stone-200 dark:border-stone-700",
-    sky: "bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-200 border-sky-200 dark:border-sky-800",
-    emerald:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800",
-    amber:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800",
-    rose: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200 border-rose-200 dark:border-rose-800",
-    slate:
-      "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700",
-  }[tone];
-  return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium border rounded ${classes}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-// contextLabelDe is used for a11y + badge hover titles in later chunks;
-// keep the import live.
-void contextLabelDe;
