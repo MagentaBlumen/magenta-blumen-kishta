@@ -1,9 +1,12 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CartLineControls } from "@/components/storefront/cart-line-controls";
+import { CheckoutProgress } from "@/components/storefront/checkout-progress";
 import { hydrateCart } from "@/lib/cart/hydrate";
+import { getNextDeliverySlot } from "@/lib/delivery/next-slot";
 import { thumbUrl } from "@/lib/image-urls";
 import { formatChf } from "@/lib/money";
+import type { HydratedCart } from "@/lib/cart/types";
 
 export const dynamic = "force-dynamic";
 
@@ -12,234 +15,349 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-// The DEFAULT global minimum from delivery_zone.min_order_gross.default.
-// Individual zones can be higher (Untersiggenthal 50, Brugg 50-60); the
-// per-zone check happens in checkout 5d once the customer picks a PLZ.
-// Shown here so the CHF 40 rejection surfaces in the cart rather than
-// two screens later (per the plan).
+// Default global minimum from delivery_zone.min_order_gross.default.
+// Per-zone minima (Untersiggenthal 50, Brugg 50-60) get re-checked at
+// /kasse/lieferung once the customer picks a PLZ.
 const DEFAULT_MIN_ORDER_GROSS = 40;
+
+// Shown as an estimate in the cart. Real fee resolves in /kasse/lieferung
+// from delivery_zone once PLZ + Ortschaft are known.
+const FREE_SHIPPING_FROM = 120;
+const ESTIMATE_DELIVERY_FEE = 12;
 
 export default async function CartPage() {
   const cart = await hydrateCart();
+  const itemCount = cart.lines.reduce((n, l) => n + l.qty, 0);
 
   if (cart.lines.length === 0) {
-    return <EmptyCart />;
+    return (
+      <main className="max-w-[1280px] mx-auto px-4 lg:px-8 py-8 lg:py-10 pb-24 flex flex-col gap-10">
+        <CheckoutProgress current="warenkorb" />
+        <CartTitle itemCount={0} />
+        <EmptyCart />
+      </main>
+    );
   }
 
   const subtotalNum = Number(cart.subtotalGross);
   const belowMinimum = subtotalNum < DEFAULT_MIN_ORDER_GROSS;
   const shortfall = Math.max(0, DEFAULT_MIN_ORDER_GROSS - subtotalNum);
   const anySoldOut = cart.lines.some((l) => !l.isAvailable);
+  const qualifiesFreeShipping = subtotalNum >= FREE_SHIPPING_FROM;
+  const feeNum = qualifiesFreeShipping ? 0 : ESTIMATE_DELIVERY_FEE;
+  const totalNum = subtotalNum + feeNum;
+  const nextSlot = getNextDeliverySlot();
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-6 py-10 lg:py-14 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <header className="mb-8">
-        <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium mb-2">
+    <main className="max-w-[1280px] mx-auto px-4 lg:px-8 py-8 lg:py-10 pb-24 flex flex-col gap-10">
+      <CheckoutProgress current="warenkorb" />
+      <CartTitle itemCount={itemCount} />
+
+      {cart.droppedCount > 0 && <DroppedBanner count={cart.droppedCount} />}
+      {anySoldOut && <SoldOutBanner />}
+
+      <div className="flex flex-col lg:flex-row flex-wrap gap-10 lg:gap-16 items-start">
+        <div className="w-full lg:flex-[7_1_520px] min-w-0 flex flex-col">
+          <ul className="m-0 p-0 list-none border-t border-[#E6DDD2]">
+            {cart.lines.map((l) => (
+              <CartLineRow key={`${l.productId}:${l.variantId}`} line={l} />
+            ))}
+          </ul>
+          <Link
+            href="/kategorie/alle-anlaesse"
+            className="self-start mt-6 inline-flex items-center gap-2 text-[14px] font-semibold text-bark hover:text-rose transition-colors"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M19 12H5M11 18l-6-6 6-6" />
+            </svg>
+            Weiter einkaufen
+          </Link>
+        </div>
+
+        <CartSummary
+          subtotalNum={subtotalNum}
+          feeNum={feeNum}
+          totalNum={totalNum}
+          qualifiesFreeShipping={qualifiesFreeShipping}
+          belowMinimum={belowMinimum}
+          shortfall={shortfall}
+          anySoldOut={anySoldOut}
+          nextSlotLabel={
+            nextSlot ? `${nextSlot.dayLabel}, ${nextSlot.timeLabel}` : null
+          }
+        />
+      </div>
+    </main>
+  );
+}
+
+function CartTitle({ itemCount }: { itemCount: number }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
           Warenkorb
         </p>
-        <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
-          Ihre Auswahl
+        <h1 className="m-0 font-display font-light text-bark text-[clamp(40px,4.4vw,60px)] leading-none tracking-[-0.025em]">
+          Ihre <em className="italic text-rose">Auswahl</em>
         </h1>
-      </header>
-
-      {cart.droppedCount > 0 && (
-        <div className="mb-6 px-4 py-3 bg-cream border border-mist text-[0.8rem] text-bark">
-          {cart.droppedCount === 1
-            ? "1 Artikel wurde aus dem Warenkorb entfernt, weil er nicht mehr verfügbar ist."
-            : `${cart.droppedCount} Artikel wurden aus dem Warenkorb entfernt, weil sie nicht mehr verfügbar sind.`}
-        </div>
-      )}
-
-      {anySoldOut && (
-        <div className="mb-6 px-4 py-3 border border-rose/40 bg-rose/5 text-[0.8rem] text-bark">
-          Ein Artikel in Ihrem Warenkorb ist zurzeit ausverkauft und muss
-          entfernt werden, bevor Sie zur Kasse gehen können.
-        </div>
-      )}
-
-      <div className="grid gap-10 lg:grid-cols-[1fr_360px] items-start">
-        {/* -------- Lines -------- */}
-        <ul className="border-t border-mist">
-          {cart.lines.map((l) => (
-            <li
-              key={`${l.productId}:${l.variantId}`}
-              className="group grid grid-cols-[80px_1fr_auto] sm:grid-cols-[100px_1fr_auto] gap-4 sm:gap-6 py-5 border-b border-mist"
-            >
-              <Link
-                href={`/produkt/${l.productSlug}`}
-                className="block aspect-[3/4] bg-mist overflow-hidden"
-              >
-                {l.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={thumbUrl(l.imageUrl)}
-                    alt={l.imageAlt ?? l.productNameDe}
-                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
-                    loading="lazy"
-                  />
-                ) : null}
-              </Link>
-
-              <div className="min-w-0 flex flex-col gap-1.5">
-                <Link
-                  href={`/produkt/${l.productSlug}`}
-                  className="font-display text-[1.1rem] text-bark leading-tight hover:text-rose transition-colors"
-                >
-                  {l.productNameDe}
-                </Link>
-                {l.variantLabelDe && (
-                  <p className="text-[0.72rem] tracking-[0.06em] uppercase text-sage">
-                    {l.variantLabelDe}
-                  </p>
-                )}
-                {!l.isAvailable && (
-                  <p className="text-[0.7rem] tracking-[0.08em] uppercase text-rose font-medium">
-                    Ausverkauft
-                  </p>
-                )}
-                <p className="text-[0.78rem] text-sage tabular-nums">
-                  {formatChf(l.unitPriceGross)} / Stück
-                </p>
-                <div className="pt-2">
-                  <CartLineControls
-                    productId={l.productId}
-                    variantId={l.variantId}
-                    qty={l.qty}
-                  />
-                </div>
-              </div>
-
-              <div className="text-right">
-                <p className="font-display text-[1.1rem] text-bark tabular-nums">
-                  {formatChf(l.lineTotalGross)}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {/* -------- Summary -------- */}
-        <aside className="bg-cream border border-mist p-6 lg:sticky lg:top-24">
-          <h2 className="text-[0.68rem] tracking-[0.2em] uppercase font-medium text-bark mb-4">
-            Zusammenfassung
-          </h2>
-
-          <dl className="space-y-2 text-[0.9rem]">
-            <div className="flex justify-between">
-              <dt className="text-bark">Zwischensumme</dt>
-              <dd className="text-bark tabular-nums font-medium">
-                {formatChf(cart.subtotalGross)}
-              </dd>
-            </div>
-            <div className="flex justify-between text-[0.78rem] text-sage">
-              <dt>Lieferung</dt>
-              <dd>wird bei der Kasse berechnet</dd>
-            </div>
-          </dl>
-
-          <div className="mt-6 pt-5 border-t border-mist">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[0.72rem] tracking-[0.12em] uppercase font-medium text-bark">
-                Total (ohne Lieferung)
-              </span>
-              <span className="font-display text-[1.4rem] text-bark tabular-nums">
-                {formatChf(cart.subtotalGross)}
-              </span>
-            </div>
-          </div>
-
-          {/* -------- Minimum-order gate --------
-              Per the checkout spec: reject at the cart, not two screens
-              later. The default zone minimum is CHF 40 (ohne Karte + Transport,
-              per her price sheet). Individual zones may be higher and get
-              enforced again at PLZ resolution in 5d. */}
-          {belowMinimum && (
-            <div className="mt-4 px-3 py-2 bg-rose/10 border border-rose/30 text-[0.78rem] text-bark leading-[1.55]">
-              Mindestbestellwert CHF {DEFAULT_MIN_ORDER_GROSS.toFixed(2)}.
-              Bitte fügen Sie noch <span className="font-medium">CHF {shortfall.toFixed(2)}</span>{" "}
-              hinzu, um zur Kasse zu gehen.
-            </div>
-          )}
-
-          <CheckoutButton disabled={belowMinimum || anySoldOut} />
-
-          <p className="mt-4 text-[0.7rem] text-sage leading-[1.55]">
-            Alle Preise inkl. MwSt. Höhere Mindestbestellwerte gelten in
-            einzelnen Zonen.
-          </p>
-        </aside>
       </div>
-
-      <div className="mt-10">
-        <Link
-          href="/kategorie/alle-anlaesse"
-          className="group inline-flex items-center gap-2 px-4 py-2 border border-rose text-rose text-[0.7rem] tracking-[0.14em] uppercase font-medium hover:bg-rose hover:text-ivory transition-colors duration-200"
-        >
-          <span className="transition-transform duration-200 group-hover:-translate-x-1">
-            ←
-          </span>
-          Weiter einkaufen
-        </Link>
-      </div>
+      {itemCount > 0 && (
+        <span className="text-[14px] text-sage">
+          {itemCount === 1 ? "1 Artikel" : `${itemCount} Artikel`}
+        </span>
+      )}
     </div>
+  );
+}
+
+function CartLineRow({ line: l }: { line: HydratedCart["lines"][number] }) {
+  return (
+    <li className="flex gap-4 lg:gap-6 py-7 border-b border-[#E6DDD2]">
+      <Link
+        href={`/produkt/${l.productSlug}`}
+        className="block shrink-0 bg-cream w-[88px] lg:w-[120px]"
+      >
+        {l.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbUrl(l.imageUrl)}
+            alt={l.imageAlt ?? l.productNameDe}
+            className="block w-[88px] h-[110px] lg:w-[120px] lg:h-[150px] object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-[88px] h-[110px] lg:w-[120px] lg:h-[150px]" />
+        )}
+      </Link>
+
+      <div className="flex-1 min-w-0 flex flex-col gap-3.5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex flex-col gap-1">
+            <Link
+              href={`/produkt/${l.productSlug}`}
+              className="font-display text-[18px] lg:text-[22px] leading-[1.2] text-bark hover:text-rose transition-colors"
+            >
+              {l.productNameDe}
+            </Link>
+            {l.variantLabelDe && (
+              <span className="text-[13px] text-sage">{l.variantLabelDe}</span>
+            )}
+            {!l.isAvailable && (
+              <span className="text-[13px] text-rose font-semibold">
+                Ausverkauft
+              </span>
+            )}
+          </div>
+          <span className="font-display text-[18px] lg:text-[22px] whitespace-nowrap text-bark tabular-nums">
+            {formatChf(l.lineTotalGross)}
+          </span>
+        </div>
+
+        <div className="mt-auto">
+          <CartLineControls
+            productId={l.productId}
+            variantId={l.variantId}
+            qty={l.qty}
+          />
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function CartSummary({
+  subtotalNum,
+  feeNum,
+  totalNum,
+  qualifiesFreeShipping,
+  belowMinimum,
+  shortfall,
+  anySoldOut,
+  nextSlotLabel,
+}: {
+  subtotalNum: number;
+  feeNum: number;
+  totalNum: number;
+  qualifiesFreeShipping: boolean;
+  belowMinimum: boolean;
+  shortfall: number;
+  anySoldOut: boolean;
+  nextSlotLabel: string | null;
+}) {
+  const ctaBlocked = belowMinimum || anySoldOut;
+  return (
+    <aside
+      aria-label="Zusammenfassung"
+      className="w-full lg:flex-[4_1_340px] min-w-0 lg:sticky lg:top-6 flex flex-col gap-3.5"
+    >
+      <div className="mb-wood p-6 lg:p-7 flex flex-col gap-5">
+        <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-[#EBDDC9]">
+          Zusammenfassung
+        </p>
+
+        <dl className="m-0 flex flex-col gap-3 text-[15px]">
+          <div className="flex justify-between gap-4">
+            <dt className="text-[#EBDDC9]">Zwischensumme</dt>
+            <dd className="m-0 tabular-nums">
+              {formatChf(subtotalNum.toFixed(2))}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-[#EBDDC9]">Lieferung</dt>
+            <dd
+              className={`m-0 ${
+                qualifiesFreeShipping
+                  ? "text-[#9BE3A8] font-semibold"
+                  : "tabular-nums"
+              }`}
+            >
+              {qualifiesFreeShipping
+                ? "Gratis"
+                : `ab ${formatChf(feeNum.toFixed(2))}`}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="flex items-baseline justify-between gap-4 pt-[18px] border-t border-white/20">
+          <span className="flex flex-col gap-0.5">
+            <strong className="text-[15px] font-semibold">Total</strong>
+            <span className="text-[12px] text-[#D9C4A8]">inkl. MwSt.</span>
+          </span>
+          <span className="font-display text-[32px] lg:text-[36px] leading-none whitespace-nowrap tabular-nums">
+            {formatChf(totalNum.toFixed(2))}
+          </span>
+        </div>
+
+        {belowMinimum ? (
+          <div className="px-4 py-3 bg-ivory/15 text-ivory text-[13px] leading-[1.5]">
+            Mindestbestellwert CHF {DEFAULT_MIN_ORDER_GROSS}.{" "}
+            Fehlt noch {formatChf(shortfall.toFixed(2))}.
+          </div>
+        ) : anySoldOut ? (
+          <div className="px-4 py-3 bg-ivory/15 text-ivory text-[13px] leading-[1.5]">
+            Ausverkauften Artikel entfernen, um fortzufahren.
+          </div>
+        ) : null}
+
+        {ctaBlocked ? (
+          <span
+            aria-disabled="true"
+            className="flex items-center justify-center h-14 bg-ivory/20 text-ivory/70 text-[16px] font-semibold tracking-[0.02em] cursor-not-allowed"
+          >
+            Zur Kasse
+          </span>
+        ) : (
+          <Link
+            href="/kasse/lieferung"
+            className="flex items-center justify-center gap-2.5 h-14 bg-rose text-ivory text-[16px] font-semibold tracking-[0.02em] hover:brightness-110 transition-[filter]"
+          >
+            Zur Kasse
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </Link>
+        )}
+
+        {nextSlotLabel && (
+          <div className="flex items-center gap-3 text-[13px] text-[#EBDDC9]">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M2 7h11v9H2z" />
+              <path d="M13 10h4l3 3v3h-7z" />
+              <circle cx="6" cy="18" r="2" />
+              <circle cx="17" cy="18" r="2" />
+            </svg>
+            <span>
+              Frühester Liefertermin:{" "}
+              <strong className="text-ivory font-semibold">
+                {nextSlotLabel}
+              </strong>
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4 px-0.5 text-[12px] text-sage">
+        <span className="flex gap-1.5">
+          <span className="h-7 px-2.5 border border-[#E1D5C7] inline-flex items-center font-semibold">
+            TWINT
+          </span>
+          <span className="h-7 px-2.5 border border-[#E1D5C7] inline-flex items-center font-semibold">
+            Karte
+          </span>
+        </span>
+        <span>In einzelnen Zonen gilt ein höherer Mindestbestellwert.</span>
+      </div>
+    </aside>
   );
 }
 
 function EmptyCart() {
   return (
-    <div className="max-w-2xl mx-auto px-6 py-24 text-center space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <p className="text-[0.68rem] tracking-[0.2em] uppercase text-sage font-medium">
-        Warenkorb
+    <div className="border border-[#E6DDD2] px-6 py-14 flex flex-col items-center gap-4 text-center">
+      <p className="m-0 font-display text-[26px] text-bark">
+        Ihr Warenkorb ist leer
       </p>
-      <h1 className="font-display font-light text-bark text-[clamp(2rem,4vw,3rem)] leading-[1.1]">
-        Ihr Warenkorb ist leer.
-      </h1>
-      <p className="text-[0.9rem] text-bark/70 leading-[1.7] font-light">
-        Stöbern Sie im Sortiment oder rufen Sie uns direkt an.
-      </p>
-      <div className="pt-4 flex flex-wrap gap-3 justify-center">
-        <Link
-          href="/kategorie/alle-anlaesse"
-          className="group inline-flex items-center gap-2 bg-bark text-ivory px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-rose active:translate-y-px transition-all duration-200"
-        >
-          Zum Sortiment
-          <span className="transition-transform duration-200 group-hover:translate-x-1">
-            →
-          </span>
-        </Link>
-        <a
-          href="tel:+41565565609"
-          className="inline-block border border-bark text-bark px-9 py-3.5 text-[0.72rem] tracking-[0.16em] uppercase font-medium hover:bg-bark hover:text-ivory active:translate-y-px transition-all duration-200"
-        >
-          Anrufen
+      <p className="m-0 text-[15px] text-sage max-w-md">
+        Entdecken Sie die Sträusse dieser Woche — oder rufen Sie uns an unter{" "}
+        <a href="tel:+41565565609" className="text-rose hover:underline">
+          056 556 56 09
         </a>
-      </div>
+        .
+      </p>
+      <Link
+        href="/kategorie/alle-anlaesse"
+        className="mt-2 inline-flex items-center h-12 px-6 bg-rose text-ivory text-[15px] font-semibold hover:brightness-110 transition-[filter]"
+      >
+        Blumen entdecken
+      </Link>
     </div>
   );
 }
 
-function CheckoutButton({ disabled }: { disabled: boolean }) {
-  const base =
-    "mt-5 w-full h-[52px] text-[0.72rem] tracking-[0.16em] uppercase font-medium transition-all duration-200 inline-flex items-center justify-center gap-2";
-  if (disabled) {
-    return (
-      <span
-        aria-disabled="true"
-        className={`${base} bg-mist text-sage cursor-not-allowed`}
-      >
-        Zur Kasse
-      </span>
-    );
-  }
+function DroppedBanner({ count }: { count: number }) {
   return (
-    <Link
-      href="/kasse/lieferung"
-      className={`group ${base} bg-rose text-ivory hover:bg-[#831249] active:translate-y-px`}
-    >
-      Zur Kasse
-      <span className="transition-transform duration-200 group-hover:translate-x-1">
-        →
-      </span>
-    </Link>
+    <div className="px-4 py-3 bg-cream border border-[#E6DDD2] text-[13px] text-bark">
+      {count === 1
+        ? "1 Artikel wurde aus dem Warenkorb entfernt, weil er nicht mehr verfügbar ist."
+        : `${count} Artikel wurden aus dem Warenkorb entfernt, weil sie nicht mehr verfügbar sind.`}
+    </div>
+  );
+}
+
+function SoldOutBanner() {
+  return (
+    <div className="px-4 py-3 border border-rose/40 bg-rose/5 text-[13px] text-bark">
+      Ein Artikel in Ihrem Warenkorb ist zurzeit ausverkauft und muss entfernt
+      werden, bevor Sie zur Kasse gehen können.
+    </div>
   );
 }
