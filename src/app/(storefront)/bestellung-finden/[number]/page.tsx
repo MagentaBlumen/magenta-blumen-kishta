@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
+import { auth } from "@/auth";
 import { fetchGuestOrderView } from "@/lib/order-lookup/fetch";
 import { verifyOrderViewToken } from "@/lib/order-lookup/token";
 import { formatChf } from "@/lib/money";
@@ -32,14 +33,26 @@ export default async function GuestOrderViewPage({ params }: PageProps) {
   const { number } = await params;
   const orderNumber = decodeURIComponent(number);
 
-  // Token-bound: a valid cookie must prove this browser landed here
-  // via an email link (or a logged-in Konto view). No token → 404.
-  // The old redirect target (/bestellung-finden form) is gone.
-  const ok = await verifyOrderViewToken(orderNumber);
-  if (!ok) notFound();
-
-  const data = await fetchGuestOrderView(orderNumber);
+  // Two auth paths lead here:
+  //   1. Guest magic link in a fulfillment email writes a token cookie
+  //      bound to this order number (verifyOrderViewToken).
+  //   2. A logged-in customer clicks 'Details' in /konto — no token,
+  //      but order.customer_id must match their session.
+  // No match on either → 404 (ordinary strangers can't guess a URL
+  // into someone else's order history).
+  const [session, data] = await Promise.all([
+    auth(),
+    fetchGuestOrderView(orderNumber),
+  ]);
   if (!data) notFound();
+
+  const hasToken = await verifyOrderViewToken(orderNumber);
+  const isOwner =
+    session?.user?.role === "customer" &&
+    session.user.customerId != null &&
+    data.customerId != null &&
+    data.customerId === session.user.customerId;
+  if (!hasToken && !isOwner) notFound();
 
   const slotLabel = buildSlotLabel(data);
 
@@ -168,10 +181,10 @@ export default async function GuestOrderViewPage({ params }: PageProps) {
 
       <div className="pt-6 border-t border-mist flex flex-wrap gap-3 justify-between items-center">
         <Link
-          href="/"
+          href={isOwner ? "/konto/bestellungen" : "/"}
           className="text-[0.82rem] text-sage hover:text-rose transition-colors"
         >
-          ← Zurück zur Startseite
+          ← {isOwner ? "Zurück zu Mein Konto" : "Zurück zur Startseite"}
         </Link>
         <a
           href="tel:+41565565609"

@@ -44,6 +44,7 @@ export async function verifyGuestLookup(
 
 export type GuestOrderView = {
   orderNumber: string;
+  customerId: number | null;
   status: OrderStatus;
   placedAt: Date;
   fulfilment: "run" | "timed" | "pickup" | "post";
@@ -149,6 +150,7 @@ export async function fetchGuestOrderView(
 
   return {
     orderNumber: o.orderNumber,
+    customerId: o.customerId,
     status: o.status,
     placedAt: o.placedAt,
     fulfilment: o.fulfilment,
