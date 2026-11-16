@@ -18,10 +18,7 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
     {
       href: "/admin",
       label: "Bestellungen",
-      match: (p) =>
-        p === "/admin" ||
-        p.startsWith("/admin/bestellung") ||
-        p.startsWith("/admin/kalender"),
+      match: (p) => p === "/admin" || p.startsWith("/admin/bestellung"),
       icon: (
         <svg
           className="icon"
@@ -40,6 +37,28 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
         </svg>
       ),
       badge: openOrderCount,
+    },
+    {
+      href: "/admin/kalender",
+      label: "Kalender",
+      match: (p) => p.startsWith("/admin/kalender"),
+      icon: (
+        <svg
+          className="icon"
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <rect x="3" y="5" width="18" height="16" />
+          <path d="M3 10h18M8 3v4M16 3v4" />
+        </svg>
+      ),
     },
     {
       href: "/admin/produkte",

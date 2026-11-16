@@ -85,10 +85,10 @@ export function AdminTopBar() {
 }
 
 function titleFor(pathname: string): string {
+  if (pathname.startsWith("/admin/kalender")) return "Kalender";
   if (pathname.startsWith("/admin/produkte")) return "Produkte";
   if (pathname.startsWith("/admin/kunden")) return "Kunden";
   if (pathname.startsWith("/admin/einstellungen")) return "Einstellungen";
-  if (pathname.startsWith("/admin/kalender")) return "Kalender";
   if (pathname.startsWith("/admin/bestellung")) return "Bestellung";
   if (pathname.startsWith("/admin/suche")) return "Suche";
   return "Bestellungen";
