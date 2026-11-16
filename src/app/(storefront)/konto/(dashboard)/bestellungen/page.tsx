@@ -88,13 +88,6 @@ function EmptyOrders() {
       <p className="text-[15px] text-bark m-0">
         Noch keine Bestellungen auf diesem Konto.
       </p>
-      <p className="text-[13px] text-sage m-0 max-w-md">
-        Als Gast bestellt?{" "}
-        <Link href="/bestellung-finden" className="text-rose hover:underline">
-          Bestellung finden
-        </Link>
-        .
-      </p>
       <Link
         href="/kategorie/alle-anlaesse"
         className="mt-2 inline-flex items-center gap-2 h-11 px-5 bg-bark text-ivory text-[13px] font-semibold tracking-[0.14em] uppercase hover:bg-rose transition-colors"

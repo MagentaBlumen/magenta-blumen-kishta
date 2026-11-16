@@ -54,7 +54,6 @@ export function SiteFooter() {
           <div className="text-[0.68rem] tracking-[0.16em] uppercase font-medium text-bark mb-3">
             Service
           </div>
-          <FooterLink href="/bestellung-finden">Bestellung finden</FooterLink>
           <FooterLink href="/konto">Mein Konto</FooterLink>
           <FooterLink href="/impressum">Impressum</FooterLink>
           <FooterLink href="/agb">AGB</FooterLink>
