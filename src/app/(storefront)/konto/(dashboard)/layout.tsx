@@ -43,7 +43,7 @@ export default async function KontoDashboardLayout({
   ).length;
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 lg:px-8 py-10 lg:py-14 flex flex-col lg:flex-row flex-wrap gap-8 lg:gap-14 items-start">
+    <div className="max-w-[1200px] mx-auto px-4 lg:px-8 py-4 lg:py-14 pb-28 lg:pb-14 flex flex-col lg:flex-row flex-wrap gap-6 lg:gap-14 items-start">
       <KontoSidebar
         firstName={profile.firstName}
         lastName={profile.lastName}

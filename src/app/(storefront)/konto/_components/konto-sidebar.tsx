@@ -20,7 +20,10 @@ export function KontoSidebar({
 
   return (
     <aside className="w-full lg:w-[240px] lg:flex-none lg:sticky lg:top-6 flex flex-col gap-7">
-      <div className="flex items-center gap-3.5">
+      {/* User card — shown only on lg and up. On phones the nav is a
+          fixed bottom tab bar; identity + logout live inside the Profil
+          tab so the top of every page is clean. */}
+      <div className="hidden lg:flex items-center gap-3.5">
         <span
           aria-hidden
           className="w-[52px] h-[52px] grid place-items-center bg-rose text-ivory font-display text-[22px] shrink-0"

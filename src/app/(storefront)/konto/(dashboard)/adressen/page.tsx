@@ -21,7 +21,7 @@ export default async function KontoAddresses() {
     <section className="flex flex-col gap-7">
       <header className="flex flex-col gap-2">
         <h1 className="m-0 font-display font-light text-bark text-[40px] leading-[1.05]">
-          Adressbuch
+          Empfänger
         </h1>
         <p className="m-0 text-[15px] text-sage">
           Gespeicherte Empfänger werden beim Bestellen automatisch ausgefüllt.

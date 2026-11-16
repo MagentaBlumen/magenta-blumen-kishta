@@ -16,7 +16,7 @@ export default async function KontoSettings() {
   return (
     <section className="flex flex-col gap-7">
       <h1 className="m-0 font-display font-light text-bark text-[40px] leading-[1.05]">
-        Einstellungen
+        Profil
       </h1>
 
       <div className="grid gap-5 md:grid-cols-2">
