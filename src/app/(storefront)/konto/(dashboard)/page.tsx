@@ -32,8 +32,12 @@ export default async function KontoOverview() {
     addresses,
   );
   const firstName = profile.firstName || profile.email.split("@")[0];
-  const lastOrder = orders[0] ?? null;
-  const flowerStripOrders = orders.slice(0, 4);
+  const heroOrder = selectHeroOrder(orders);
+  // 'Ihre Blumen' is the memory lane — show past bouquets only so
+  // there's no overlap with the hero's live/upcoming order.
+  const pastOrders = orders
+    .filter((o) => o.status === "delivered")
+    .slice(0, 4);
   const initials = initialsFrom(
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
       profile.email,
@@ -67,11 +71,9 @@ export default async function KontoOverview() {
         </Link>
       </header>
 
-      {lastOrder && <HeroOrder order={lastOrder} />}
+      {heroOrder && <HeroOrder order={heroOrder} />}
 
-      {flowerStripOrders.length > 0 && (
-        <FlowerStrip orders={flowerStripOrders} />
-      )}
+      {pastOrders.length > 0 && <FlowerStrip orders={pastOrders} />}
 
       <RecipientsStrip
         addresses={addresses.slice(0, 4)}
@@ -104,6 +106,38 @@ function GreetingMeta({
       {orderText} · Mitglied seit {memberSince}
     </p>
   );
+}
+
+// Pick the most relevant order for the hero. Preference ladder:
+//   1. On-the-way: any out_for_delivery.
+//   2. Active + soonest: next delivery_date >= today, status is NOT
+//      delivered/cancelled. Sorted asc so Montag beats Mittwoch.
+//   3. Most recent delivered. Falls through to orders[0] if even that
+//      isn't there (e.g. everything got cancelled).
+function selectHeroOrder(
+  orders: CustomerOrderRow[],
+): CustomerOrderRow | null {
+  if (orders.length === 0) return null;
+  const onTheWay = orders.find((o) => o.status === "out_for_delivery");
+  if (onTheWay) return onTheWay;
+
+  const todayIso =
+    DateTime.now().setZone("Europe/Zurich").toISODate() ?? "";
+  const upcoming = orders
+    .filter(
+      (o) =>
+        o.status !== "delivered" &&
+        o.status !== "cancelled" &&
+        o.deliveryDate != null &&
+        o.deliveryDate >= todayIso,
+    )
+    .sort((a, b) =>
+      (a.deliveryDate ?? "").localeCompare(b.deliveryDate ?? ""),
+    );
+  if (upcoming.length > 0) return upcoming[0];
+
+  const lastDelivered = orders.find((o) => o.status === "delivered");
+  return lastDelivered ?? orders[0];
 }
 
 // ---------- Hero: current/last order with photo + status pill ----------

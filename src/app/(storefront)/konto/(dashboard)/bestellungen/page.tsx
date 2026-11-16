@@ -15,8 +15,26 @@ export default async function KontoOrders() {
 
   const orders = await fetchCustomerOrders(session.user.customerId);
 
+  // Split into two buckets:
+  //   Aktuell  = anything not delivered/cancelled, next delivery first
+  //              (ongoing out_for_delivery sorts right alongside future
+  //              dates on the same deliveryDate column).
+  //   Vergangen = delivered + cancelled, most recent first.
+  const aktuell = orders
+    .filter((o) => o.status !== "delivered" && o.status !== "cancelled")
+    .sort((a, b) =>
+      (a.deliveryDate ?? "9999-12-31").localeCompare(
+        b.deliveryDate ?? "9999-12-31",
+      ),
+    );
+  const vergangen = orders
+    .filter((o) => o.status === "delivered" || o.status === "cancelled")
+    .sort((a, b) =>
+      (b.deliveryDate ?? "").localeCompare(a.deliveryDate ?? ""),
+    );
+
   return (
-    <section className="flex flex-col gap-7">
+    <section className="flex flex-col gap-10">
       <h1 className="m-0 font-display font-light text-bark text-[40px] leading-[1.05]">
         Bestellungen
       </h1>
@@ -24,20 +42,70 @@ export default async function KontoOrders() {
       {orders.length === 0 ? (
         <EmptyOrders />
       ) : (
-        <div className="border border-mist divide-y divide-hair">
-          {orders.map((o) => (
-            <OrderRow key={o.orderNumber} order={o} />
-          ))}
-        </div>
+        <>
+          {aktuell.length > 0 && (
+            <OrderGroup
+              label="Aktuell"
+              sub={
+                aktuell.length === 1
+                  ? "1 Bestellung unterwegs oder geplant"
+                  : `${aktuell.length} Bestellungen unterwegs oder geplant`
+              }
+              orders={aktuell}
+            />
+          )}
+          {vergangen.length > 0 && (
+            <OrderGroup
+              label="Vergangen"
+              sub={
+                vergangen.length === 1
+                  ? "1 geliefert"
+                  : `${vergangen.length} geliefert`
+              }
+              orders={vergangen}
+            />
+          )}
+        </>
       )}
     </section>
   );
 }
 
+function OrderGroup({
+  label,
+  sub,
+  orders,
+}: {
+  label: string;
+  sub: string;
+  orders: CustomerOrderRow[];
+}) {
+  return (
+    <section className="flex flex-col gap-4">
+      <header className="flex items-baseline justify-between gap-3">
+        <h2 className="m-0 font-display font-normal text-[22px] lg:text-[26px] text-bark leading-[1.2]">
+          {label}
+        </h2>
+        <span className="text-[13px] text-sage">{sub}</span>
+      </header>
+      <div className="border border-mist divide-y divide-hair">
+        {orders.map((o) => (
+          <OrderRow key={o.orderNumber} order={o} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function OrderRow({ order: o }: { order: CustomerOrderRow }) {
-  const placed = DateTime.fromJSDate(o.placedAt, { zone: "Europe/Zurich" })
-    .setLocale("de-CH")
-    .toFormat("ccc d. LLL");
+  const whenIso = o.deliveryDate ?? null;
+  const when = whenIso
+    ? DateTime.fromISO(whenIso, { zone: "Europe/Zurich" })
+        .setLocale("de-CH")
+        .toFormat("ccc d. LLL")
+    : DateTime.fromJSDate(o.placedAt, { zone: "Europe/Zurich" })
+        .setLocale("de-CH")
+        .toFormat("ccc d. LLL");
 
   return (
     <div className="px-6 py-5 flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -46,7 +114,7 @@ function OrderRow({ order: o }: { order: CustomerOrderRow }) {
           Für {o.recipientName}
         </strong>
         <span className="text-[13px] text-sage tabular-nums">
-          {placed} · Nr. {o.orderNumber}
+          {when} · Nr. {o.orderNumber}
         </span>
       </div>
       <StatusChip status={o.status} />
