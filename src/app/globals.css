@@ -218,7 +218,12 @@
     -moz-osx-font-smoothing: grayscale;
   }
   html {
-    scroll-behavior: smooth;
+    /* Deliberately NOT smooth. Next.js App Router scrolls to top on
+       every route change by calling scrollTo(); with smooth scrolling
+       the animation visibly runs while the new page is already visible,
+       and a user hitting another link mid-animation ends up scrolled
+       partway down. 'auto' (instant) is the right default here;
+       anchor links can opt in with scroll-behavior: smooth locally. */
     /* Base font size bumped from the browser default 16px to 17.5px so
        every rem-based size, spacing, button height, and text scale
        lifts ~9% in one place. Fixed-pixel widths (media queries,

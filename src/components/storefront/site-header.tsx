@@ -175,6 +175,17 @@ export function SiteHeader({
     setMobileExpanded(null);
   }
 
+  // Panels and the mobile drawer both navigate via <Link>. When the
+  // link fires, close the overlay AND force the window to the top of
+  // the new page. Without the explicit scrollTo, Next.js's own
+  // scroll-to-top can race with the layout and leave the new page
+  // mid-scroll.
+  function closeAndScrollTop() {
+    closePanelNow();
+    closeMobile();
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, left: 0 });
+  }
+
   const currentItem = NAV.find((n) => n.id === openId) ?? null;
 
   return (
@@ -297,13 +308,13 @@ export function SiteHeader({
             >
               <div className="max-w-7xl mx-auto px-8 py-9">
                 {currentItem.kind === "list" && (
-                  <ListPanel item={currentItem} onNavigate={closePanelNow} />
+                  <ListPanel item={currentItem} onNavigate={closeAndScrollTop} />
                 )}
                 {currentItem.kind === "tiles" && (
-                  <TilesPanel item={currentItem} onNavigate={closePanelNow} />
+                  <TilesPanel item={currentItem} onNavigate={closeAndScrollTop} />
                 )}
                 {currentItem.kind === "swatches" && (
-                  <SwatchesPanel item={currentItem} onNavigate={closePanelNow} />
+                  <SwatchesPanel item={currentItem} onNavigate={closeAndScrollTop} />
                 )}
               </div>
             </div>
@@ -343,7 +354,7 @@ export function SiteHeader({
                           <li key={l.href + l.label}>
                             <Link
                               href={l.href}
-                              onClick={closeMobile}
+                              onClick={closeAndScrollTop}
                               className="block px-8 py-2.5 font-display text-[1.1rem] text-bark hover:text-rose transition-colors"
                             >
                               {l.label}
@@ -360,7 +371,7 @@ export function SiteHeader({
         )}
       </header>
 
-      {/* Scrim — behind the panel but above page content. Click closes. */}
+      {/* Scrim — behind the mega panel on desktop. Click closes. */}
       {openId && (
         <button
           type="button"
@@ -368,6 +379,17 @@ export function SiteHeader({
           tabIndex={-1}
           onClick={closePanelNow}
           className="hidden lg:block fixed inset-0 z-40 bg-bark/40 cursor-default animate-in fade-in duration-200"
+        />
+      )}
+
+      {/* Mobile scrim — tapping anywhere outside the drawer closes it. */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Menü schliessen"
+          tabIndex={-1}
+          onClick={closeMobile}
+          className="lg:hidden fixed inset-0 z-40 bg-bark/40 cursor-default animate-in fade-in duration-200"
         />
       )}
     </>
