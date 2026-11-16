@@ -101,6 +101,37 @@ export async function addToCartAction(
   revalidatePath("/", "layout");
 }
 
+// Adds a bouquet + optional addon (product+variant) lines in a single
+// cookie write. Addon lines are inserted right after the bouquet so
+// hydrate / display order reflects the pairing; parent_line_id gets
+// stamped at reserve time, not in the cart cookie.
+export async function addToCartWithAddonsAction(
+  productIdRaw: number,
+  variantIdRaw: number,
+  qtyRaw: number,
+  addonsRaw: { productId: number; variantId: number }[],
+): Promise<void> {
+  const productId = assertPositiveInt(productIdRaw, "productId");
+  const variantId = assertPositiveInt(variantIdRaw, "variantId");
+  const qty = assertPositiveInt(qtyRaw, "qty");
+
+  await assertOrderable(productId, variantId);
+  for (const a of addonsRaw) {
+    const ap = assertPositiveInt(a.productId, "addon.productId");
+    const av = assertPositiveInt(a.variantId, "addon.variantId");
+    await assertOrderable(ap, av);
+  }
+
+  const cart = await readCartCookie();
+  let next = addLineToCart(cart, productId, variantId, qty);
+  for (const a of addonsRaw) {
+    // Addons scale with the bouquet qty — one praline per bouquet.
+    next = addLineToCart(next, a.productId, a.variantId, qty);
+  }
+  await writeCartCookie(next);
+  revalidatePath("/", "layout");
+}
+
 export async function setCartLineQtyAction(
   productIdRaw: number,
   variantIdRaw: number,

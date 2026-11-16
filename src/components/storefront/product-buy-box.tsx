@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { formatChf } from "@/lib/money";
-import { addToCartAction } from "@/lib/cart/actions";
+import { thumbUrl } from "@/lib/image-urls";
+import {
+  addToCartAction,
+  addToCartWithAddonsAction,
+} from "@/lib/cart/actions";
+import type { AddonChoice } from "@/lib/cart/addons";
 
 type Variant = {
   id: number;
@@ -20,9 +25,11 @@ type Variant = {
 export function ProductBuyBox({
   productId,
   variants,
+  addons = [],
 }: {
   productId: number;
   variants: Variant[];
+  addons?: AddonChoice[];
 }) {
   const firstAvailableIdx = variants.findIndex((v) => v.isAvailable);
   const initialIdx = firstAvailableIdx >= 0 ? firstAvailableIdx : 0;
@@ -32,6 +39,10 @@ export function ProductBuyBox({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [stickyVisible, setStickyVisible] = useState(false);
+  const [addonsOpen, setAddonsOpen] = useState(false);
+  const [pickedAddonIds, setPickedAddonIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const summaryRef = useRef<HTMLDivElement | null>(null);
 
   // Mobile sticky buy bar — shows once the dark summary slab scrolls out
@@ -53,11 +64,21 @@ export function ProductBuyBox({
 
   const selected = variants[selectedIdx] ?? variants[0];
 
-  const { totalNum } = useMemo(() => {
-    if (!selected) return { totalNum: 0 };
+  const pickedAddons = useMemo(
+    () => addons.filter((a) => pickedAddonIds.has(a.productId)),
+    [addons, pickedAddonIds],
+  );
+
+  const { totalNum, addonsTotal } = useMemo(() => {
+    if (!selected) return { totalNum: 0, addonsTotal: 0 };
     const unit = Number(selected.salePriceGross ?? selected.priceGross);
-    return { totalNum: unit * qty };
-  }, [selected, qty]);
+    const addonsUnit = pickedAddons.reduce(
+      (acc, a) => acc + Number(a.priceGross),
+      0,
+    );
+    const total = (unit + addonsUnit) * qty;
+    return { totalNum: total, addonsTotal: addonsUnit * qty };
+  }, [selected, qty, pickedAddons]);
 
   if (variants.length === 0) {
     return (
@@ -82,13 +103,36 @@ export function ProductBuyBox({
     setErrorMsg(null);
   }
 
+  function toggleAddon(a: AddonChoice) {
+    setPickedAddonIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(a.productId)) next.delete(a.productId);
+      else next.add(a.productId);
+      return next;
+    });
+    setFeedback("idle");
+    setErrorMsg(null);
+  }
+
   function handleAdd() {
     if (!canBuy) return;
     setFeedback("idle");
     setErrorMsg(null);
     startTransition(async () => {
       try {
-        await addToCartAction(productId, selected.id, qty);
+        if (pickedAddons.length === 0) {
+          await addToCartAction(productId, selected.id, qty);
+        } else {
+          await addToCartWithAddonsAction(
+            productId,
+            selected.id,
+            qty,
+            pickedAddons.map((a) => ({
+              productId: a.productId,
+              variantId: a.variantId,
+            })),
+          );
+        }
         setFeedback("added");
         setTimeout(() => setFeedback("idle"), 2200);
       } catch (err) {
@@ -166,6 +210,105 @@ export function ProductBuyBox({
         </fieldset>
       ) : null}
 
+      {/* ---- Noch etwas dazu? (add-ons) ---- */}
+      {addons.length > 0 && (
+        <div className="border-b border-[#E8DED3] py-5 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => setAddonsOpen((v) => !v)}
+            aria-expanded={addonsOpen}
+            aria-controls="pdp-addons"
+            className="flex items-center justify-between w-full text-left"
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className="text-[15px] font-semibold text-bark">
+                Noch etwas dazu?
+              </span>
+              <span className="text-[13px] text-sage">
+                {pickedAddons.length === 0
+                  ? "Optional · Pralinen, Duftkerze, Karte …"
+                  : pickedAddons.map((a) => a.nameDe).join(" · ") +
+                    ` · + ${formatChf(addonsTotal.toFixed(2))}`}
+              </span>
+            </span>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+              className={`shrink-0 text-sage transition-transform duration-200 motion-reduce:transition-none ${
+                addonsOpen ? "rotate-180" : ""
+              }`}
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+
+          {addonsOpen && (
+            <ul
+              id="pdp-addons"
+              className="list-none m-0 p-0 flex flex-col gap-2"
+            >
+              {addons.map((a) => {
+                const checked = pickedAddonIds.has(a.productId);
+                return (
+                  <li key={a.productId}>
+                    <label
+                      className={`flex items-center gap-3 p-2.5 border cursor-pointer transition-colors ${
+                        checked
+                          ? "border-rose bg-[#FDF2F6]"
+                          : "border-mist hover:border-oak"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={checked}
+                        onChange={() => toggleAddon(a)}
+                      />
+                      {a.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbUrl(a.imageUrl)}
+                          alt=""
+                          className="w-14 h-14 object-cover shrink-0"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 bg-cream shrink-0" />
+                      )}
+                      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <span className="text-[14px] font-semibold text-bark truncate">
+                          {a.nameDe}
+                        </span>
+                        <span className="text-[13px] text-sage">
+                          + {formatChf(a.priceGross)}
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden
+                        className={`shrink-0 w-6 h-6 border-[1.5px] grid place-items-center text-ivory text-[13px] font-bold ${
+                          checked
+                            ? "bg-rose border-rose"
+                            : "border-oak bg-white"
+                        }`}
+                      >
+                        {checked ? "✓" : ""}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* ---- Dark summary slab ---- */}
       <div
         ref={summaryRef}
@@ -175,6 +318,9 @@ export function ProductBuyBox({
           <div className="flex flex-col gap-1.5 min-w-0">
             <span className="text-[13px] text-[#D9C4A8]">
               {qty} × {selected.sizeLabelDe || "Standard"}
+              {pickedAddons.length > 0
+                ? ` + ${pickedAddons.length} ${pickedAddons.length === 1 ? "Extra" : "Extras"}`
+                : ""}
             </span>
             <span className="font-display text-[36px] leading-none text-ivory tabular-nums">
               {formatChf(totalNum.toFixed(2))}

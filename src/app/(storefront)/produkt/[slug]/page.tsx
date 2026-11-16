@@ -5,6 +5,7 @@ import { PdpDeliveryTimeline } from "@/components/storefront/pdp-delivery-timeli
 import { ProductBuyBox } from "@/components/storefront/product-buy-box";
 import { ProductCard } from "@/components/storefront/product-card";
 import { ProductGallery } from "@/components/storefront/product-gallery";
+import { fetchAvailableAddons } from "@/lib/cart/addons";
 import { largeUrl } from "@/lib/image-urls";
 import { minPrice } from "@/lib/money";
 import {
@@ -71,6 +72,14 @@ export default async function ProductDetailPage({ params }: PageProps) {
     ? await getProductsInCategory(firstCategoryFull.id, firstCategoryFull.slug)
     : [];
   const related = relatedAll.filter((r) => r.slug !== p.slug).slice(0, 4);
+
+  // Add-ons: skip for enquiry products (they have no checkout anyway).
+  // fetchAvailableAddons drops the current product by id so a product
+  // flagged is_addon=true doesn't offer itself as an add-on.
+  const addons =
+    p.pricingMode === "enquiry"
+      ? []
+      : await fetchAvailableAddons({ excludeProductId: p.id });
 
   // Split the title into "main" and "italic trailer" by the LAST
   // comma or dash. Falls back to italicising the last word so the
@@ -195,7 +204,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
           {p.pricingMode === "enquiry" ? (
             <EnquiryBlock />
           ) : (
-            <ProductBuyBox productId={p.id} variants={variants} />
+            <ProductBuyBox
+              productId={p.id}
+              variants={variants}
+              addons={addons}
+            />
           )}
         </div>
       </div>
