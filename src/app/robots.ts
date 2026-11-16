@@ -20,7 +20,9 @@ export default function robots(): MetadataRoute.Robots {
           "/kasse/",
           "/konto",
           "/konto/",
-          "/bestellung-finden",
+          // /bestellung-finden/<number> is still reachable via tokened
+          // email links for guest-order status; keep it out of indexes
+          // too.
           "/bestellung-finden/",
         ],
       },

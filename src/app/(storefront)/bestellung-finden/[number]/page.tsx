@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { fetchGuestOrderView } from "@/lib/order-lookup/fetch";
 import { verifyOrderViewToken } from "@/lib/order-lookup/token";
@@ -32,11 +32,14 @@ export default async function GuestOrderViewPage({ params }: PageProps) {
   const { number } = await params;
   const orderNumber = decodeURIComponent(number);
 
+  // Token-bound: a valid cookie must prove this browser landed here
+  // via an email link (or a logged-in Konto view). No token → 404.
+  // The old redirect target (/bestellung-finden form) is gone.
   const ok = await verifyOrderViewToken(orderNumber);
-  if (!ok) redirect("/bestellung-finden");
+  if (!ok) notFound();
 
   const data = await fetchGuestOrderView(orderNumber);
-  if (!data) redirect("/bestellung-finden?error=NotFound");
+  if (!data) notFound();
 
   const slotLabel = buildSlotLabel(data);
 
