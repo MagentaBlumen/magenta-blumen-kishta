@@ -93,11 +93,8 @@ function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
       ? "Storniert"
       : o.status === "out_for_delivery"
         ? "Unterwegs"
-        : o.status === "ready" || o.status === "in_production"
-          ? "Gebunden"
-          : "Bestellt";
+        : "Bestellt";
 
-  const stepIndex = stepIndexFor(o.status);
   const titleLine = cancelled
     ? `Bestellung ${o.orderNumber}`
     : `Für ${o.recipientName}`;
@@ -146,30 +143,6 @@ function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
       </div>
 
       <div className="px-5 lg:px-6 py-5 flex flex-col gap-4">
-        {!cancelled && (
-          <ol className="list-none m-0 p-0 grid grid-cols-4 gap-1.5">
-            {STEP_LABELS.map((label, i) => {
-              const isDone = i <= stepIndex;
-              const isCurrent = i === stepIndex;
-              return (
-                <li
-                  key={label}
-                  {...(isCurrent ? { "aria-current": "step" as const } : {})}
-                  className={`flex flex-col gap-2 text-[12px] ${
-                    isDone ? "text-bark" : "text-sage"
-                  } ${isCurrent ? "font-semibold" : ""}`}
-                >
-                  <span
-                    className={`h-1 ${isDone ? "bg-rose" : "bg-hair"}`}
-                    aria-hidden
-                  />
-                  <span>{label}</span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-
         <div className="flex flex-wrap items-center justify-between gap-2 text-[15px]">
           <span className="text-sage">
             {o.firstLineProductName ?? `Bestellung ${o.orderNumber}`}
@@ -212,26 +185,6 @@ function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
       </div>
     </article>
   );
-}
-
-const STEP_LABELS = ["Bestellt", "Gebunden", "Unterwegs", "Geliefert"] as const;
-
-function stepIndexFor(s: CustomerOrderRow["status"]): number {
-  switch (s) {
-    case "new":
-    case "confirmed":
-      return 0;
-    case "in_production":
-    case "ready":
-      return 1;
-    case "out_for_delivery":
-    case "delivery_failed":
-      return 2;
-    case "delivered":
-      return 3;
-    case "cancelled":
-      return -1;
-  }
 }
 
 // ---------- "Ihre Blumen" strip: last orders as photo tiles ----------
