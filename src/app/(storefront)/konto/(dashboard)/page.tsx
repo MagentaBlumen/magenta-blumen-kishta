@@ -6,9 +6,11 @@ import { fetchCustomerProfile } from "@/lib/customer-auth/profile";
 import { fetchCustomerOrders } from "@/lib/customer-auth/orders";
 import { fetchCustomerAddresses } from "@/lib/customer-auth/addresses";
 import { getSuggestedAddressFromLastOrder } from "@/lib/customer-auth/suggested-address";
-import { getNextDeliverySlot } from "@/lib/delivery/next-slot";
 import { formatChf } from "@/lib/money";
+import { thumbUrl } from "@/lib/image-urls";
 import type { CustomerOrderRow } from "@/lib/customer-auth/orders";
+import type { CustomerAddressRow } from "@/lib/customer-auth/addresses";
+import type { SuggestedAddress } from "@/lib/customer-auth/suggested-address";
 
 export default async function KontoOverview() {
   const session = await auth();
@@ -28,39 +30,55 @@ export default async function KontoOverview() {
     customerId,
     addresses,
   );
-  const nextSlot = getNextDeliverySlot();
   const firstName = profile.firstName || profile.email.split("@")[0];
   const lastOrder = orders[0] ?? null;
+  const flowerStripOrders = orders.slice(0, 4);
+  const initials = initialsFrom(
+    [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
+      profile.email,
+  );
 
   return (
-    <section className="flex flex-col gap-7">
-      <header className="flex flex-col gap-2.5">
-        <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
-          Mein Konto
-        </p>
-        <h1 className="m-0 font-display font-light text-bark text-[clamp(38px,4.2vw,54px)] leading-[1.02] tracking-[-0.025em]">
-          Guten Tag,{" "}
-          <em className="italic text-rose">{firstName}.</em>
-        </h1>
+    <section className="flex flex-col gap-7 lg:gap-8">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
+            Mein Konto
+          </p>
+          <h1 className="m-0 font-display font-light text-bark text-[clamp(28px,4.2vw,46px)] leading-[1.05]">
+            Hallo,{" "}
+            <em className="italic text-rose">{firstName}</em>
+          </h1>
+        </div>
+        <Link
+          href="/konto/einstellungen"
+          aria-label="Profil"
+          className="lg:hidden w-12 h-12 grid place-items-center bg-cream text-bark font-display text-[18px] shrink-0 hover:bg-mist transition-colors"
+        >
+          {initials}
+        </Link>
       </header>
 
-      {lastOrder && <LastOrderCard order={lastOrder} />}
+      {lastOrder && <HeroOrder order={lastOrder} />}
 
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
-        <NextTourTile slot={nextSlot} />
-        {suggestion ? (
-          <AddressSuggestionTile recipientName={suggestion.recipientName} />
-        ) : (
-          <BrowseCategoryTile />
-        )}
-      </div>
+      {flowerStripOrders.length > 0 && (
+        <FlowerStrip orders={flowerStripOrders} />
+      )}
+
+      <RecipientsStrip
+        addresses={addresses.slice(0, 4)}
+        suggestion={suggestion}
+      />
     </section>
   );
 }
 
-function LastOrderCard({ order: o }: { order: CustomerOrderRow }) {
+// ---------- Hero: current/last order with photo + status pill ----------
+
+function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
   const delivered = o.status === "delivered";
   const cancelled = o.status === "cancelled";
+
   const when = o.deliveryDate
     ? DateTime.fromISO(o.deliveryDate, { zone: "Europe/Zurich" })
         .setLocale("de-CH")
@@ -69,63 +87,114 @@ function LastOrderCard({ order: o }: { order: CustomerOrderRow }) {
         .setLocale("de-CH")
         .toFormat("cccc, d. LLLL");
 
-  const statusLine = delivered
-    ? `Geliefert an ${o.recipientName}`
+  const statusText = delivered
+    ? "Geliefert"
     : cancelled
-      ? `Storniert · ${o.recipientName}`
-      : `Unterwegs zu ${o.recipientName}`;
+      ? "Storniert"
+      : o.status === "out_for_delivery"
+        ? "Unterwegs"
+        : o.status === "ready" || o.status === "in_production"
+          ? "Gebunden"
+          : "Bestellt";
+
+  const stepIndex = stepIndexFor(o.status);
+  const titleLine = cancelled
+    ? `Bestellung ${o.orderNumber}`
+    : `Für ${o.recipientName}`;
 
   return (
-    <article className="border border-mist">
-      <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-b border-hair">
-        <div className="flex items-center gap-3.5">
+    <article className="border lg:border border-mist bg-white -mx-4 lg:mx-0">
+      {/* Photo + overlay */}
+      <div className="relative aspect-[5/4] sm:aspect-[16/7] bg-cream overflow-hidden">
+        {o.firstLineImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbUrl(o.firstLineImageUrl)}
+            alt=""
+            className="w-full h-full object-cover block"
+          />
+        ) : null}
+        <div
+          className="absolute inset-x-0 bottom-0 p-6 pt-16 text-ivory flex flex-col items-start gap-1.5"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(30,20,12,0.85), rgba(30,20,12,0))",
+          }}
+        >
           <span
-            aria-hidden
-            className={`w-10 h-10 grid place-items-center text-[18px] font-bold shrink-0 ${
-              delivered
-                ? "bg-[#EAF3E6] text-[#2F6B3E]"
-                : cancelled
-                  ? "bg-stone-100 text-stone-500"
-                  : "bg-[#FBEAF1] text-rose"
+            className={`inline-flex items-center gap-2 h-[30px] px-3 bg-white text-bark text-[14px] font-semibold ${
+              cancelled ? "text-stone-500" : ""
             }`}
           >
-            {delivered ? "✓" : cancelled ? "–" : "→"}
+            <span
+              aria-hidden
+              className={`w-2 h-2 rounded-full ${
+                delivered
+                  ? "bg-[#2F6B3E]"
+                  : cancelled
+                    ? "bg-stone-400"
+                    : "bg-[#2E6DB4]"
+              }`}
+            />
+            {statusText}
           </span>
-          <div>
-            <h2 className="m-0 font-display font-normal text-[24px] leading-[1.2] text-bark">
-              {statusLine}
-            </h2>
-            <span className="text-[14px] text-sage">{when}</span>
-          </div>
+          <h2 className="m-0 font-display font-normal text-[26px] sm:text-[30px] leading-[1.15] text-ivory">
+            {titleLine}
+          </h2>
+          <p className="m-0 text-[15px] text-[#F2E8DC]">{when}</p>
         </div>
-        <span className="text-[13px] text-sage">Letzte Bestellung</span>
       </div>
 
-      <div className="px-6 py-5 flex flex-wrap items-center gap-5">
-        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <strong className="text-[15px] font-semibold text-bark">
-            Bestellung {o.orderNumber}
-          </strong>
-          <span className="text-[13px] text-sage tabular-nums">
-            {formatChf(o.totalGross)}
+      <div className="px-5 lg:px-6 py-5 flex flex-col gap-4">
+        {!cancelled && (
+          <ol className="list-none m-0 p-0 grid grid-cols-4 gap-1.5">
+            {STEP_LABELS.map((label, i) => {
+              const isDone = i <= stepIndex;
+              const isCurrent = i === stepIndex;
+              return (
+                <li
+                  key={label}
+                  {...(isCurrent ? { "aria-current": "step" as const } : {})}
+                  className={`flex flex-col gap-2 text-[12px] ${
+                    isDone ? "text-bark" : "text-sage"
+                  } ${isCurrent ? "font-semibold" : ""}`}
+                >
+                  <span
+                    className={`h-1 ${isDone ? "bg-rose" : "bg-hair"}`}
+                    aria-hidden
+                  />
+                  <span>{label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[15px]">
+          <span className="text-sage">
+            {o.firstLineProductName ?? `Bestellung ${o.orderNumber}`}
+            {o.firstLineVariantLabel ? ` · ${o.firstLineVariantLabel}` : ""}
           </span>
+          <strong className="font-semibold tabular-nums text-bark">
+            {formatChf(o.totalGross)}
+          </strong>
         </div>
-        <div className="flex items-center gap-5">
+
+        <div className="flex flex-wrap gap-2.5">
           <Link
             href={`/bestellung-finden/${o.orderNumber}`}
-            className="underline text-[13px] text-sage hover:text-rose transition-colors"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center h-12 px-5 border border-bark text-bark text-[14px] font-semibold hover:bg-cream transition-colors"
           >
             Details
           </Link>
-          {/* TODO: reorder-to-cart action doesn't exist yet. For now this
-              drops the customer into the catalogue. */}
+          {/* Reorder-to-cart doesn't exist yet; link to the catalogue. */}
           <Link
             href="/kategorie/alle-anlaesse"
-            className="inline-flex items-center gap-2 h-11 px-4 bg-rose text-ivory text-[14px] font-semibold hover:brightness-110 transition-[filter]"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 h-12 px-5 bg-rose text-ivory text-[14px] font-semibold hover:brightness-110 transition-[filter]"
           >
             <svg
-              width="15"
-              height="15"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -145,124 +214,226 @@ function LastOrderCard({ order: o }: { order: CustomerOrderRow }) {
   );
 }
 
-function NextTourTile({
-  slot,
+const STEP_LABELS = ["Bestellt", "Gebunden", "Unterwegs", "Geliefert"] as const;
+
+function stepIndexFor(s: CustomerOrderRow["status"]): number {
+  switch (s) {
+    case "new":
+    case "confirmed":
+      return 0;
+    case "in_production":
+    case "ready":
+      return 1;
+    case "out_for_delivery":
+    case "delivery_failed":
+      return 2;
+    case "delivered":
+      return 3;
+    case "cancelled":
+      return -1;
+  }
+}
+
+// ---------- "Ihre Blumen" strip: last orders as photo tiles ----------
+
+function FlowerStrip({ orders }: { orders: CustomerOrderRow[] }) {
+  return (
+    <section className="flex flex-col gap-3.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="m-0 font-display font-normal text-[22px] lg:text-[26px] text-bark leading-[1.2]">
+          Ihre Blumen
+        </h2>
+        <Link
+          href="/konto/bestellungen"
+          className="inline-flex items-center gap-1.5 min-h-11 text-[15px] font-semibold text-rose hover:brightness-90"
+        >
+          Alle
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </Link>
+      </div>
+      <ul
+        // Mobile: horizontal scroll strip with snap. Desktop: 4-col grid.
+        className={[
+          "list-none m-0 p-0",
+          "flex gap-3 overflow-x-auto snap-x snap-mandatory",
+          "-mx-4 px-4 lg:mx-0 lg:px-0",
+          "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+          "lg:grid lg:grid-cols-4 lg:overflow-visible",
+        ].join(" ")}
+      >
+        {orders.map((o) => (
+          <li
+            key={o.orderNumber}
+            className="shrink-0 w-[148px] lg:w-auto snap-start"
+          >
+            <Link
+              href={`/bestellung-finden/${o.orderNumber}`}
+              className="flex flex-col gap-2 text-bark hover:text-rose transition-colors"
+            >
+              {o.firstLineImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbUrl(o.firstLineImageUrl)}
+                  alt=""
+                  className="w-full aspect-square object-cover bg-cream block"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full aspect-square bg-cream" />
+              )}
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[15px] font-semibold leading-tight">
+                  Für {o.recipientName}
+                </span>
+                <span className="text-[13px] text-sage">
+                  {formatDateShort(o.deliveryDate ?? null, o.placedAt)}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function formatDateShort(iso: string | null, fallback: Date): string {
+  const dt = iso
+    ? DateTime.fromISO(iso, { zone: "Europe/Zurich" })
+    : DateTime.fromJSDate(fallback, { zone: "Europe/Zurich" });
+  return dt.setLocale("de-CH").toFormat("d. LLLL");
+}
+
+// ---------- "Ihre Empfänger" strip: avatars + suggestion + new ----------
+
+function RecipientsStrip({
+  addresses,
+  suggestion,
 }: {
-  slot: Awaited<ReturnType<typeof getNextDeliverySlot>>;
+  addresses: CustomerAddressRow[];
+  suggestion: SuggestedAddress | null;
 }) {
+  const hasAny = addresses.length > 0 || suggestion != null;
   return (
-    <Link
-      href="/kategorie/alle-anlaesse"
-      className="mb-wood min-h-[168px] p-6 flex flex-col justify-between gap-5 transition-[filter] hover:brightness-110"
-    >
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-[#EBDDC9]">
-          Nächste Tour
-        </span>
-        {slot ? (
-          <>
-            <span className="font-display text-[32px] leading-[1.05]">
-              {slot.dayLabel}{" "}
-              <em className="italic">{slot.timeLabel}</em>
-            </span>
-            <span className="text-[13px] text-[#EBDDC9]">
-              bestellen bis {slot.cutoffPrefixDe}
-              {slot.cutoffTimeLabel} Uhr
-            </span>
-          </>
-        ) : (
-          <span className="font-display text-[26px] leading-[1.2]">
-            Keine Tour in Reichweite.
-          </span>
+    <section className="flex flex-col gap-3.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="m-0 font-display font-normal text-[22px] lg:text-[26px] text-bark leading-[1.2]">
+          Ihre Empfänger
+        </h2>
+        <Link
+          href="/konto/adressen"
+          className="inline-flex items-center gap-1.5 min-h-11 text-[15px] font-semibold text-rose hover:brightness-90"
+        >
+          Alle
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </Link>
+      </div>
+      <ul
+        className={[
+          "list-none m-0 p-0",
+          "flex gap-3 overflow-x-auto snap-x snap-mandatory",
+          "-mx-4 px-4 lg:mx-0 lg:px-0",
+          "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+          "lg:grid lg:grid-cols-4 lg:overflow-visible",
+        ].join(" ")}
+      >
+        {suggestion && (
+          <li className="shrink-0 w-[148px] lg:w-auto snap-start">
+            <Link
+              href="/konto/adressen"
+              className="min-h-[190px] h-full p-4 border border-dashed border-rose bg-[#FDF2F6]/40 flex flex-col items-center text-center gap-1 text-bark hover:brightness-95"
+            >
+              <span
+                aria-hidden
+                className="w-14 h-14 grid place-items-center bg-[#FBE8F1] text-rose font-display text-[20px] mb-1.5"
+              >
+                {initialsFrom(suggestion.recipientName)}
+              </span>
+              <span className="text-[15px] font-semibold leading-tight">
+                {suggestion.recipientName}
+              </span>
+              <span className="text-[13px] text-sage">
+                {suggestion.city}
+              </span>
+              <span className="mt-auto pt-2 text-[14px] font-semibold text-rose">
+                Speichern
+              </span>
+            </Link>
+          </li>
         )}
-      </div>
-      <span className="inline-flex items-center gap-2 text-[15px] font-semibold">
-        Blumen bestellen
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
-      </span>
-    </Link>
+
+        {addresses.map((a) => (
+          <li
+            key={a.id}
+            className="shrink-0 w-[148px] lg:w-auto snap-start"
+          >
+            <Link
+              href="/kategorie/alle-anlaesse"
+              className="min-h-[190px] h-full p-4 border border-mist bg-white flex flex-col items-center text-center gap-1 text-bark hover:border-oak transition-colors"
+            >
+              <span
+                aria-hidden
+                className="w-14 h-14 grid place-items-center bg-cream text-bark font-display text-[20px] mb-1.5"
+              >
+                {initialsFrom(a.recipientName)}
+              </span>
+              <span className="text-[15px] font-semibold leading-tight">
+                {a.recipientName}
+              </span>
+              <span className="text-[13px] text-sage">{a.city}</span>
+              <span className="mt-auto pt-2 text-[14px] font-semibold text-rose">
+                Blumen senden
+              </span>
+            </Link>
+          </li>
+        ))}
+
+        <li className="shrink-0 w-[148px] lg:w-auto snap-start">
+          <Link
+            href="/konto/adressen"
+            className="min-h-[190px] h-full p-4 border border-dashed border-oak bg-white flex flex-col items-center justify-center gap-2 text-bark hover:border-rose hover:text-rose transition-colors"
+          >
+            <span
+              aria-hidden
+              className="w-11 h-11 bg-cream grid place-items-center text-[22px] text-sage"
+            >
+              +
+            </span>
+            <span className="text-[14px] font-semibold text-center">
+              {hasAny ? "Neuer Empfänger" : "Ersten Empfänger hinzufügen"}
+            </span>
+          </Link>
+        </li>
+      </ul>
+    </section>
   );
 }
 
-function AddressSuggestionTile({ recipientName }: { recipientName: string }) {
-  return (
-    <Link
-      href="/konto/adressen"
-      className="min-h-[168px] p-6 border border-mist bg-white text-bark hover:border-oak transition-colors flex flex-col justify-between gap-5"
-    >
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
-          Adressbuch
-        </span>
-        <span className="font-display text-[24px] leading-[1.2]">
-          {recipientName} speichern?
-        </span>
-        <span className="text-[13px] text-sage">
-          Dann ist die Adresse beim nächsten Mal schon ausgefüllt.
-        </span>
-      </div>
-      <span className="inline-flex items-center gap-2 text-[15px] font-semibold text-rose">
-        Zum Adressbuch
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
-      </span>
-    </Link>
-  );
-}
-
-function BrowseCategoryTile() {
-  return (
-    <Link
-      href="/bestellung-finden"
-      className="min-h-[168px] p-6 border border-mist bg-white text-bark hover:border-oak transition-colors flex flex-col justify-between gap-5"
-    >
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold tracking-[0.14em] uppercase text-sage">
-          Gast-Bestellung
-        </span>
-        <span className="font-display text-[24px] leading-[1.2]">
-          Früher einmal ohne Konto bestellt?
-        </span>
-        <span className="text-[13px] text-sage">
-          Status mit Bestellnummer und E-Mail finden.
-        </span>
-      </div>
-      <span className="inline-flex items-center gap-2 text-[15px] font-semibold text-rose">
-        Bestellung finden
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <path d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
-      </span>
-    </Link>
-  );
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+  return (first + last).toUpperCase() || "?";
 }
