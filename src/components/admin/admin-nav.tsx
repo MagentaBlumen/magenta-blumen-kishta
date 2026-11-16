@@ -18,7 +18,10 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
     {
       href: "/admin",
       label: "Heute",
-      match: (p) => p === "/admin" || p.startsWith("/admin/bestellung"),
+      match: (p) =>
+        p === "/admin" ||
+        p.startsWith("/admin/bestellung") ||
+        p.startsWith("/admin/kalender"),
       icon: (
         <svg
           className="icon"

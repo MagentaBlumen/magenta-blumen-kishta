@@ -7,6 +7,7 @@ import { order } from "@/db/schema/order";
 import { payment } from "@/db/schema/payment";
 import {
   ALL_STATUSES,
+  allowedNextStatuses,
   isValidTransition,
   type OrderStatus,
 } from "@/lib/admin/order-status";
@@ -201,6 +202,107 @@ export async function updateOrderStatusAction(
 
   revalidatePath("/admin");
   revalidatePath(`/admin/bestellung/${orderNumber}`);
+}
+
+// Multi-step status advance for the Heute dropdown. Walks the pipeline
+// from the order's CURRENT status toward the target 4-stage DB equiv:
+//   neu       → stays at new/confirmed (no-op)
+//   fertig    → ready
+//   unterwegs → out_for_delivery
+//   geliefert → delivered
+//   storniert → cancelled
+//
+// Each hop is run through updateOrderStatusAction so the state machine
+// and the email-idempotency logic apply per transition. Safety cap
+// prevents runaway loops if transitions start cycling.
+export type UiStage =
+  | "neu"
+  | "fertig"
+  | "unterwegs"
+  | "geliefert"
+  | "storniert";
+
+const PIPELINE: OrderStatus[] = [
+  "new",
+  "confirmed",
+  "in_production",
+  "ready",
+  "out_for_delivery",
+  "delivered",
+];
+
+function targetDbStatusFor(stage: UiStage): OrderStatus {
+  switch (stage) {
+    case "neu":
+      return "new";
+    case "fertig":
+      return "ready";
+    case "unterwegs":
+      return "out_for_delivery";
+    case "geliefert":
+      return "delivered";
+    case "storniert":
+      return "cancelled";
+  }
+}
+
+export async function setOrderStageAction(
+  orderNumberRaw: string,
+  stageRaw: string,
+): Promise<void> {
+  await requireAdmin();
+  const orderNumber = String(orderNumberRaw ?? "").trim();
+  if (!orderNumber) throw new Error("Ungültige Bestellnummer");
+
+  const validStages: UiStage[] = [
+    "neu",
+    "fertig",
+    "unterwegs",
+    "geliefert",
+    "storniert",
+  ];
+  if (!validStages.includes(stageRaw as UiStage)) {
+    throw new Error("Ungültige Stufe");
+  }
+  const stage = stageRaw as UiStage;
+  const target = targetDbStatusFor(stage);
+
+  for (let step = 0; step < 10; step++) {
+    const [row] = await db
+      .select({ status: order.status })
+      .from(order)
+      .where(eq(order.orderNumber, orderNumber))
+      .limit(1);
+    if (!row) throw new Error("Bestellung nicht gefunden");
+    if (row.status === target) return;
+
+    const allowed = allowedNextStatuses(row.status);
+    const next = pickNextTowardTarget(row.status, target, allowed);
+    if (!next) {
+      throw new Error(
+        `Kein erlaubter Übergang von ${row.status} nach ${target}`,
+      );
+    }
+    await updateOrderStatusAction(orderNumber, next);
+  }
+  throw new Error("Abgebrochen nach 10 Übergängen");
+}
+
+function pickNextTowardTarget(
+  from: OrderStatus,
+  target: OrderStatus,
+  allowed: OrderStatus[],
+): OrderStatus | null {
+  if (target === "cancelled") {
+    return allowed.includes("cancelled") ? "cancelled" : null;
+  }
+  const fromIdx = PIPELINE.indexOf(from);
+  const toIdx = PIPELINE.indexOf(target);
+  if (fromIdx < 0 || toIdx < 0 || toIdx <= fromIdx) return null;
+  for (let i = fromIdx + 1; i <= toIdx; i++) {
+    if (allowed.includes(PIPELINE[i])) return PIPELINE[i];
+  }
+  return null;
 }
 
 function statusEmailKindFor(status: OrderStatus): StatusEmailKind | null {

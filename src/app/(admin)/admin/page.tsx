@@ -6,8 +6,8 @@ import {
   type DayTab,
 } from "@/components/admin/heute-day-picker";
 import {
-  NextStepButton,
   PrintButton,
+  StatusSelect,
 } from "@/components/admin/heute-actions";
 import {
   fetchActionableOrdersInRange,
@@ -79,29 +79,10 @@ const UI_STAGE_LABEL: Record<UiStage, string> = {
   geliefert: "Geliefert",
 };
 
-// Next single-step DB transition, as a (target, button-label) pair.
-// Returns null when the pipeline is done (delivered) or error-recovery
-// is needed (delivery_failed — admin handles on the detail page).
-function dbNext(s: OrderStatus): { target: OrderStatus; label: string } | null {
-  switch (s) {
-    case "new":
-      return { target: "confirmed", label: "Bestätigen" };
-    case "confirmed":
-      return { target: "in_production", label: "In Produktion" };
-    case "in_production":
-      return { target: "ready", label: "Strauss ist fertig" };
-    case "ready":
-      return { target: "out_for_delivery", label: "Losgefahren" };
-    case "out_for_delivery":
-      return { target: "delivered", label: "Ist geliefert" };
-    default:
-      return null;
-  }
-}
-
-// (Undo buttons are deliberately absent on Heute — the state machine
-// only moves forward. Exceptional transitions happen on the detail
-// page `/admin/bestellung/[number]`.)
+// Status progression now lives in StatusSelect (components/admin/
+// heute-actions.tsx). The dropdown shows the current 4-stage UI
+// status and lets admin jump directly to any later stage; the
+// server action walks the DB pipeline through valid transitions.
 
 // -------- Tour grouping within a day --------
 const TOUR_ORDER = ["am", "event", "pm"] as const;
@@ -191,7 +172,27 @@ export default async function HeutePage(props: {
           <h1 className="adm-title">{title.short}</h1>
           <p className="adm-sub">{title.long}</p>
         </div>
-        <PrintButton />
+        <div className="row" style={{ gap: 8 }}>
+          <Link className="btn btn--lg" href="/admin/kalender">
+            <svg
+              className="icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="3" y="5" width="18" height="16" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+            Kalender
+          </Link>
+          <PrintButton />
+        </div>
       </div>
 
       <HeuteDayPicker days={days} currentIso={currentIso} />
@@ -276,7 +277,6 @@ function longDayLabel(
 function OrderCard({ order: o }: { order: ActionableOrder }) {
   const stage = uiStageFor(o.status);
   const chipClass = `chip chip--${stage}`;
-  const next = dbNext(o.status);
 
   const placeDetail =
     o.deliveryContext === "hospital" && o.deliveryWard
@@ -312,13 +312,7 @@ function OrderCard({ order: o }: { order: ActionableOrder }) {
           <span className="chip chip--neu">Lieferung fehlgeschlagen</span>
         )}
         <div className="order__actions">
-          {next && (
-            <NextStepButton
-              orderNumber={o.orderNumber}
-              target={next.target}
-              label={next.label}
-            />
-          )}
+          <StatusSelect orderNumber={o.orderNumber} status={o.status} />
         </div>
       </div>
       <div className="order__body">

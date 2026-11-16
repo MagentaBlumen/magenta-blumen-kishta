@@ -746,6 +746,128 @@
   gap: 10px;
 }
 
+/* =================== KALENDER =================== */
+.adm .kal {
+  background: #fff;
+  border: 1px solid var(--a-line);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adm .kal__dows {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--a-hair);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--a-subtle);
+  text-align: left;
+}
+.adm .kal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.adm .kal__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 112px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--a-hair);
+  background: #fff;
+  color: var(--a-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.adm .kal__cell:hover { border-color: var(--a-ink); }
+.adm .kal__cell.is-empty {
+  cursor: default;
+  background: var(--a-sand);
+  color: var(--a-subtle);
+}
+.adm .kal__cell.is-empty:hover { border-color: var(--a-hair); }
+.adm .kal__cell.is-muted {
+  opacity: 0.45;
+}
+.adm .kal__cell.is-today {
+  border: 1px solid var(--a-accent);
+  box-shadow: 0 0 0 1px var(--a-accent);
+}
+.adm .kal__cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-weight: 600;
+}
+.adm .kal__date { font-size: 15px; }
+.adm .kal__cell.is-today .kal__date { color: var(--a-accent); }
+.adm .kal__count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--a-ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.adm .kal__cell.is-today .kal__count {
+  background: var(--a-accent);
+}
+.adm .kal__previews {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.adm .kal__chip {
+  display: inline-block;
+  padding: 3px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  background: var(--a-sand);
+  color: var(--a-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm .kal__chip--am { background: #FBE8F1; color: #8E1450; }
+.adm .kal__chip--pm { background: #E3EEF8; color: #1F4E79; }
+.adm .kal__chip--event { background: #FFF1D6; color: #6B4300; }
+.adm .kal__chip--other { background: var(--a-sand); color: var(--a-ink); }
+.adm .kal__more {
+  font-size: 11px;
+  color: var(--a-subtle);
+  padding: 2px 4px;
+}
+
+@media (max-width: 900px) {
+  .adm .kal { padding: 12px; }
+  .adm .kal__cell {
+    min-height: 72px;
+    padding: 6px 7px 7px;
+    gap: 4px;
+  }
+  .adm .kal__date { font-size: 13px; }
+  .adm .kal__chip { font-size: 10px; padding: 2px 5px; }
+  .adm .kal__chip,
+  .adm .kal__more { display: none; }
+}
+@media (max-width: 560px) {
+  .adm .kal__grid { gap: 4px; }
+  .adm .kal__dows { gap: 4px; }
+  .adm .kal__cell { min-height: 56px; }
+}
+
 /* ---------- Kleine Bildschirme: Menü oben ---------- */
 @media (max-width: 900px) {
   .adm-side__inner {

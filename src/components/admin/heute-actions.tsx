@@ -1,95 +1,86 @@
 "use client";
 
 import { useTransition } from "react";
-import { updateOrderStatusAction } from "@/app/(admin)/admin/bestellung/[number]/actions";
+import { setOrderStageAction } from "@/app/(admin)/admin/bestellung/[number]/actions";
 import type { OrderStatus } from "@/lib/admin/order-status";
 
-// Primary "next step" button that moves the order one stop forward
-// in the state machine. Label comes from the caller so the Heute
-// page can show the mockup wording ('Strauss ist fertig', etc.)
-// while the action still runs through the strict DB transitions.
-export function NextStepButton({
+// Dropdown that shows the order's current 4-stage UI status and lets
+// the admin jump to any later stage in one action. Server walks the
+// DB pipeline on their behalf — no more clicking through confirmed →
+// in_production → ready manually. Also offers 'Storniert' as the
+// escape hatch.
+export function StatusSelect({
   orderNumber,
-  target,
-  label,
+  status,
 }: {
   orderNumber: string;
-  target: OrderStatus;
-  label: string;
+  status: OrderStatus;
 }) {
   const [isPending, startTransition] = useTransition();
-  function run() {
+  const currentStage = uiStageFor(status);
+
+  function change(nextStage: string) {
+    if (nextStage === currentStage) return;
     startTransition(async () => {
       try {
-        await updateOrderStatusAction(orderNumber, target);
+        await setOrderStageAction(orderNumber, nextStage);
       } catch (err) {
-        // Silent in-place fail — admin sees no visual update and will
-        // try again. Fine for now; a toast system would upgrade this.
-        console.error("status transition failed:", err);
+        console.error("stage change failed:", err);
       }
     });
   }
+
+  // Terminal states have no outgoing transitions; keep the dropdown
+  // present but disabled so admin still sees the value.
+  const isTerminal =
+    status === "delivered" ||
+    status === "cancelled" ||
+    status === "delivery_failed";
+
   return (
-    <button
-      type="button"
-      className="order__next"
-      onClick={run}
-      disabled={isPending}
+    <select
+      aria-label={`Status Bestellung ${orderNumber}`}
+      value={currentStage}
+      disabled={isPending || isTerminal}
+      onChange={(e) => change(e.target.value)}
+      // Matches the mockup's `.order__next` chrome: rose pill with
+      // white text, 48px tall. Native select for mobile reliability.
+      className="h-12 px-4 pr-9 bg-rose text-ivory text-[15px] font-semibold border-0 cursor-pointer appearance-none disabled:opacity-60 disabled:cursor-not-allowed"
+      style={{
+        backgroundImage:
+          'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'white\' stroke-width=\'2.4\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")',
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 12px center",
+      }}
     >
-      <svg
-        className="icon"
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <path d="M5 12l5 5 9-10" />
-      </svg>
-      {isPending ? "…" : label}
-    </button>
+      <option value="neu">Neu</option>
+      <option value="fertig">Fertig</option>
+      <option value="unterwegs">Unterwegs</option>
+      <option value="geliefert">Geliefert</option>
+      <option value="storniert">Storniert</option>
+    </select>
   );
 }
 
-// "Rückgängig" link — bumps the order back one state. Only renders when
-// the caller supplies a `previous` target (i.e. the transition is in
-// the allowed list).
-export function UndoStepButton({
-  orderNumber,
-  previous,
-}: {
-  orderNumber: string;
-  previous: OrderStatus;
-}) {
-  const [isPending, startTransition] = useTransition();
-  function run() {
-    startTransition(async () => {
-      try {
-        await updateOrderStatusAction(orderNumber, previous);
-      } catch (err) {
-        console.error("status undo failed:", err);
-      }
-    });
+function uiStageFor(s: OrderStatus): "neu" | "fertig" | "unterwegs" | "geliefert" | "storniert" {
+  switch (s) {
+    case "new":
+    case "confirmed":
+      return "neu";
+    case "in_production":
+    case "ready":
+      return "fertig";
+    case "out_for_delivery":
+    case "delivery_failed":
+      return "unterwegs";
+    case "delivered":
+      return "geliefert";
+    case "cancelled":
+      return "storniert";
   }
-  return (
-    <button
-      type="button"
-      className="btn-link"
-      onClick={run}
-      disabled={isPending}
-    >
-      Rückgängig
-    </button>
-  );
 }
 
-// Print trigger that opens the browser print dialog. Admin CSS @media
-// print strips the sidebar + action buttons so the paper view shows
-// the day list cleanly.
+// Print trigger (unchanged).
 export function PrintButton() {
   return (
     <button
