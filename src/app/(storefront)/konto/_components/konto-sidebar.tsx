@@ -2,78 +2,53 @@ import { signOut } from "@/auth";
 import { KontoNav } from "./konto-nav";
 
 export function KontoSidebar({
-  firstName,
-  lastName,
-  email,
   orderCount,
   addressCount,
 }: {
-  firstName: string;
-  lastName: string;
-  email: string;
   orderCount: number;
   addressCount: number;
 }) {
-  const fullName =
-    [firstName, lastName].filter(Boolean).join(" ") || email.split("@")[0];
-  const initials = initialsFrom(fullName);
-
+  // Sidebar is just the nav. The old user-card (avatar + name + email)
+  // was removed — identity lives in each page's content ('Hallo, Laura.'
+  // on Übersicht, the big identity header on Profil). Abmelden is the
+  // last item of the nav list on desktop; on phones it's inside the
+  // Profil tab (since the mobile nav is a fixed bottom tab bar).
   return (
-    <aside className="w-full lg:w-[240px] lg:flex-none lg:sticky lg:top-6 flex flex-col gap-7">
-      {/* User card — shown only on lg and up. On phones the nav is a
-          fixed bottom tab bar; identity + logout live inside the Profil
-          tab so the top of every page is clean. */}
-      <div className="hidden lg:flex items-center gap-3.5">
-        <span
-          aria-hidden
-          className="w-[52px] h-[52px] grid place-items-center bg-rose text-ivory font-display text-[22px] shrink-0"
-        >
-          {initials}
-        </span>
-        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-          <span className="font-display text-[19px] leading-[1.2] text-bark truncate">
-            {fullName}
-          </span>
-          <span className="text-[13px] text-sage break-all">{email}</span>
-        </div>
-        <form
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/" });
-          }}
-        >
-          <button
-            type="submit"
-            aria-label="Abmelden"
-            className="inline-flex items-center gap-1.5 shrink-0 h-9 px-2.5 text-[13px] text-sage hover:text-rose transition-colors"
+    <aside className="w-full lg:w-[240px] lg:flex-none lg:sticky lg:top-6">
+      <KontoNav
+        orderCount={orderCount}
+        addressCount={addressCount}
+        trailing={
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/" });
+            }}
+            className="hidden lg:block"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
+            <button
+              type="submit"
+              className="w-full flex items-center gap-3 min-h-[52px] px-3.5 lg:pl-[17px] text-[15px] text-sage hover:text-rose transition-colors border-b border-hair"
             >
-              <path d="M9 21H5V3h4" />
-              <path d="M16 17l5-5-5-5M21 12H9" />
-            </svg>
-            <span className="hidden sm:inline">Abmelden</span>
-          </button>
-        </form>
-      </div>
-
-      <KontoNav orderCount={orderCount} addressCount={addressCount} />
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M9 21H5V3h4" />
+                <path d="M16 17l5-5-5-5M21 12H9" />
+              </svg>
+              Abmelden
+            </button>
+          </form>
+        }
+      />
     </aside>
   );
-}
-
-function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
-  return (first + last).toUpperCase() || "?";
 }

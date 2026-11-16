@@ -134,15 +134,18 @@ function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
 
   return (
     <article className="border lg:border border-mist bg-white -mx-4 lg:mx-0">
-      {/* Photo + overlay. Mobile: near-square (5:4). Desktop: 16:9
-          so the slab doesn't swallow the viewport. */}
-      <div className="relative aspect-[5/4] sm:aspect-[16/9] bg-cream overflow-hidden">
+      {/* Photo + overlay. Mobile: 5/4 near-square. Desktop: 16/7
+          landscape slab per the mockup. The img is absolutely
+          positioned so its natural dimensions can't push the card's
+          height past the aspect box; the overlay stays visible at
+          the bottom. */}
+      <div className="relative aspect-[5/4] sm:aspect-[16/7] bg-cream overflow-hidden">
         {o.firstLineImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={thumbUrl(o.firstLineImageUrl)}
             alt=""
-            className="w-full h-full object-cover block"
+            className="absolute top-0 left-0 w-full h-full object-cover block"
           />
         ) : null}
         <div

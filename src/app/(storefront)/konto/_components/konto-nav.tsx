@@ -13,9 +13,11 @@ type Item = {
 export function KontoNav({
   orderCount,
   addressCount,
+  trailing,
 }: {
   orderCount: number;
   addressCount: number;
+  trailing?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const items: Item[] = [
@@ -110,53 +112,66 @@ export function KontoNav({
   return (
     <nav
       aria-label="Mein Konto"
-      // Mobile: fixed bottom tab bar (one-hand thumb reach, app feel).
-      // Desktop: vertical rail with hair-line separators.
-      // Content gets pb-20 on mobile from the layout so nothing hides.
+      // Mobile: fixed bottom tab bar (one-hand thumb reach).
+      // Desktop: vertical rail. Layout adds pb-28 on mobile.
       className={[
         "fixed bottom-0 inset-x-0 z-40 flex border-t border-mist bg-ivory",
-        "lg:static lg:border-t-0 lg:bg-transparent lg:border-b-0",
-        "lg:flex-col lg:border-l-0",
+        "lg:static lg:flex-col lg:bg-transparent lg:border-t-0",
         "[padding-bottom:env(safe-area-inset-bottom,0px)] lg:[padding-bottom:0]",
       ].join(" ")}
     >
-      {items.map((item) => {
-        const isActive =
-          item.href === "/konto"
-            ? pathname === "/konto"
-            : pathname === item.href || pathname.startsWith(item.href + "/");
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={isActive ? "page" : undefined}
-            className={[
-              // Mobile tab (equal flex, stacked icon+label)
-              "flex-1 min-w-0 min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-2 text-[12px]",
-              // Desktop list row (horizontal, left-indent, left-accent)
-              "lg:flex-none lg:flex-row lg:items-center lg:justify-between lg:min-h-[52px] lg:px-3.5 lg:py-0 lg:gap-3 lg:text-[15px] lg:border-b lg:border-hair lg:border-l-[3px]",
-              "transition-colors",
-              isActive
-                ? "text-rose shadow-[inset_0_3px_0_var(--color-rose)] lg:shadow-none lg:border-l-rose lg:bg-cream lg:text-bark font-semibold"
-                : "text-sage hover:text-bark hover:lg:bg-cream lg:border-l-transparent lg:pl-[17px]",
-            ].join(" ")}
-          >
-            <span aria-hidden className="lg:hidden">
-              {item.icon}
-            </span>
-            <span className="truncate">{item.label}</span>
-            {item.count !== null && (
-              <span
-                className={`hidden lg:inline text-[12px] tabular-nums ${
-                  isActive ? "text-rose font-semibold" : "text-sage"
-                }`}
-              >
-                {item.count}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+      {items.map((item) => (
+        <NavItem key={item.href} item={item} pathname={pathname} />
+      ))}
+      {trailing}
     </nav>
+  );
+}
+
+function NavItem({ item, pathname }: { item: Item; pathname: string }) {
+  // Exact match only — never highlight a parent route when a child is
+  // active. Previously the <Link> active-state also applied hover
+  // bg-cream, which could stick after a focus and look like a second
+  // active item; now only aria-current drives the background.
+  const isActive = pathname === item.href;
+  return (
+    <Link
+      href={item.href}
+      aria-current={isActive ? "page" : undefined}
+      className={[
+        // Mobile tab
+        "flex-1 min-w-0 min-h-16 flex flex-col items-center justify-center gap-1 px-1 py-2 text-[12px]",
+        // Desktop list row
+        "lg:flex-none lg:flex-row lg:items-center lg:justify-start lg:min-h-[52px] lg:px-3.5 lg:py-0 lg:gap-3 lg:text-[15px]",
+        "lg:border-b lg:border-hair",
+        "transition-colors",
+        isActive
+          ? [
+              // Mobile: rose icon/label with top accent bar.
+              "text-rose shadow-[inset_0_3px_0_var(--color-rose)]",
+              // Desktop: cream bg + bark text + left rose accent.
+              "lg:shadow-[inset_3px_0_0_var(--color-rose)]",
+              "lg:bg-cream lg:text-bark font-semibold",
+            ].join(" ")
+          : "text-sage hover:text-rose lg:hover:text-bark",
+      ].join(" ")}
+    >
+      <span aria-hidden className="lg:hidden">
+        {item.icon}
+      </span>
+      <span aria-hidden className="hidden lg:inline-flex">
+        {item.icon}
+      </span>
+      <span className="truncate">{item.label}</span>
+      {item.count !== null && (
+        <span
+          className={`hidden lg:inline ml-auto text-[12px] tabular-nums ${
+            isActive ? "text-rose font-semibold" : "text-sage"
+          }`}
+        >
+          {item.count}
+        </span>
+      )}
+    </Link>
   );
 }
