@@ -17,7 +17,7 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
   const items: Item[] = [
     {
       href: "/admin",
-      label: "Heute",
+      label: "Bestellungen",
       match: (p) =>
         p === "/admin" ||
         p.startsWith("/admin/bestellung") ||
@@ -35,8 +35,8 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
           strokeLinejoin="round"
           aria-hidden
         >
-          <rect x="3" y="5" width="18" height="16" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
+          <path d="M5 7h14l-1.2 13H6.2z" />
+          <path d="M9 7V5a3 3 0 0 1 6 0v2" />
         </svg>
       ),
       badge: openOrderCount,
@@ -118,19 +118,16 @@ export function AdminNav({ openOrderCount }: { openOrderCount: number }) {
   ];
 
   return (
-    <ul className="adm-nav">
+    <ul className="adm-tabs">
       {items.map((item) => {
         const isActive = item.match(pathname);
         return (
           <li key={item.href}>
-            <Link
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-            >
+            <Link href={item.href} aria-current={isActive ? "page" : undefined}>
               {item.icon}
-              {item.label}
+              <span>{item.label}</span>
               {item.badge !== undefined && item.badge > 0 && (
-                <span className="adm-nav__badge" aria-label="offen">
+                <span className="adm-badge" aria-label="offen">
                   {item.badge}
                 </span>
               )}

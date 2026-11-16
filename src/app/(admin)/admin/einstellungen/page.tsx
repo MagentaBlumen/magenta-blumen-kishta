@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { asc } from "drizzle-orm";
 import { DateTime } from "luxon";
+import { signOut } from "@/auth";
 import { db } from "@/db/client";
 import { settings, taxRate } from "@/db/schema/settings";
 import { fetchSystemHealth } from "@/lib/admin/system-health";
@@ -10,16 +12,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Setting keys surfaced on this page. Any key not listed gets ignored
-// by the form (it's kept in the DB but not editable here).
-const SHOP_FIELDS: StepperField[] = [
+const PRICE_FIELDS: StepperField[] = [
   {
     key: "free_delivery_over_gross",
     label: "Gratis-Lieferung ab",
+    hint: "Darunter kostet die Lieferung.",
     unit: "CHF",
     step: 10,
     max: 1000,
-    initial: "120",
   },
   {
     key: "global_min_order_gross",
@@ -28,16 +28,17 @@ const SHOP_FIELDS: StepperField[] = [
     unit: "CHF",
     step: 5,
     max: 500,
-    initial: "40",
   },
+];
+
+const TIME_FIELDS: StepperField[] = [
   {
     key: "same_day_cutoff_hours",
     label: "Bestellschluss vor der Tour",
-    hint: "Tour um 16:00 → bestellen bis",
+    hint: "Tour 16:00 → bestellen bis",
     unit: "Stunden",
     step: 1,
     max: 24,
-    initial: "3",
     showCutoffExample: true,
   },
   {
@@ -46,24 +47,22 @@ const SHOP_FIELDS: StepperField[] = [
     unit: "Tage",
     step: 1,
     max: 365,
-    initial: "30",
   },
   {
     key: "timed_deliveries_per_hour",
-    label: "Max. Anlass-Lieferungen",
+    label: "Anlass-Lieferungen",
     hint: "Mit fester Uhrzeit, z. B. Trauerfeiern.",
     unit: "pro Stunde",
     step: 1,
     max: 20,
-    initial: "3",
   },
   {
     key: "soft_launch_daily_cap",
-    label: "Max. Online-Bestellungen",
+    label: "Online-Bestellungen",
+    hint: "Höchstens so viele pro Tag.",
     unit: "pro Tag",
     step: 1,
     max: 500,
-    initial: "5",
   },
 ];
 
@@ -74,7 +73,6 @@ const DEVELOPER_FIELDS: StepperField[] = [
     unit: "Minuten",
     step: 5,
     max: 240,
-    initial: "30",
     codeTag: "abandoned_order_minutes",
   },
   {
@@ -83,10 +81,22 @@ const DEVELOPER_FIELDS: StepperField[] = [
     unit: "Tage",
     step: 1,
     max: 365,
-    initial: "60",
     codeTag: "run_generation_days",
   },
 ];
+
+const ALL_FIELDS = [...PRICE_FIELDS, ...TIME_FIELDS, ...DEVELOPER_FIELDS];
+
+const INITIAL_DEFAULTS: Record<string, string> = {
+  free_delivery_over_gross: "120",
+  global_min_order_gross: "40",
+  same_day_cutoff_hours: "3",
+  max_booking_horizon_days: "30",
+  timed_deliveries_per_hour: "3",
+  soft_launch_daily_cap: "5",
+  abandoned_order_minutes: "30",
+  run_generation_days: "60",
+};
 
 export default async function EinstellungenPage() {
   const [settingRows, taxRateRows, health] = await Promise.all([
@@ -107,8 +117,8 @@ export default async function EinstellungenPage() {
 
   const settingsMap = new Map(settingRows.map((r) => [r.key, r.value ?? ""]));
   const initialValues: Record<string, string> = {};
-  for (const f of [...SHOP_FIELDS, ...DEVELOPER_FIELDS]) {
-    initialValues[f.key] = settingsMap.get(f.key) ?? f.initial;
+  for (const f of ALL_FIELDS) {
+    initialValues[f.key] = settingsMap.get(f.key) ?? INITIAL_DEFAULTS[f.key] ?? "";
   }
 
   const shopTimezone = settingsMap.get("shop_timezone") ?? "Europe/Zurich";
@@ -116,10 +126,10 @@ export default async function EinstellungenPage() {
   const anyBad = checks.some((c) => !c.ok);
 
   return (
-    <>
-      <div className="adm-head">
-        <div className="adm-head__text">
-          <h1 className="adm-title">Einstellungen</h1>
+    <div className="adm-wrap adm-wrap--narrow">
+      <div className="adm-head adm-head--solo">
+        <div>
+          <h1>Einstellungen</h1>
         </div>
       </div>
 
@@ -127,8 +137,8 @@ export default async function EinstellungenPage() {
         <div className="alert" role="alert">
           <svg
             className="icon"
-            width="22"
-            height="22"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -142,38 +152,37 @@ export default async function EinstellungenPage() {
           </svg>
           <span>
             <strong>Einige Systeme sind nicht erreichbar.</strong>{" "}
-            Details unter «Weitere Angaben».
+            Details unter «Systemstatus und Technisches».
           </span>
         </div>
       )}
 
       <SettingsForm
-        shopFields={SHOP_FIELDS}
+        priceFields={PRICE_FIELDS}
+        timeFields={TIME_FIELDS}
         developerFields={DEVELOPER_FIELDS}
         initialValues={initialValues}
         extraHidden={{ shop_timezone: shopTimezone }}
         moreChildren={
           <>
-            <div>
-              <h2>Systemstatus</h2>
+            <section className="set-group" aria-labelledby="g-status">
+              <h2 id="g-status">Systemstatus</h2>
               <ul className="checks">
                 {checks.map((c) => (
-                  <li key={c.key} className={c.ok ? undefined : "is-bad"}>
-                    <span className="checks__mark">
+                  <li key={c.key}>
+                    <span className={`ck${c.ok ? "" : " ck--bad"}`}>
                       {c.ok ? <TickIcon /> : <WarnIcon />}
                     </span>
-                    <span>
-                      <strong>{c.label}</strong>{" "}
-                      <span>· {c.detail}</span>
-                    </span>
+                    <strong>{c.label}</strong>
+                    <span className="hint">{c.detail}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-            <div>
-              <h2>Mehrwertsteuer</h2>
+            </section>
+            <section className="set-group" aria-labelledby="g-mwst">
+              <h2 id="g-mwst">Mehrwertsteuer</h2>
               {taxRateRows.length === 0 ? (
-                <p className="hint">Noch keine Sätze hinterlegt.</p>
+                <p>Noch keine Sätze hinterlegt.</p>
               ) : (
                 <p>
                   {taxRateRows
@@ -190,22 +199,65 @@ export default async function EinstellungenPage() {
                     .join(" · ")}
                 </p>
               )}
-            </div>
+            </section>
           </>
         }
       />
-    </>
+
+      {/* Mobile-only: shop link + logout (desktop has them in the sidebar). */}
+      <nav className="links set-group" aria-label="Weiteres">
+        <Link href="/" target="_blank" rel="noopener">
+          <svg
+            className="icon"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />
+          </svg>
+          Shop ansehen
+        </Link>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/signin" });
+          }}
+        >
+          <button type="submit">
+            <svg
+              className="icon"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M9 4H5v16h4M14 8l4 4-4 4M18 12H9" />
+            </svg>
+            Abmelden
+          </button>
+        </form>
+      </nav>
+    </div>
   );
 }
 
 type Check = { key: string; label: string; detail: string; ok: boolean };
 
-// All system checks displayed under "Weitere Angaben". The red alert at
-// the top of the page fires if any of these return ok=false.
-function buildChecks(health: Awaited<ReturnType<typeof fetchSystemHealth>>): Check[] {
-  // Fix for the 'letzte: Invalid DateTime' bug: fromJSDate can produce
-  // an invalid DateTime if the source Date is NaN or the timezone
-  // resolver fails. Guard with .isValid before formatting.
+function buildChecks(
+  health: Awaited<ReturnType<typeof fetchSystemHealth>>,
+): Check[] {
+  // Fix for 'letzte: Invalid DateTime': guard isValid before formatting.
   const latestDt = health.orders.latestOrderPlacedAt
     ? DateTime.fromJSDate(health.orders.latestOrderPlacedAt, {
         zone: "Europe/Zurich",
@@ -272,12 +324,12 @@ function TickIcon() {
   return (
     <svg
       className="icon"
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.4"
+      strokeWidth="2.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -291,8 +343,8 @@ function WarnIcon() {
   return (
     <svg
       className="icon"
-      width="16"
-      height="16"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

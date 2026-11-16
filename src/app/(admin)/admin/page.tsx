@@ -1,27 +1,19 @@
-import Link from "next/link";
 import { DateTime } from "luxon";
 import { auth } from "@/auth";
 import {
   HeuteDayPicker,
   type DayTab,
 } from "@/components/admin/heute-day-picker";
-import {
-  PrintButton,
-  StatusSelect,
-} from "@/components/admin/heute-actions";
+import { OrderCard, PrintButton } from "@/components/admin/order-card";
+import type { OrderCardData } from "@/components/admin/order-card";
 import {
   fetchActionableOrdersInRange,
   type ActionableOrder,
 } from "@/lib/admin/heute";
-import { formatChf } from "@/lib/money";
 import { todayZ } from "@/lib/checkout/time";
-import { thumbUrl } from "@/lib/image-urls";
-import type { OrderStatus } from "@/lib/admin/order-status";
 
 export const dynamic = "force-dynamic";
 
-// Window the Heute dashboard loads: a week back (for carryover /
-// recently delivered) and two months forward (booking horizon + buffer).
 const RANGE_PAST_DAYS = 7;
 const RANGE_FUTURE_DAYS = 60;
 
@@ -49,42 +41,6 @@ const MON_LONG = [
   "Dezember",
 ] as const;
 
-// -------- UI-stage mapping --------
-// DB has 8 statuses; the owner thinks in 4. The chip and the next-step
-// button both use these display stages.
-type UiStage = "neu" | "fertig" | "unterwegs" | "geliefert";
-
-function uiStageFor(s: OrderStatus): UiStage {
-  switch (s) {
-    case "new":
-    case "confirmed":
-      return "neu";
-    case "in_production":
-    case "ready":
-      return "fertig";
-    case "out_for_delivery":
-      return "unterwegs";
-    case "delivered":
-    case "delivery_failed": // still treated as "unterwegs" visually
-      return "unterwegs";
-    case "cancelled":
-      return "geliefert"; // defensive; cancelled rows are filtered out
-  }
-}
-
-const UI_STAGE_LABEL: Record<UiStage, string> = {
-  neu: "Neu",
-  fertig: "Fertig",
-  unterwegs: "Unterwegs",
-  geliefert: "Geliefert",
-};
-
-// Status progression now lives in StatusSelect (components/admin/
-// heute-actions.tsx). The dropdown shows the current 4-stage UI
-// status and lets admin jump directly to any later stage; the
-// server action walks the DB pipeline through valid transitions.
-
-// -------- Tour grouping within a day --------
 const TOUR_ORDER = ["am", "event", "pm"] as const;
 type Tour = (typeof TOUR_ORDER)[number];
 
@@ -97,14 +53,40 @@ function tourOf(o: ActionableOrder): Tour | "other" {
   return "other";
 }
 
-const TOUR_LABEL: Record<Tour | "other", string> = {
-  am: "Vormittag · 10–12 Uhr",
-  pm: "Nachmittag · 16–18 Uhr",
-  event: "Anlass mit fester Uhrzeit",
-  other: "Weitere Termine",
+const TOUR_LABEL: Record<Tour | "other", { name: string; sub: string }> = {
+  am: { name: "Vormittag", sub: "10–12 Uhr" },
+  event: { name: "Anlass", sub: "feste Uhrzeit" },
+  pm: { name: "Nachmittag", sub: "16–18 Uhr" },
+  other: { name: "Weitere Termine", sub: "" },
 };
 
-export default async function HeutePage(props: {
+function toCardData(o: ActionableOrder): OrderCardData {
+  return {
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    fulfilment: o.fulfilment,
+    recipientName: o.recipientName,
+    recipientPhone: o.recipientPhone,
+    buyerName: o.buyerName,
+    buyerPhone: o.buyerPhone,
+    deliveryStreet: o.deliveryStreet,
+    deliveryPlz: o.deliveryPlz,
+    deliveryCity: o.deliveryCity,
+    deliveryWard: o.deliveryWard,
+    deliveryRoom: o.deliveryRoom,
+    requestedDeliveryAt: o.requestedDeliveryAt,
+    totalGross: o.totalGross,
+    paymentMethod: o.paymentMethod,
+    firstLineProductName: o.firstLineProductName,
+    firstLineVariantLabel: o.firstLineVariantLabel,
+    firstLineImageUrl: o.firstLineImageUrl,
+    cardMessage: o.cardMessage,
+    deliveryInstructions: o.deliveryInstructions,
+  };
+}
+
+export default async function BestellungenPage(props: {
   searchParams: Promise<{ tag?: string }>;
 }) {
   await auth();
@@ -114,12 +96,10 @@ export default async function HeutePage(props: {
   const todayIso = today.toISODate() ?? "";
   const fromIso =
     today.minus({ days: RANGE_PAST_DAYS }).toISODate() ?? todayIso;
-  const toIso =
-    today.plus({ days: RANGE_FUTURE_DAYS }).toISODate() ?? todayIso;
+  const toIso = today.plus({ days: RANGE_FUTURE_DAYS }).toISODate() ?? todayIso;
 
   const orders = await fetchActionableOrdersInRange(fromIso, toIso);
 
-  // Group by delivery_date — one tab per date with orders.
   const ordersByDate = new Map<string, ActionableOrder[]>();
   for (const o of orders) {
     const key = o.deliveryDate ?? "unbekannt";
@@ -131,9 +111,6 @@ export default async function HeutePage(props: {
     .filter((k) => k !== "unbekannt")
     .sort();
 
-  // Current day: the tag param if it's present AND it has orders,
-  // otherwise today (even if today has no orders — show the empty
-  // state), otherwise the first date with orders.
   const currentIso =
     sp.tag && datesWithOrders.includes(sp.tag)
       ? sp.tag
@@ -141,8 +118,6 @@ export default async function HeutePage(props: {
         ? todayIso
         : datesWithOrders[0] ?? todayIso;
 
-  // Build the day tabs: include today as a tab even when it has zero
-  // orders so Sandra can land on 'Heute' and see the empty-state copy.
   const allDays = new Set<string>(datesWithOrders);
   allDays.add(todayIso);
   const days: DayTab[] = Array.from(allDays)
@@ -154,9 +129,8 @@ export default async function HeutePage(props: {
     }));
 
   const dayOrders = ordersByDate.get(currentIso) ?? [];
-  const title = longDayLabel(currentIso, todayIso);
+  const title = longDayLabel(currentIso);
 
-  // Group within the current day by tour.
   const byTour: Record<Tour | "other", ActionableOrder[]> = {
     am: [],
     event: [],
@@ -165,80 +139,88 @@ export default async function HeutePage(props: {
   };
   for (const o of dayOrders) byTour[tourOf(o)].push(o);
 
+  // Within each tour: delivered orders go to the bottom.
+  for (const key of Object.keys(byTour) as (Tour | "other")[]) {
+    byTour[key].sort((a, b) => {
+      const aDone = a.status === "delivered" ? 1 : 0;
+      const bDone = b.status === "delivered" ? 1 : 0;
+      return aDone - bDone;
+    });
+  }
+
+  const totalDone = dayOrders.filter((o) => o.status === "delivered").length;
+  const totalCount = dayOrders.length;
+  const progressPct =
+    totalCount === 0 ? 0 : Math.round((totalDone / totalCount) * 100);
+
   return (
-    <>
+    <div className="adm-wrap">
       <div className="adm-head">
-        <div className="adm-head__text">
-          <h1 className="adm-title">{title.short}</h1>
-          <p className="adm-sub">{title.long}</p>
+        <div>
+          <h1>Bestellungen</h1>
+          <p>{title}</p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <Link className="btn btn--lg" href="/admin/kalender">
-            <svg
-              className="icon"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="3" y="5" width="18" height="16" />
-              <path d="M3 10h18M8 3v4M16 3v4" />
-            </svg>
-            Kalender
-          </Link>
+        <div className="adm-head__actions">
           <PrintButton />
         </div>
       </div>
 
-      <HeuteDayPicker days={days} currentIso={currentIso} />
+      <div className="day-row">
+        <HeuteDayPicker days={days} currentIso={currentIso} />
+        {totalCount > 0 && (
+          <div className="progress" aria-label="Fortschritt">
+            <span className="progress__bar">
+              <span style={{ width: `${progressPct}%` }} />
+            </span>
+            <span>
+              {totalDone} von {totalCount} geliefert
+            </span>
+          </div>
+        )}
+      </div>
 
-      {dayOrders.length === 0 ? (
+      {totalCount === 0 ? (
         <p className="empty">
-          <strong>Keine Lieferungen.</strong>
+          <strong>Keine Lieferungen</strong>
           Neue Bestellungen erscheinen hier automatisch.
         </p>
       ) : (
-        <div className="orders">
+        <div className="tours">
           {TOUR_ORDER.map((tour) => {
             const group = byTour[tour];
             if (group.length === 0) return null;
+            const label = TOUR_LABEL[tour];
             return (
-              <section key={tour}>
-                <h2 className="tour">{TOUR_LABEL[tour]}</h2>
-                {group.map((o) =>
-                  o.status === "delivered" ? (
-                    <DeliveredRow key={o.id} order={o} />
-                  ) : (
-                    <OrderCard key={o.id} order={o} />
-                  ),
-                )}
+              <section key={tour} aria-label={label.name}>
+                <div className="tour">
+                  <h2>{label.name}</h2>
+                  {label.sub && <span>{label.sub}</span>}
+                </div>
+                <div className="orders">
+                  {group.map((o) => (
+                    <OrderCard key={o.id} data={toCardData(o)} />
+                  ))}
+                </div>
               </section>
             );
           })}
           {byTour.other.length > 0 && (
-            <section>
-              <h2 className="tour">{TOUR_LABEL.other}</h2>
-              {byTour.other.map((o) =>
-                o.status === "delivered" ? (
-                  <DeliveredRow key={o.id} order={o} />
-                ) : (
-                  <OrderCard key={o.id} order={o} />
-                ),
-              )}
+            <section aria-label={TOUR_LABEL.other.name}>
+              <div className="tour">
+                <h2>{TOUR_LABEL.other.name}</h2>
+              </div>
+              <div className="orders">
+                {byTour.other.map((o) => (
+                  <OrderCard key={o.id} data={toCardData(o)} />
+                ))}
+              </div>
             </section>
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
-
-// ---------- Day labels ----------
 
 function shortDayLabel(iso: string, todayIso: string): string {
   const d = DateTime.fromISO(iso, { zone: "Europe/Zurich" });
@@ -251,165 +233,7 @@ function shortDayLabel(iso: string, todayIso: string): string {
   return d.setLocale("de-CH").toFormat("ccc d. LLL");
 }
 
-function longDayLabel(
-  iso: string,
-  todayIso: string,
-): { short: string; long: string } {
+function longDayLabel(iso: string): string {
   const d = DateTime.fromISO(iso, { zone: "Europe/Zurich" });
-  const t = DateTime.fromISO(todayIso, { zone: "Europe/Zurich" });
-  const diff = Math.round(d.startOf("day").diff(t.startOf("day"), "days").days);
-  const short =
-    diff === 0
-      ? "Heute"
-      : diff === 1
-        ? "Morgen"
-        : diff === -1
-          ? "Gestern"
-          : diff === 2
-            ? "Übermorgen"
-            : d.setLocale("de-CH").toFormat("cccc");
-  const long = `${DOW_LONG[d.weekday % 7]}, ${d.day}. ${MON_LONG[d.month - 1]}`;
-  return { short, long };
-}
-
-// ---------- Order card ----------
-
-function OrderCard({ order: o }: { order: ActionableOrder }) {
-  const stage = uiStageFor(o.status);
-  const chipClass = `chip chip--${stage}`;
-
-  const placeDetail =
-    o.deliveryContext === "hospital" && o.deliveryWard
-      ? `Station ${o.deliveryWard}${o.deliveryRoom ? `, Zimmer ${o.deliveryRoom}` : ""}`
-      : "";
-  const addressLine = [o.deliveryStreet, o.deliveryPlz, o.deliveryCity]
-    .filter(Boolean)
-    .join(", ");
-
-  const eventText =
-    o.fulfilment === "timed" && o.requestedDeliveryAt
-      ? `Zeremonie ${DateTime.fromJSDate(o.requestedDeliveryAt, { zone: "Europe/Zurich" }).setLocale("de-CH").toFormat("HH:mm")} Uhr`
-      : null;
-
-  const isCash = o.paymentMethod === "cash";
-
-  return (
-    <article className="order" aria-label={`Bestellung ${o.orderNumber}`}>
-      <div className="order__top">
-        <Link
-          href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}`}
-          className="order__no"
-        >
-          Nr. {o.orderNumber}
-        </Link>
-        <span className={chipClass}>{UI_STAGE_LABEL[stage]}</span>
-        {isCash && (
-          <span className="chip chip--cash">
-            Bar kassieren · {formatChf(o.totalGross)}
-          </span>
-        )}
-        {o.status === "delivery_failed" && (
-          <span className="chip chip--neu">Lieferung fehlgeschlagen</span>
-        )}
-        <div className="order__actions">
-          <StatusSelect orderNumber={o.orderNumber} status={o.status} />
-        </div>
-      </div>
-      <div className="order__body">
-        <div className="order__what">
-          {o.firstLineImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={thumbUrl(o.firstLineImageUrl)} alt="" />
-          ) : (
-            <div style={{ width: 56, height: 56, background: "var(--a-sand)" }} />
-          )}
-          <div>
-            <span className="order__product">
-              {o.firstLineProductName ?? "(Produkt gelöscht)"}
-            </span>
-            <span className="order__meta">
-              {o.firstLineVariantLabel
-                ? `${o.firstLineVariantLabel} · `
-                : ""}
-              {formatChf(o.totalGross)}
-              {o.itemCount > 1 ? ` · ${o.itemCount} Positionen` : ""}
-            </span>
-          </div>
-        </div>
-
-        {o.cardMessage ? (
-          <p className="order__card">
-            «{o.cardMessage}»{o.cardIsAnonymous ? " (anonym)" : ""}
-          </p>
-        ) : (
-          <span aria-hidden />
-        )}
-
-        <div className="order__to">
-          {eventText && <p className="order__event">{eventText}</p>}
-          <span className="order__name">{o.recipientName}</span>
-          {addressLine && (
-            <span className="order__addr">{addressLine}</span>
-          )}
-          {placeDetail && <span className="order__place">{placeDetail}</span>}
-          {o.recipientPhone && (
-            <a
-              className="order__tel"
-              href={`tel:${o.recipientPhone.replace(/\s/g, "")}`}
-            >
-              <svg
-                className="icon"
-                width="17"
-                height="17"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z" />
-              </svg>
-              {o.recipientPhone}
-            </a>
-          )}
-          {o.deliveryInstructions && (
-            <p className="order__note">{o.deliveryInstructions}</p>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function DeliveredRow({ order: o }: { order: ActionableOrder }) {
-  return (
-    <Link
-      href={`/admin/bestellung/${encodeURIComponent(o.orderNumber)}`}
-      className="order-done"
-    >
-      <span className="order-done__ok">
-        <svg
-          className="icon"
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <path d="M5 12l5 5 9-10" />
-        </svg>
-        Geliefert
-      </span>
-      <span className="order-done__text">
-        Nr. {o.orderNumber} · {o.recipientName}
-        {o.firstLineProductName ? ` · ${o.firstLineProductName}` : ""}
-      </span>
-    </Link>
-  );
+  return `${DOW_LONG[d.weekday % 7]}, ${d.day}. ${MON_LONG[d.month - 1]}`;
 }

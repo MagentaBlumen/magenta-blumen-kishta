@@ -55,18 +55,17 @@ export function ProdukteGrid({
     router.push(qs ? `/admin/produkte?${qs}` : "/admin/produkte");
   }
 
-  const emptyCopy =
-    q
-      ? "Kein Produkt gefunden."
-      : tab === "archived"
-        ? "Keine archivierten Produkte."
-        : tab === "sold"
-          ? "Keine ausverkauften Produkte."
-          : "Keine Produkte.";
+  const emptyCopy = q
+    ? "Kein Produkt gefunden."
+    : tab === "archived"
+      ? "Keine Produkte im Archiv."
+      : tab === "sold"
+        ? "Nichts ausverkauft."
+        : "Noch keine Produkte.";
 
   return (
     <>
-      <div className="row">
+      <div className="toolbar">
         <div className="field-search">
           <label htmlFor="prod-search" className="sr-only">
             Produkt suchen
@@ -101,7 +100,7 @@ export function ProdukteGrid({
             aria-pressed={tab === "all"}
             onClick={() => switchTab("all")}
           >
-            Alle <span>{counts.all}</span>
+            Im Shop <span>{counts.all}</span>
           </button>
           <button
             type="button"
@@ -123,11 +122,13 @@ export function ProdukteGrid({
       {visible.length === 0 ? (
         <p className="empty">{emptyCopy}</p>
       ) : (
-        <div className="pgrid">
+        <ul className="pgrid">
           {visible.map((p) => (
-            <ProduktCard key={p.id} product={p} />
+            <li key={p.id}>
+              <ProduktCard product={p} />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </>
   );
@@ -136,13 +137,19 @@ export function ProdukteGrid({
 function ProduktCard({ product: p }: { product: ProduktRow }) {
   const isSold = !p.isAvailable && !p.isArchived;
   const priceLabel = priceLabelFor(p);
+  const editHref = `/admin/produkte/${p.id}`;
 
   return (
     <article
-      className={`pcard ${isSold ? "is-sold" : ""}`}
+      className={`p ${isSold ? "is-sold" : ""}`}
       data-id={p.id}
     >
-      <div className="pcard__img">
+      <Link
+        className="p__img"
+        href={editHref}
+        tabIndex={-1}
+        aria-hidden
+      >
         {p.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -151,32 +158,31 @@ function ProduktCard({ product: p }: { product: ProduktRow }) {
             loading="lazy"
           />
         ) : (
-          <div
-            style={{ width: "100%", aspectRatio: "4 / 3", background: "var(--a-sand)" }}
-          />
+          <div style={{ width: "100%", aspectRatio: "4 / 3" }} />
         )}
-        {isSold && <span className="chip chip--sold">Ausverkauft</span>}
-        {p.isArchived && <span className="chip chip--fertig">Archiviert</span>}
+        {isSold && <span className="p__flag">Ausverkauft</span>}
+      </Link>
+      <div className="p__body">
+        <Link className="p__name" href={editHref}>
+          {p.nameDe}
+        </Link>
+        <span className="p__price">{priceLabel}</span>
       </div>
-      <div className="pcard__body">
-        <h2 className="pcard__name">{p.nameDe}</h2>
-        <span className="pcard__price">{priceLabel}</span>
-      </div>
-      <div className="pcard__actions">
+      <div className="p__foot">
         {p.isArchived ? (
-          <span />
+          <span className="p__price">Im Archiv</span>
         ) : (
           <SoldCheckbox id={p.id} isAvailable={p.isAvailable} />
         )}
         <Link
-          className="btn"
-          href={`/admin/produkte/${p.id}`}
+          className="p__edit"
+          href={editHref}
           aria-label={`${p.nameDe} bearbeiten`}
         >
           <svg
             className="icon"
-            width="17"
-            height="17"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -188,7 +194,7 @@ function ProduktCard({ product: p }: { product: ProduktRow }) {
             <path d="M4 20h4L20 8l-4-4L4 16z" />
             <path d="M13.5 6.5l4 4" />
           </svg>
-          Bearbeiten
+          <span>Bearbeiten</span>
         </Link>
       </div>
     </article>
@@ -211,7 +217,6 @@ function SoldCheckbox({
       try {
         await toggleProductAvailabilityAction(id, !nextChecked);
       } catch (err) {
-        // Roll back on failure.
         console.error("toggle availability failed:", err);
         setChecked(!nextChecked);
       }
@@ -241,5 +246,5 @@ function priceLabelFor(p: ProduktRow): string {
   }
   if (nums.length === 1) return formatChf(p.prices[0]);
   const min = Math.min(...nums).toFixed(2);
-  return `${formatChfFrom(min)}`;
+  return formatChfFrom(min);
 }

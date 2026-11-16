@@ -10,28 +10,26 @@ export type StepperField = {
   unit: string;
   step: number;
   max: number;
-  initial: string;
   showCutoffExample?: boolean;
-  codeTag?: string; // developer-section field shows its key in small type
+  codeTag?: string;
 };
 
-export type Section = {
-  title?: string;
+type Group = {
+  title: string;
   description?: string;
   fields: StepperField[];
 };
 
-// All stepper fields in one form. Save bar is sticky at the bottom and
-// appears when any field is dirty; Discard resets to initial, Save
-// POSTs via the existing updateSettings server action.
 export function SettingsForm({
-  shopFields,
+  priceFields,
+  timeFields,
   developerFields,
   initialValues,
   moreChildren,
   extraHidden,
 }: {
-  shopFields: StepperField[];
+  priceFields: StepperField[];
+  timeFields: StepperField[];
   developerFields: StepperField[];
   initialValues: Record<string, string>;
   moreChildren: React.ReactNode;
@@ -83,47 +81,46 @@ export function SettingsForm({
     });
   }
 
+  const priceGroup: Group = {
+    title: "Lieferung & Preise",
+    fields: priceFields,
+  };
+  const timeGroup: Group = { title: "Bestellzeiten", fields: timeFields };
+
   return (
     <form
       ref={formRef}
       action={onSubmit}
+      id="settings"
       noValidate
-      style={{ display: "flex", flexDirection: "column", gap: 24 }}
+      style={{ display: "flex", flexDirection: "column", gap: 16 }}
     >
-      <section className="panel" aria-label="Shop">
-        {shopFields.map((f, i) => (
-          <SettingRow
-            key={f.key}
-            field={f}
-            value={values[f.key] ?? ""}
-            onChange={(v) => set(f.key, v)}
-            onStep={(dir) => bump(f, dir)}
-            cutoffExample={f.showCutoffExample ? cutoffExample : undefined}
-            isFirst={i === 0}
-          />
-        ))}
-      </section>
+      <GroupSection group={priceGroup} values={values} onSet={set} onBump={bump} />
+      <GroupSection
+        group={timeGroup}
+        values={values}
+        onSet={set}
+        onBump={bump}
+        cutoffExample={cutoffExample}
+      />
 
       <button
         type="button"
-        className="btn more-toggle"
+        className="btn-link more-toggle"
         aria-expanded={moreOpen}
         aria-controls="more"
         onClick={() => setMoreOpen((o) => !o)}
       >
-        {moreOpen ? "Weitere Angaben ausblenden" : "Weitere Angaben anzeigen"}
+        {moreOpen
+          ? "Systemstatus und Technisches ausblenden"
+          : "Systemstatus und Technisches anzeigen"}
       </button>
 
-      <section
-        id="more"
-        className="panel panel--more"
-        aria-label="Weitere Angaben"
-        hidden={!moreOpen}
-      >
+      <div className="more" id="more" hidden={!moreOpen}>
         {moreChildren}
-        <div>
-          <h2>Für Entwickler</h2>
-          <p className="hint">
+        <section className="set-group" aria-labelledby="g-dev">
+          <h2 id="g-dev">Für Entwickler</h2>
+          <p>
             Nur ändern, wenn Ihr Entwickler es sagt. Zeitzone: Europe/Zurich.
           </p>
           {developerFields.map((f) => (
@@ -135,8 +132,8 @@ export function SettingsForm({
               onStep={(dir) => bump(f, dir)}
             />
           ))}
-        </div>
-      </section>
+        </section>
+      </div>
 
       {extraHidden &&
         Object.entries(extraHidden).map(([k, v]) => (
@@ -145,6 +142,7 @@ export function SettingsForm({
 
       {dirty && (
         <div className="savebar" role="region" aria-label="Speichern">
+          <span>Nicht gespeichert</span>
           <button
             type="button"
             className="btn"
@@ -179,24 +177,40 @@ export function SettingsForm({
 
       {showSaved && !dirty && (
         <p className="saved" role="status">
-          <svg
-            className="icon"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M5 12l5 5 9-10" />
-          </svg>
           Gespeichert.
         </p>
       )}
     </form>
+  );
+}
+
+function GroupSection({
+  group,
+  values,
+  onSet,
+  onBump,
+  cutoffExample,
+}: {
+  group: Group;
+  values: Record<string, string>;
+  onSet: (k: string, v: string) => void;
+  onBump: (f: StepperField, dir: 1 | -1) => void;
+  cutoffExample?: string;
+}) {
+  return (
+    <section className="set-group" aria-label={group.title}>
+      <h2>{group.title}</h2>
+      {group.fields.map((f) => (
+        <SettingRow
+          key={f.key}
+          field={f}
+          value={values[f.key] ?? ""}
+          onChange={(v) => onSet(f.key, v)}
+          onStep={(dir) => onBump(f, dir)}
+          cutoffExample={f.showCutoffExample ? cutoffExample : undefined}
+        />
+      ))}
+    </section>
   );
 }
 
@@ -206,17 +220,15 @@ function SettingRow({
   onChange,
   onStep,
   cutoffExample,
-  isFirst,
 }: {
   field: StepperField;
   value: string;
   onChange: (v: string) => void;
   onStep: (dir: 1 | -1) => void;
   cutoffExample?: string;
-  isFirst?: boolean;
 }) {
   return (
-    <div className="set-row" style={isFirst ? { borderTop: 0 } : undefined}>
+    <div className="set-row">
       <div className="set-row__text">
         <label htmlFor={`set-${field.key}`}>{field.label}</label>
         {field.hint && (
@@ -248,7 +260,6 @@ function SettingRow({
           value={value}
           onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
           onBlur={(e) => {
-            // Clamp on blur so a typed value stays in range.
             const n = Number(e.target.value) || 0;
             onChange(String(Math.max(0, Math.min(field.max, n))));
           }}

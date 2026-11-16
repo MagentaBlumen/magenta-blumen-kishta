@@ -70,7 +70,7 @@ export default async function AdminKalenderPage({ searchParams }: PageProps) {
   ).length;
 
   return (
-    <>
+    <div className="adm-wrap">
       <div className="adm-head">
         <div className="adm-head__text">
           <h1 className="adm-title">{title}</h1>
@@ -128,7 +128,7 @@ export default async function AdminKalenderPage({ searchParams }: PageProps) {
           })}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

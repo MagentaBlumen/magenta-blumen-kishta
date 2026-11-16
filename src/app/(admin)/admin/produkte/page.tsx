@@ -92,16 +92,16 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
     return !r.isArchived; // 'all' excludes archived
   });
 
-  const subline = `${counts.all} ${counts.all === 1 ? "Produkt" : "Produkte"}`;
+  const subline = `${counts.all} im Shop`;
 
   return (
-    <>
+    <div className="adm-wrap">
       <div className="adm-head">
-        <div className="adm-head__text">
-          <h1 className="adm-title">Produkte</h1>
-          <p className="adm-sub">{subline}</p>
+        <div>
+          <h1>Produkte</h1>
+          <p>{subline}</p>
         </div>
-        <Link className="btn btn--main" href="/admin/produkte/neu">
+        <Link className="btn btn--main btn--new" href="/admin/produkte/neu">
           <svg
             className="icon"
             width="20"
@@ -121,7 +121,7 @@ export default async function ProdukteListPage({ searchParams }: PageProps) {
       </div>
 
       <ProdukteGrid rows={filtered} counts={counts} tab={tab} />
-    </>
+    </div>
   );
 }
 
