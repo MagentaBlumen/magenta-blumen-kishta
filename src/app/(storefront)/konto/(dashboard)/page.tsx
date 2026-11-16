@@ -8,6 +8,7 @@ import { fetchCustomerAddresses } from "@/lib/customer-auth/addresses";
 import { getSuggestedAddressFromLastOrder } from "@/lib/customer-auth/suggested-address";
 import { formatChf } from "@/lib/money";
 import { thumbUrl } from "@/lib/image-urls";
+import type { CustomerProfile } from "@/lib/customer-auth/profile";
 import type { CustomerOrderRow } from "@/lib/customer-auth/orders";
 import type { CustomerAddressRow } from "@/lib/customer-auth/addresses";
 import type { SuggestedAddress } from "@/lib/customer-auth/suggested-address";
@@ -37,18 +38,25 @@ export default async function KontoOverview() {
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
       profile.email,
   );
+  const activeOrderCount = orders.filter(
+    (o) => o.status !== "cancelled",
+  ).length;
 
   return (
-    <section className="flex flex-col gap-7 lg:gap-8">
+    <section className="flex flex-col gap-7 lg:gap-10 lg:max-w-[920px]">
       <header className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1.5">
           <p className="m-0 text-[12px] font-semibold tracking-[0.16em] uppercase text-rose">
             Mein Konto
           </p>
-          <h1 className="m-0 font-display font-light text-bark text-[clamp(28px,4.2vw,46px)] leading-[1.05]">
+          <h1 className="m-0 font-display font-light text-bark text-[clamp(28px,3.2vw,40px)] leading-[1.05]">
             Hallo,{" "}
             <em className="italic text-rose">{firstName}</em>
           </h1>
+          <GreetingMeta
+            profile={profile}
+            orderCount={activeOrderCount}
+          />
         </div>
         <Link
           href="/konto/einstellungen"
@@ -70,6 +78,31 @@ export default async function KontoOverview() {
         suggestion={suggestion}
       />
     </section>
+  );
+}
+
+function GreetingMeta({
+  profile,
+  orderCount,
+}: {
+  profile: CustomerProfile;
+  orderCount: number;
+}) {
+  const memberSince = DateTime.fromJSDate(profile.createdAt, {
+    zone: "Europe/Zurich",
+  })
+    .setLocale("de-CH")
+    .toFormat("LLLL yyyy");
+  const orderText =
+    orderCount === 0
+      ? "Noch keine Bestellungen"
+      : orderCount === 1
+        ? "1 Bestellung"
+        : `${orderCount} Bestellungen`;
+  return (
+    <p className="m-0 text-[13px] text-sage">
+      {orderText} · Mitglied seit {memberSince}
+    </p>
   );
 }
 
@@ -101,8 +134,9 @@ function HeroOrder({ order: o }: { order: CustomerOrderRow }) {
 
   return (
     <article className="border lg:border border-mist bg-white -mx-4 lg:mx-0">
-      {/* Photo + overlay */}
-      <div className="relative aspect-[5/4] sm:aspect-[16/7] bg-cream overflow-hidden">
+      {/* Photo + overlay. Mobile: near-square (5:4). Desktop: 16:9
+          so the slab doesn't swallow the viewport. */}
+      <div className="relative aspect-[5/4] sm:aspect-[16/9] bg-cream overflow-hidden">
         {o.firstLineImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -222,7 +256,7 @@ function FlowerStrip({ orders }: { orders: CustomerOrderRow[] }) {
           "flex gap-3 overflow-x-auto snap-x snap-mandatory",
           "-mx-4 px-4 lg:mx-0 lg:px-0",
           "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-          "lg:grid lg:grid-cols-4 lg:overflow-visible",
+          "lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:overflow-visible lg:gap-5",
         ].join(" ")}
       >
         {orders.map((o) => (
@@ -309,7 +343,7 @@ function RecipientsStrip({
           "flex gap-3 overflow-x-auto snap-x snap-mandatory",
           "-mx-4 px-4 lg:mx-0 lg:px-0",
           "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-          "lg:grid lg:grid-cols-4 lg:overflow-visible",
+          "lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:overflow-visible lg:gap-5",
         ].join(" ")}
       >
         {suggestion && (
