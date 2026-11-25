@@ -17,9 +17,10 @@ import type { ProductCardData } from "@/components/storefront/product-card";
 /**
  * Cached storefront queries.
  *
- * Pages are dynamic (dynamic = 'force-dynamic') so the Docker build
- * doesn't need a live DB to prerender - but each request re-uses the
- * result from the cache below rather than hitting Postgres every time.
+ * Pages use `revalidate = 300` (ISR) — rendered shell lives in the cache
+ * for 5 min, queries below also sit in `unstable_cache` with the same
+ * TTL and the same tag set, so a fresh prerender touches Postgres once
+ * per window per key.
  *
  * Cache tags let admin write actions bust exactly the right entries:
  *
@@ -31,36 +32,65 @@ import type { ProductCardData } from "@/components/storefront/product-card";
  *
  * All in src/app/(admin)/admin/produkte/actions.ts.
  *
- * TTL is 5 min. Set generously - most cache misses will come from
- * admin edits (tag invalidation) rather than the timer expiring.
+ * Build-time degradation: the Docker build runs `next build` without a
+ * live Postgres. If a query fails during the production build phase we
+ * return empty data so prerender succeeds; the first real request at
+ * runtime misses the cache and populates it against the real DB.
  */
 
 const REVALIDATE_SECONDS = 300;
 
+function isProductionBuild(): boolean {
+  return process.env.NEXT_PHASE === "phase-production-build";
+}
+
+async function tolerateBuildFailure<T>(
+  fn: () => Promise<T>,
+  fallback: T,
+  label: string,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isProductionBuild()) {
+      console.warn(
+        `[cached-storefront] ${label} failed during build, returning empty — the first runtime request will refill the cache`,
+        err instanceof Error ? err.message : String(err),
+      );
+      return fallback;
+    }
+    throw err;
+  }
+}
+
 // ---------- Featured products (home page) ----------
 
 export const getFeaturedProducts = unstable_cache(
-  async (): Promise<ProductCardData[]> => {
-    const rows = await db
-      .select({
-        id: product.id,
-        slug: product.slug,
-        nameDe: product.nameDe,
-        pricingMode: product.pricingMode,
-        isAvailable: product.isAvailable,
-      })
-      .from(product)
-      .where(
-        and(
-          eq(product.isArchived, false),
-          eq(product.isOnlineOrderable, true),
-        ),
-      )
-      .orderBy(desc(product.createdAt))
-      .limit(8);
-
-    return enrichProducts(rows);
-  },
+  async (): Promise<ProductCardData[]> =>
+    tolerateBuildFailure(
+      async () => {
+        const rows = await db
+          .select({
+            id: product.id,
+            slug: product.slug,
+            nameDe: product.nameDe,
+            pricingMode: product.pricingMode,
+            isAvailable: product.isAvailable,
+          })
+          .from(product)
+          .where(
+            and(
+              eq(product.isArchived, false),
+              eq(product.isOnlineOrderable, true),
+            ),
+          )
+          .orderBy(desc(product.createdAt))
+          .limit(8);
+        return enrichProducts(rows);
+      },
+      [],
+      "getFeaturedProducts",
+    ),
   ["storefront:featured"],
   { revalidate: REVALIDATE_SECONDS, tags: ["products"] },
 );
@@ -68,16 +98,20 @@ export const getFeaturedProducts = unstable_cache(
 // ---------- Home page occasion tiles ----------
 
 export const getHomeOccasionCategories = unstable_cache(
-  async (slugs: string[]) => {
-    return db
-      .select({
-        id: category.id,
-        slug: category.slug,
-        nameDe: category.nameDe,
-      })
-      .from(category)
-      .where(inArray(category.slug, slugs));
-  },
+  async (slugs: string[]) =>
+    tolerateBuildFailure(
+      () =>
+        db
+          .select({
+            id: category.id,
+            slug: category.slug,
+            nameDe: category.nameDe,
+          })
+          .from(category)
+          .where(inArray(category.slug, slugs)),
+      [],
+      "getHomeOccasionCategories",
+    ),
   ["storefront:home-occasions"],
   { revalidate: REVALIDATE_SECONDS, tags: ["categories"] },
 );
@@ -89,31 +123,40 @@ export const getHomeOccasionCategories = unstable_cache(
  * row on category browse pages.
  */
 export const getCategoriesByKind = unstable_cache(
-  async (kind: "range" | "occasion") => {
-    return db
-      .select({
-        id: category.id,
-        slug: category.slug,
-        nameDe: category.nameDe,
-      })
-      .from(category)
-      .where(eq(category.kind, kind))
-      .orderBy(asc(category.sortOrder), asc(category.nameDe));
-  },
+  async (kind: "range" | "occasion") =>
+    tolerateBuildFailure(
+      () =>
+        db
+          .select({
+            id: category.id,
+            slug: category.slug,
+            nameDe: category.nameDe,
+          })
+          .from(category)
+          .where(eq(category.kind, kind))
+          .orderBy(asc(category.sortOrder), asc(category.nameDe)),
+      [],
+      "getCategoriesByKind",
+    ),
   ["storefront:categories-by-kind"],
   { revalidate: 300, tags: ["categories"] },
 );
 
 export function getCategoryBySlug(slug: string) {
   return unstable_cache(
-    async () => {
-      const [row] = await db
-        .select()
-        .from(category)
-        .where(eq(category.slug, slug))
-        .limit(1);
-      return row ?? null;
-    },
+    async () =>
+      tolerateBuildFailure(
+        async () => {
+          const [row] = await db
+            .select()
+            .from(category)
+            .where(eq(category.slug, slug))
+            .limit(1);
+          return row ?? null;
+        },
+        null,
+        `getCategoryBySlug(${slug})`,
+      ),
     ["storefront:category-by-slug", slug],
     { revalidate: REVALIDATE_SECONDS, tags: [`category:${slug}`, "categories"] },
   )();
@@ -121,28 +164,32 @@ export function getCategoryBySlug(slug: string) {
 
 export function getProductsInCategory(categoryId: number, categorySlug: string) {
   return unstable_cache(
-    async (): Promise<ProductCardData[]> => {
-      const rows = await db
-        .select({
-          id: product.id,
-          slug: product.slug,
-          nameDe: product.nameDe,
-          pricingMode: product.pricingMode,
-          isAvailable: product.isAvailable,
-        })
-        .from(product)
-        .innerJoin(productCategory, eq(productCategory.productId, product.id))
-        .where(
-          and(
-            eq(productCategory.categoryId, categoryId),
-            eq(product.isArchived, false),
-            eq(product.isOnlineOrderable, true),
-          ),
-        )
-        .orderBy(asc(product.sortOrder), asc(product.nameDe));
-
-      return enrichProducts(rows);
-    },
+    async (): Promise<ProductCardData[]> =>
+      tolerateBuildFailure(
+        async () => {
+          const rows = await db
+            .select({
+              id: product.id,
+              slug: product.slug,
+              nameDe: product.nameDe,
+              pricingMode: product.pricingMode,
+              isAvailable: product.isAvailable,
+            })
+            .from(product)
+            .innerJoin(productCategory, eq(productCategory.productId, product.id))
+            .where(
+              and(
+                eq(productCategory.categoryId, categoryId),
+                eq(product.isArchived, false),
+                eq(product.isOnlineOrderable, true),
+              ),
+            )
+            .orderBy(asc(product.sortOrder), asc(product.nameDe));
+          return enrichProducts(rows);
+        },
+        [],
+        `getProductsInCategory(${categorySlug})`,
+      ),
     ["storefront:products-in-category", String(categoryId)],
     {
       revalidate: REVALIDATE_SECONDS,
@@ -157,14 +204,19 @@ export function getProductsInCategory(categoryId: number, categorySlug: string) 
 
 export function getProductBySlug(slug: string) {
   return unstable_cache(
-    async () => {
-      const [row] = await db
-        .select()
-        .from(product)
-        .where(and(eq(product.slug, slug), eq(product.isArchived, false)))
-        .limit(1);
-      return row ?? null;
-    },
+    async () =>
+      tolerateBuildFailure(
+        async () => {
+          const [row] = await db
+            .select()
+            .from(product)
+            .where(and(eq(product.slug, slug), eq(product.isArchived, false)))
+            .limit(1);
+          return row ?? null;
+        },
+        null,
+        `getProductBySlug(${slug})`,
+      ),
     ["storefront:product-by-slug", slug],
     { revalidate: REVALIDATE_SECONDS, tags: [`product:${slug}`, "products"] },
   )();
@@ -215,7 +267,6 @@ export function getProductDetailBundle(productId: number, productSlug: string) {
           )
           .where(eq(productCategory.productId, productId)),
       ]);
-
       return { variants, images, colours, categories };
     },
     ["storefront:product-detail", String(productId)],
@@ -227,22 +278,27 @@ export function getProductDetailBundle(productId: number, productSlug: string) {
 
 export function getColourBySlug(slug: string) {
   return unstable_cache(
-    async () => {
-      const [row] = await db
-        .select({
-          id: attributeValue.id,
-          value: attributeValue.value,
-          nameDe: attributeValue.nameDe,
-          hex: attributeValue.hex,
-        })
-        .from(attributeValue)
-        .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
-        .where(
-          and(eq(attribute.key, "colour"), eq(attributeValue.value, slug)),
-        )
-        .limit(1);
-      return row ?? null;
-    },
+    async () =>
+      tolerateBuildFailure(
+        async () => {
+          const [row] = await db
+            .select({
+              id: attributeValue.id,
+              value: attributeValue.value,
+              nameDe: attributeValue.nameDe,
+              hex: attributeValue.hex,
+            })
+            .from(attributeValue)
+            .innerJoin(attribute, eq(attribute.id, attributeValue.attributeId))
+            .where(
+              and(eq(attribute.key, "colour"), eq(attributeValue.value, slug)),
+            )
+            .limit(1);
+          return row ?? null;
+        },
+        null,
+        `getColourBySlug(${slug})`,
+      ),
     ["storefront:colour-by-slug", slug],
     { revalidate: REVALIDATE_SECONDS, tags: ["categories"] },
   )();
@@ -250,31 +306,35 @@ export function getColourBySlug(slug: string) {
 
 export function getProductsInColour(colourId: number) {
   return unstable_cache(
-    async (): Promise<ProductCardData[]> => {
-      const rows = await db
-        .select({
-          id: product.id,
-          slug: product.slug,
-          nameDe: product.nameDe,
-          pricingMode: product.pricingMode,
-          isAvailable: product.isAvailable,
-        })
-        .from(product)
-        .innerJoin(
-          productAttributeValue,
-          eq(productAttributeValue.productId, product.id),
-        )
-        .where(
-          and(
-            eq(productAttributeValue.attributeValueId, colourId),
-            eq(product.isArchived, false),
-            eq(product.isOnlineOrderable, true),
-          ),
-        )
-        .orderBy(asc(product.sortOrder), asc(product.nameDe));
-
-      return enrichProducts(rows);
-    },
+    async (): Promise<ProductCardData[]> =>
+      tolerateBuildFailure(
+        async () => {
+          const rows = await db
+            .select({
+              id: product.id,
+              slug: product.slug,
+              nameDe: product.nameDe,
+              pricingMode: product.pricingMode,
+              isAvailable: product.isAvailable,
+            })
+            .from(product)
+            .innerJoin(
+              productAttributeValue,
+              eq(productAttributeValue.productId, product.id),
+            )
+            .where(
+              and(
+                eq(productAttributeValue.attributeValueId, colourId),
+                eq(product.isArchived, false),
+                eq(product.isOnlineOrderable, true),
+              ),
+            )
+            .orderBy(asc(product.sortOrder), asc(product.nameDe));
+          return enrichProducts(rows);
+        },
+        [],
+        `getProductsInColour(${colourId})`,
+      ),
     ["storefront:products-in-colour", String(colourId)],
     { revalidate: REVALIDATE_SECONDS, tags: ["products"] },
   )();
@@ -283,33 +343,41 @@ export function getProductsInColour(colourId: number) {
 // ---------- Sitemap: all products + categories ----------
 
 export const getAllProductsForSitemap = unstable_cache(
-  async () => {
-    return db
-      .select({
-        slug: product.slug,
-        updatedAt: product.updatedAt,
-      })
-      .from(product)
-      .where(
-        and(
-          eq(product.isArchived, false),
-          eq(product.isOnlineOrderable, true),
-        ),
-      );
-  },
+  async () =>
+    tolerateBuildFailure(
+      () =>
+        db
+          .select({
+            slug: product.slug,
+            updatedAt: product.updatedAt,
+          })
+          .from(product)
+          .where(
+            and(
+              eq(product.isArchived, false),
+              eq(product.isOnlineOrderable, true),
+            ),
+          ),
+      [],
+      "getAllProductsForSitemap",
+    ),
   ["storefront:sitemap-products"],
   { revalidate: REVALIDATE_SECONDS, tags: ["products"] },
 );
 
 export const getAllCategoriesForSitemap = unstable_cache(
-  async () => {
-    return db
-      .select({
-        slug: category.slug,
-      })
-      .from(category)
-      .where(eq(category.isOrderableOnline, true));
-  },
+  async () =>
+    tolerateBuildFailure(
+      () =>
+        db
+          .select({
+            slug: category.slug,
+          })
+          .from(category)
+          .where(eq(category.isOrderableOnline, true)),
+      [],
+      "getAllCategoriesForSitemap",
+    ),
   ["storefront:sitemap-categories"],
   { revalidate: REVALIDATE_SECONDS, tags: ["categories"] },
 );

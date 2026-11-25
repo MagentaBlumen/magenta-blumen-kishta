@@ -22,6 +22,8 @@ export type OrderEmailLine = {
   quantity: number;
   unitPriceGross: string;   // 'CHF 45.00' or numeric string
   lineTotalGross: string;
+  /** Snapshot of order_line.tax_rate (e.g. '0.0260', '0.0810'). */
+  taxRate: string | null;
 };
 
 export type OrderEmailData = {
@@ -53,16 +55,98 @@ export type OrderEmailData = {
   familyContactPhone: string | null;
   subtotalGross: string;
   deliveryFeeGross: string;
+  /** Snapshot of order.delivery_fee_tax_rate (e.g. '0.0260', '0.0810'). */
+  deliveryFeeTaxRate: string | null;
   totalGross: string;
   paymentMethod: "cash" | "invoice" | "card" | "twint";
   lines: OrderEmailLine[];
 };
 
+export type VatBreakdownRow = {
+  /** '0.0260' or '0.0810' */
+  rate: string;
+  /** '2.6' / '8.1' for display */
+  ratePct: string;
+  /** Gross sum at this rate, two-decimal string. */
+  grossAmount: string;
+  /** VAT included in that gross, two-decimal string. */
+  vatAmount: string;
+  /** Net = gross − VAT, two-decimal string. */
+  netAmount: string;
+};
+
+/**
+ * Group gross amounts by tax rate and derive net + VAT per rate.
+ *
+ * Mandatory for Art. 26 MWSTG compliance when the order mixes rates
+ * (per docs/vat-rates.md): a bouquet (2.6%) + vase (8.1%) must render
+ * as two rate lines, not one blended figure.
+ *
+ * Inputs are snapshotted `order_line.tax_rate` / `order.delivery_fee_tax_rate`
+ * strings in `numeric(5,4)` shape ('0.0260', '0.0810'). Lines with a
+ * null rate are skipped — the row cannot be grouped. The delivery fee is
+ * only included when both its rate and amount are non-null / non-zero.
+ */
+export function computeVatBreakdown(
+  lines: OrderEmailLine[],
+  deliveryFeeGross: string,
+  deliveryFeeTaxRate: string | null,
+): VatBreakdownRow[] {
+  const byRate = new Map<string, number>();
+  for (const l of lines) {
+    if (!l.taxRate) continue;
+    const gross = Number(l.lineTotalGross);
+    if (!Number.isFinite(gross)) continue;
+    byRate.set(l.taxRate, (byRate.get(l.taxRate) ?? 0) + gross);
+  }
+  const feeAmount = Number(deliveryFeeGross);
+  if (deliveryFeeTaxRate && Number.isFinite(feeAmount) && feeAmount > 0) {
+    byRate.set(
+      deliveryFeeTaxRate,
+      (byRate.get(deliveryFeeTaxRate) ?? 0) + feeAmount,
+    );
+  }
+
+  const rows: VatBreakdownRow[] = [];
+  const ratesSorted = Array.from(byRate.keys()).sort((a, b) =>
+    Number(a) - Number(b),
+  );
+  for (const rate of ratesSorted) {
+    const gross = round2(byRate.get(rate) ?? 0);
+    const r = Number(rate);
+    const vat = round2((gross * r) / (1 + r));
+    const net = round2(gross - vat);
+    rows.push({
+      rate,
+      ratePct: formatRatePct(r),
+      grossAmount: gross.toFixed(2),
+      vatAmount: vat.toFixed(2),
+      netAmount: net.toFixed(2),
+    });
+  }
+  return rows;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function formatRatePct(r: number): string {
+  // 0.026 -> "2.6", 0.081 -> "8.1". Trim a trailing zero but keep one
+  // decimal if the rate has one (e.g. 0.077 -> "7.7").
+  const pct = r * 100;
+  const fixed = pct.toFixed(1);
+  return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+}
+
 // ------------------------------------------------------------------
 // Buyer confirmation
 // ------------------------------------------------------------------
 
-export function buyerConfirmationEmail(o: OrderEmailData): {
+export function buyerConfirmationEmail(
+  o: OrderEmailData,
+  orderDeepLinkUrl: string,
+): {
   subject: string;
   html: string;
   text: string;
@@ -71,10 +155,27 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
 
   const deliveryLabel = slotLabelDe(o);
   const paymentLabel = paymentMethodLabelDe(o.paymentMethod);
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://178-104-239-168.nip.io";
-  const lookupUrl = `${siteUrl}/bestellung-finden`;
-  const lookupLabel = lookupUrl.replace(/^https?:\/\//, "");
+  const lookupUrl = orderDeepLinkUrl;
+  const lookupLabel = "Bestellung öffnen";
+  const vatBreakdown = computeVatBreakdown(
+    o.lines,
+    o.deliveryFeeGross,
+    o.deliveryFeeTaxRate,
+  );
+
+  const vatRowsHtml = vatBreakdown
+    .map(
+      (v) => `
+                <tr>
+                  <td style="padding:2px 0;color:#4f6752;font-size:13px;">
+                    MWST ${v.ratePct}% · netto ${formatChfInline(v.netAmount)} + MWST ${formatChfInline(v.vatAmount)}
+                  </td>
+                  <td style="padding:2px 0;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;">
+                    ${formatChfInline(v.grossAmount)}
+                  </td>
+                </tr>`,
+    )
+    .join("");
 
   const linesHtml = o.lines
     .map(
@@ -150,6 +251,16 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
                   <td style="padding:8px 0 0;border-top:1px solid #ede9e3;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#2a1f1a;">Total</td>
                   <td style="padding:8px 0 0;border-top:1px solid #ede9e3;text-align:right;font-family:Cormorant,Georgia,serif;font-size:20px;color:#2a1f1a;">${formatChfInline(o.totalGross)}</td>
                 </tr>
+                ${
+                  vatBreakdown.length > 0
+                    ? `<tr>
+                         <td colspan="2" style="padding:12px 0 2px;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#4f6752;">
+                           MWST-Aufschlüsselung (im Total enthalten)
+                         </td>
+                       </tr>
+                       ${vatRowsHtml}`
+                    : ""
+                }
               </table>
 
               <h2 style="font-family:Cormorant,Georgia,serif;font-size:18px;font-weight:400;margin:24px 0 8px;color:#2a1f1a;">Zahlung</h2>
@@ -166,9 +277,8 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
               }
 
               <p style="margin:28px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
-                Status Ihrer Bestellung jederzeit abrufbar unter
+                Status jederzeit prüfen:
                 <a href="${lookupUrl}" style="color:#a0185a;">${lookupLabel}</a>
-                (Bestellnummer + diese E-Mail-Adresse).
               </p>
               <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
                 Bei Fragen erreichen Sie uns unter <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>
@@ -178,7 +288,7 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
           </tr>
           <tr>
             <td style="padding:16px 32px;border-top:1px solid #ede9e3;color:#4f6752;font-size:11px;letter-spacing:0.08em;">
-              Magenta Blumen · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
+              Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
             </td>
           </tr>
         </table>
@@ -211,18 +321,27 @@ export function buyerConfirmationEmail(o: OrderEmailData): {
     `Zwischensumme: ${formatChfInline(o.subtotalGross)}`,
     `Lieferung:    ${Number(o.deliveryFeeGross) === 0 ? "gratis" : formatChfInline(o.deliveryFeeGross)}`,
     `Total:        ${formatChfInline(o.totalGross)}`,
+    ...(vatBreakdown.length > 0
+      ? [
+          ``,
+          `MWST-Aufschlüsselung (im Total enthalten):`,
+          ...vatBreakdown.map(
+            (v) =>
+              `  ${v.ratePct}%: netto ${formatChfInline(v.netAmount)} + MWST ${formatChfInline(v.vatAmount)} = ${formatChfInline(v.grossAmount)}`,
+          ),
+        ]
+      : []),
     ``,
     `Zahlung: ${paymentLabel}`,
     o.cardMessage
       ? `\nKarte: «${o.cardMessage}»${o.cardIsAnonymous ? " (anonym)" : ""}`
       : ``,
     ``,
-    `Status abrufen: ${lookupUrl}`,
-    `(Bestellnummer + diese E-Mail-Adresse)`,
+    `Status jederzeit prüfen: ${lookupUrl}`,
     ``,
     `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
     ``,
-    `Magenta Blumen - Zürcherstrasse 142 - 5432 Neuenhof - CHE-363.951.581 MWST`,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
   ].join("\n");
 
   return { subject, html, text };
@@ -359,16 +478,19 @@ export function shopNotificationEmail(o: OrderEmailData): {
 // Those are noise - the buyer doesn't need an email every time
 // Sandra ticks another workflow box.
 
-export type StatusEmailKind = "unterwegs" | "zugestellt" | "fehlgeschlagen";
+export type StatusEmailKind =
+  | "unterwegs"
+  | "zugestellt"
+  | "fehlgeschlagen"
+  | "storniert";
 
 export function buyerStatusEmail(
   o: OrderEmailData,
   kind: StatusEmailKind,
+  orderDeepLinkUrl: string,
 ): { subject: string; html: string; text: string } {
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://178-104-239-168.nip.io";
-  const lookupUrl = `${siteUrl}/bestellung-finden`;
-  const lookupLabel = lookupUrl.replace(/^https?:\/\//, "");
+  const lookupUrl = orderDeepLinkUrl;
+  const lookupLabel = "Bestellung öffnen";
 
   const copy = statusEmailCopy(kind, o);
 
@@ -398,8 +520,8 @@ export function buyerStatusEmail(
             </table>
 
             <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
-              Status Ihrer Bestellung jederzeit abrufbar unter
-              <a href="${lookupUrl}" style="color:#a0185a;">${lookupLabel}</a>.
+              Status jederzeit prüfen:
+              <a href="${lookupUrl}" style="color:#a0185a;">${lookupLabel}</a>
             </p>
             <p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#4f6752;">
               Bei Fragen erreichen Sie uns unter
@@ -408,7 +530,7 @@ export function buyerStatusEmail(
             </p>
           </td></tr>
           <tr><td style="padding:16px 32px;border-top:1px solid #ede9e3;color:#4f6752;font-size:11px;letter-spacing:0.08em;">
-            Magenta Blumen · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
+            Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
           </td></tr>
         </table>
       </td></tr>
@@ -426,11 +548,11 @@ export function buyerStatusEmail(
     `Bestellnummer: ${o.orderNumber}`,
     `Empfänger: ${o.recipientName}`,
     ``,
-    `Status abrufen: ${lookupUrl}`,
+    `Status jederzeit prüfen: ${lookupUrl}`,
     ``,
     `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
     ``,
-    `Magenta Blumen - Zürcherstrasse 142 - 5432 Neuenhof - CHE-363.951.581 MWST`,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
   ].join("\n");
 
   return { subject: copy.subject, html, text };
@@ -477,7 +599,403 @@ Ihre Bestellung wurde soeben an ${o.recipientName} zugestellt. Wir hoffen, die B
 
 Wir konnten die Blumen leider nicht zustellen - etwa weil niemand angetroffen wurde oder die Adresse nicht erreichbar war. Wir melden uns bei Ihnen zur Absprache. Falls Sie uns zuvorkommen möchten, rufen Sie uns bitte an.`,
       };
+    case "storniert":
+      return {
+        subject: `Ihre Bestellung ${o.orderNumber} wurde storniert`,
+        heading: "Ihre Bestellung wurde storniert.",
+        htmlBody: `Guten Tag ${escapeHtml(o.buyerName)},<br/><br/>
+          Ihre Bestellung wurde storniert. Falls Sie bereits bezahlt
+          haben (Karte oder TWINT), erstatten wir den Betrag
+          innerhalb der nächsten Werktage automatisch auf die
+          ursprüngliche Zahlungsart zurück. Bei Fragen melden Sie sich
+          bitte telefonisch.`,
+        textBody: `Guten Tag ${o.buyerName},
+
+Ihre Bestellung wurde storniert. Falls Sie bereits bezahlt haben (Karte oder TWINT), erstatten wir den Betrag innerhalb der nächsten Werktage automatisch auf die ursprüngliche Zahlungsart zurück. Bei Fragen melden Sie sich bitte telefonisch.`,
+      };
   }
+}
+
+// ------------------------------------------------------------------
+// Account lifecycle — welcome / email verification / password reset
+// ------------------------------------------------------------------
+
+export type AccountEmailCustomer = {
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+};
+
+function displayName(c: AccountEmailCustomer): string {
+  const joined = [c.firstName, c.lastName].filter(Boolean).join(" ");
+  return joined || c.email.split("@")[0];
+}
+
+export function welcomeVerifyEmail(
+  c: AccountEmailCustomer,
+  verifyUrl: string,
+): { subject: string; html: string; text: string } {
+  const name = displayName(c);
+  const subject = "Willkommen bei Magenta Blumen";
+  const html = accountShell({
+    heading: "Willkommen bei Magenta Blumen.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(name)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Ihr Konto bei Magenta Blumen ist angelegt. Sie können ab sofort
+        bestellen und finden Ihre Bestellungen jederzeit unter «Mein Konto».
+      </p>
+      <p style="margin:16px 0 12px;font-size:15px;line-height:1.6;">
+        Wenn Sie möchten, bestätigen Sie Ihre E-Mail-Adresse — das ist
+        freiwillig und dient nur der Passwort-Rücksetzung:
+      </p>
+      <p style="margin:0 0 20px;">
+        <a href="${verifyUrl}" style="display:inline-block;padding:12px 20px;background:#a0185a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.04em;">
+          E-Mail bestätigen
+        </a>
+      </p>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#4f6752;">
+        Der Link läuft nach 24 Stunden ab. Sie können ihn ignorieren,
+        wenn Sie keine Bestätigung wünschen.
+      </p>
+    `,
+  });
+  const text = [
+    `Willkommen bei Magenta Blumen`,
+    ``,
+    `Guten Tag ${name},`,
+    ``,
+    `Ihr Konto bei Magenta Blumen ist angelegt. Sie finden Ihre Bestellungen jederzeit unter «Mein Konto».`,
+    ``,
+    `Falls Sie Ihre E-Mail-Adresse bestätigen möchten (freiwillig; nötig für Passwort-Rücksetzung):`,
+    verifyUrl,
+    ``,
+    `Der Link läuft in 24 Stunden ab.`,
+    ``,
+    `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+export function passwordResetEmail(
+  c: AccountEmailCustomer,
+  resetUrl: string,
+): { subject: string; html: string; text: string } {
+  const name = displayName(c);
+  const subject = "Passwort zurücksetzen bei Magenta Blumen";
+  const html = accountShell({
+    heading: "Passwort zurücksetzen.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(name)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Jemand hat soeben angefordert, Ihr Passwort zurückzusetzen. War
+        das nicht Sie, können Sie diese Mail einfach ignorieren.
+      </p>
+      <p style="margin:16px 0 20px;">
+        <a href="${resetUrl}" style="display:inline-block;padding:12px 20px;background:#a0185a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:0.04em;">
+          Neues Passwort setzen
+        </a>
+      </p>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#4f6752;">
+        Der Link ist <strong>1 Stunde</strong> gültig und verfällt,
+        sobald Ihr Passwort geändert wurde.
+      </p>
+    `,
+  });
+  const text = [
+    `Magenta Blumen — Passwort zurücksetzen`,
+    ``,
+    `Guten Tag ${name},`,
+    ``,
+    `Jemand hat angefordert, Ihr Passwort zurückzusetzen. Ignorieren Sie diese Mail, falls das nicht Sie waren.`,
+    ``,
+    `Neues Passwort setzen:`,
+    resetUrl,
+    ``,
+    `Der Link ist 1 Stunde gültig.`,
+    ``,
+    `Bei Fragen: 056 556 56 09 oder info@magenta-blumen.ch`,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/**
+ * Confirmation after a successful password change — either via the
+ * "neues Passwort setzen" link or via /konto/einstellungen. The
+ * warning line is the load-bearing part: if the account was taken
+ * over, the legitimate owner finds out immediately.
+ */
+export function passwordChangedEmail(c: AccountEmailCustomer): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const name = displayName(c);
+  const subject = "Ihr Passwort wurde geändert";
+  const html = accountShell({
+    heading: "Passwort geändert.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(name)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Das Passwort Ihres Magenta-Blumen-Kontos wurde soeben
+        geändert. Falls Sie das waren, müssen Sie nichts tun — Sie
+        können sich mit dem neuen Passwort anmelden.
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#a0185a;">
+        <strong>Waren Sie das nicht?</strong> Rufen Sie uns bitte
+        sofort an unter
+        <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>
+        — wir sperren den Zugang sofort.
+      </p>
+    `,
+  });
+  const text = [
+    `Magenta Blumen — Passwort geändert`,
+    ``,
+    `Guten Tag ${name},`,
+    ``,
+    `Das Passwort Ihres Magenta-Blumen-Kontos wurde soeben geändert. Falls Sie das waren, können Sie sich mit dem neuen Passwort anmelden.`,
+    ``,
+    `WAREN SIE DAS NICHT? Rufen Sie uns bitte sofort an: 056 556 56 09 — wir sperren den Zugang.`,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+/**
+ * FADP farewell. Sent to the customer's pre-anonymisation email
+ * address immediately after `anonymiseCustomer` commits. Explains
+ * what happened and what was retained (orders for 10-year accounting
+ * law). Must be sent AFTER commit so a Resend failure doesn't claim
+ * deletion that didn't happen.
+ */
+export function anonymisedEmail(c: AccountEmailCustomer): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const name = displayName(c);
+  const subject = "Ihre Kundendaten wurden gelöscht";
+  const html = accountShell({
+    heading: "Ihre Kundendaten wurden gelöscht.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(name)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Ihre persönlichen Daten (Name, E-Mail, Telefon, gespeicherte
+        Adressen) bei Magenta Blumen wurden auf Ihren Wunsch gelöscht.
+        Ein Login mit dem bisherigen Konto ist nicht mehr möglich.
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Aus gesetzlichen Gründen behalten wir frühere Bestellungen und
+        die dazugehörigen Rechnungen zehn Jahre lang (Art. 958f OR,
+        Aufbewahrungspflicht). Diese Daten dienen ausschliesslich der
+        Buchhaltung und werden nicht mehr für Marketing oder Kontakt
+        verwendet.
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Diese Bestätigung wird einmalig an diese Adresse geschickt;
+        weitere E-Mails erhalten Sie von uns nicht mehr. Bei Fragen
+        rufen Sie uns bitte unter
+        <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>
+        an.
+      </p>
+    `,
+  });
+  const text = [
+    `Magenta Blumen — Ihre Kundendaten wurden gelöscht`,
+    ``,
+    `Guten Tag ${name},`,
+    ``,
+    `Ihre persönlichen Daten (Name, E-Mail, Telefon, gespeicherte Adressen) bei Magenta Blumen wurden auf Ihren Wunsch gelöscht. Ein Login mit dem bisherigen Konto ist nicht mehr möglich.`,
+    ``,
+    `Aus gesetzlichen Gründen (Art. 958f OR) behalten wir frühere Bestellungen und die dazugehörigen Rechnungen zehn Jahre lang. Diese Daten dienen ausschliesslich der Buchhaltung.`,
+    ``,
+    `Diese Bestätigung wird einmalig geschickt; weitere E-Mails erhalten Sie von uns nicht mehr.`,
+    ``,
+    `Bei Fragen: 056 556 56 09`,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+// ------------------------------------------------------------------
+// Payment-failed — card / TWINT declined
+// ------------------------------------------------------------------
+
+export type PaymentFailedEmailData = {
+  orderNumber: string;
+  buyerName: string;
+  totalGross: string;
+  paymentMethod: "card" | "twint";
+};
+
+export function paymentFailedEmail(
+  d: PaymentFailedEmailData,
+): { subject: string; html: string; text: string } {
+  const subject = `Zahlung fehlgeschlagen für ${d.orderNumber}`;
+  const methodLabel = d.paymentMethod === "twint" ? "TWINT" : "Kreditkarte";
+  const html = accountShell({
+    heading: "Die Zahlung ist nicht durchgegangen.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(d.buyerName)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Für Ihre Bestellung <strong>${escapeHtml(d.orderNumber)}</strong>
+        (${formatChfInline(d.totalGross)}) wurde die Zahlung per
+        ${methodLabel} von Ihrer Bank abgelehnt.
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Die Bestellung wird in Kürze automatisch freigegeben. Falls Sie
+        die Blumen nach wie vor möchten, bestellen Sie bitte neu —
+        oder rufen Sie uns an, wir reservieren Ihnen den Termin
+        telefonisch.
+      </p>
+    `,
+  });
+  const text = [
+    `Magenta Blumen — Zahlung fehlgeschlagen`,
+    ``,
+    `Guten Tag ${d.buyerName},`,
+    ``,
+    `Für Ihre Bestellung ${d.orderNumber} (${formatChfInline(d.totalGross)}) wurde die Zahlung per ${methodLabel} abgelehnt.`,
+    ``,
+    `Die Bestellung wird in Kürze automatisch freigegeben. Bei Fragen rufen Sie bitte an: 056 556 56 09.`,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+// ------------------------------------------------------------------
+// Contact form — shop inbox + buyer auto-ack
+// ------------------------------------------------------------------
+
+export type ContactFormInput = {
+  name: string;
+  email: string;
+  phone: string | null;
+  message: string;
+};
+
+export function contactFormShopEmail(i: ContactFormInput): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const subject = `[Kontakt] Nachricht von ${i.name}`;
+  const html = accountShell({
+    heading: "Neue Kontakt-Nachricht",
+    body: `
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:14px;">
+        <tr><td style="padding:4px 0;color:#4f6752;width:80px;">Name</td><td style="padding:4px 0;"><strong>${escapeHtml(i.name)}</strong></td></tr>
+        <tr><td style="padding:4px 0;color:#4f6752;">E-Mail</td><td style="padding:4px 0;"><a href="mailto:${escapeHtml(i.email)}" style="color:#a0185a;">${escapeHtml(i.email)}</a></td></tr>
+        ${
+          i.phone
+            ? `<tr><td style="padding:4px 0;color:#4f6752;">Telefon</td><td style="padding:4px 0;"><a href="tel:${escapeHtml(i.phone)}" style="color:#2a1f1a;">${escapeHtml(i.phone)}</a></td></tr>`
+            : ""
+        }
+      </table>
+      <h2 style="font-family:Cormorant,Georgia,serif;font-size:16px;font-weight:400;margin:16px 0 4px;color:#2a1f1a;">Nachricht</h2>
+      <p style="margin:0;font-size:14px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(i.message)}</p>
+    `,
+  });
+  const text = [
+    `Neue Kontakt-Nachricht`,
+    ``,
+    `Name:    ${i.name}`,
+    `E-Mail:  ${i.email}`,
+    i.phone ? `Telefon: ${i.phone}` : "",
+    ``,
+    `Nachricht:`,
+    i.message,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { subject, html, text };
+}
+
+export function contactFormAckEmail(i: ContactFormInput): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const subject = "Wir haben Ihre Nachricht erhalten";
+  const html = accountShell({
+    heading: "Danke für Ihre Nachricht.",
+    body: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Guten Tag ${escapeHtml(i.name)},
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.6;">
+        Wir haben Ihre Nachricht erhalten und melden uns in der Regel
+        innerhalb eines Werktags. Dringende Anliegen klären wir am
+        schnellsten am Telefon unter
+        <a href="tel:+41565565609" style="color:#a0185a;">056 556 56 09</a>.
+      </p>
+      <h2 style="font-family:Cormorant,Georgia,serif;font-size:16px;font-weight:400;margin:16px 0 4px;color:#2a1f1a;">Ihre Nachricht</h2>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#4f6752;white-space:pre-wrap;">${escapeHtml(i.message)}</p>
+    `,
+  });
+  const text = [
+    `Magenta Blumen — Nachricht erhalten`,
+    ``,
+    `Guten Tag ${i.name},`,
+    ``,
+    `Wir haben Ihre Nachricht erhalten und melden uns in der Regel innerhalb eines Werktags. Dringend: 056 556 56 09.`,
+    ``,
+    `Ihre Nachricht:`,
+    i.message,
+    ``,
+    `Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
+// Shared visual shell for account-lifecycle + contact emails. Keeps the
+// buyer-confirmation layout intact for Art. 26 MWSTG compliance; this
+// one is for everything that is NOT an invoice.
+function accountShell(opts: { heading: string; body: string }): string {
+  return `
+<!doctype html>
+<html lang="de-CH">
+  <body style="margin:0;padding:0;background:#fdfcf9;font-family:'DM Sans',system-ui,sans-serif;color:#2a1f1a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #ede9e3;">
+          <tr><td style="padding:24px 32px 8px;">
+            <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#4f6752;">
+              Magenta Blumen
+            </div>
+          </td></tr>
+          <tr><td style="padding:8px 32px 24px;">
+            <h1 style="font-family:Cormorant,Georgia,serif;font-size:26px;font-weight:400;color:#2a1f1a;margin:0 0 16px;">
+              ${escapeHtml(opts.heading)}
+            </h1>
+            ${opts.body}
+          </td></tr>
+          <tr><td style="padding:16px 32px;border-top:1px solid #ede9e3;color:#4f6752;font-size:11px;letter-spacing:0.08em;">
+            Magenta Blumen - Kishta · Zürcherstrasse 142 · 5432 Neuenhof · CHE-363.951.581 MWST
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`.trim();
 }
 
 // ------------------------------------------------------------------

@@ -1,8 +1,26 @@
+"use client";
+
 import { DateTime } from "luxon";
+import { useSyncExternalStore } from "react";
 
 const ZONE = "Europe/Zurich";
 const CUTOFF_HOURS = 3;
 const SLOT_HOURS = [10, 16] as const;
+
+// Subscribe to a one-minute tick. Returning the current minute as the
+// snapshot means React only re-renders when it actually ticks over.
+// Server snapshot is 0 so the SSR output matches the first client
+// render — the component bails to null until client mount.
+function subscribeToMinuteTick(cb: () => void): () => void {
+  const id = setInterval(cb, 60_000);
+  return () => clearInterval(id);
+}
+function getMinuteTick(): number {
+  return Math.floor(Date.now() / 60_000);
+}
+function getServerMinuteTick(): number {
+  return 0;
+}
 
 type Slot = {
   dayLabel: string;
@@ -18,8 +36,23 @@ type Slot = {
  *
  * Purely informational — selection happens at /kasse/lieferung under
  * FOR UPDATE where capacity can actually be locked.
+ *
+ * Client-rendered on purpose. The product detail page is cached for 5
+ * minutes via `revalidate = 300`; if this ran server-side we'd be
+ * shipping a stale clock, and a customer right after cutoff would see
+ * an inviting "Frühester Termin: Heute 10:00" that then bounces at
+ * checkout. On the client each visitor's own clock drives the render,
+ * and a minute-interval re-render keeps it current.
  */
 export function PdpDeliveryTimeline() {
+  const tick = useSyncExternalStore(
+    subscribeToMinuteTick,
+    getMinuteTick,
+    getServerMinuteTick,
+  );
+  // Server + first client render return 0 → bail. Real clock drops in
+  // after hydration, then re-renders once per minute.
+  if (tick === 0) return null;
   const now = DateTime.now().setZone(ZONE);
   const todayStart = now.startOf("day");
 

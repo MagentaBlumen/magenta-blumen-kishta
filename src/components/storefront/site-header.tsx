@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -121,17 +122,35 @@ const NAV: NavItem[] = [
 
 const HOVER_CLOSE_DELAY_MS = 200;
 
-export function SiteHeader({
-  initialCartCount = 0,
-}: {
-  initialCartCount?: number;
-}) {
+export function SiteHeader() {
+  const pathname = usePathname();
   const [openId, setOpenId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const cartCount = initialCartCount;
+  const [cartCount, setCartCount] = useState(0);
+
+  // Dynamic island: the layout is now cacheable (no cookie read), so
+  // the badge count comes from a tiny API route instead. Re-fetch on
+  // every route change — cart mutations trigger a navigation/refresh,
+  // which runs this effect and brings the count up to date.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/cart/count", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { count: 0 }))
+      .then((data: { count?: number }) => {
+        if (!cancelled && typeof data.count === "number") {
+          setCartCount(data.count);
+        }
+      })
+      .catch(() => {
+        // Silent — a failed count fetch is not worth a visible error.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   function openPanel(id: string) {
     if (closeTimer.current) clearTimeout(closeTimer.current);

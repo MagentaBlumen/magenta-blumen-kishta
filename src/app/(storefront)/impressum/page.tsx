@@ -33,16 +33,18 @@ export default function ImpressumPage() {
           Anbieter
         </h2>
         <dl className="grid grid-cols-[140px_1fr] gap-y-2 gap-x-4 text-[0.9rem]">
-          <dt className="text-sage">Firma</dt>
-          <dd>Magenta Blumen</dd>
+          <dt className="text-sage">Firma (Handelsregister)</dt>
+          <dd>
+            Magenta Blumen - Kishta
+            <span className="block text-[0.75rem] text-sage mt-0.5">
+              Geschäftsbezeichnung: Magenta Blumen.
+            </span>
+          </dd>
 
           <dt className="text-sage">Rechtsform</dt>
           <dd>
-            Einzelfirma
-            <span className="block text-[0.75rem] text-sage mt-0.5">
-              Bitte durch die Inhaberin bestätigen (Einzelfirma / GmbH /
-              AG).
-            </span>
+            [TODO: Rechtsform aus Handelsregister-Auszug einsetzen
+            (Einzelfirma / GmbH / AG)]
           </dd>
 
           <dt className="text-sage">Adresse</dt>
@@ -80,11 +82,9 @@ export default function ImpressumPage() {
 
           <dt className="text-sage">UID</dt>
           <dd className="tabular-nums">
-            CHE-363.951.581
-            <span className="block text-[0.75rem] text-sage mt-0.5">
-              UID und MWST-Nummer sind in der Regel identisch; bitte
-              durch die Inhaberin bestätigen.
-            </span>
+            [TODO: UID aus Handelsregister-Auszug einsetzen – in der
+            Regel identisch mit der MWST-Nummer, muss aber eigens
+            verifiziert werden]
           </dd>
         </dl>
 

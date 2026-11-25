@@ -12,6 +12,9 @@
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:hello": "tsx scripts/hello-db.ts",
+    "check:delivery-horizon": "tsx scripts/check-delivery-horizon.ts",
+    "seed:dev-products": "tsx scripts/seed-dev-products.ts",
+    "delete:dev-products": "tsx scripts/delete-dev-products.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

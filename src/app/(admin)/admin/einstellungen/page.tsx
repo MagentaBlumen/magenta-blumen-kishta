@@ -307,8 +307,11 @@ function buildChecks(
     {
       key: "runs",
       label: "Liefertermine",
-      detail: `bis ${latestRunLabel} · ${health.runs.daysAhead} Tage Vorlauf`,
-      ok: health.runs.daysAhead >= 14,
+      detail:
+        health.runs.daysAhead >= 30
+          ? `bis ${latestRunLabel} · ${health.runs.daysAhead} Tage Vorlauf`
+          : `bis ${latestRunLabel} · nur ${health.runs.daysAhead} Tage Vorlauf (Ziel: ≥ 30)`,
+      ok: health.runs.daysAhead >= 30,
     },
     {
       key: "orders",

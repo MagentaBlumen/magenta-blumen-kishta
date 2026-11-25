@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { auth } from "@/auth";
+import { canSeeOrderView } from "@/lib/order-lookup/access";
 import { fetchGuestOrderView } from "@/lib/order-lookup/fetch";
 import { verifyOrderViewToken } from "@/lib/order-lookup/token";
 import { formatChf } from "@/lib/money";
@@ -42,7 +43,7 @@ export default async function GuestOrderViewPage({ params }: PageProps) {
     session.user.customerId != null &&
     data.customerId != null &&
     data.customerId === session.user.customerId;
-  if (!hasToken && !isOwner) notFound();
+  if (!canSeeOrderView(session, data.customerId, hasToken)) notFound();
 
   const slotLabel = buildSlotLabel(data);
   const stage = stageFor(data.status);

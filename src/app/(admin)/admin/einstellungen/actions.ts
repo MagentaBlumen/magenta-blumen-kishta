@@ -7,6 +7,8 @@ import { db } from "@/db/client";
 import { customer } from "@/db/schema/customer";
 import { settings } from "@/db/schema/settings";
 import { requireAdmin } from "@/lib/admin/require-admin";
+import { anonymiseCustomer } from "@/lib/customer-auth/anonymise";
+import { sendAnonymisationEmail } from "@/lib/email/send";
 
 /**
  * Bulk-update every seeded settings row.
@@ -55,18 +57,10 @@ export async function updateSettings(formData: FormData) {
 }
 
 /**
- * revFADP erasure for a customer.
- *
- * Nulls the personal fields and stamps anonymised_at. Password hash
- * is replaced with a lockout string that can never match a real
- * bcrypt comparison, so the row can't be used to log in again even if
- * someone later clears anonymised_at by hand.
- *
- * Orders stay intact. Each order already carries buyer name / email /
- * phone as a snapshot (rule 1) - those are the retention-mandated
- * accounting fields. The anonymisation point is that no live record
- * can be used to re-identify the customer going forward; the historic
- * snapshots remain for the 10-year accounting window.
+ * revFADP erasure entry-point from Einstellungen. Looks the customer
+ * up by email, delegates the whole erasure to the shared
+ * `anonymiseCustomer` helper in one transaction, then redirects back
+ * to the settings page with a status flag.
  */
 export async function anonymiseCustomerAction(formData: FormData) {
   await requireAdmin();
@@ -84,21 +78,31 @@ export async function anonymiseCustomerAction(formData: FormData) {
     redirect("/admin/einstellungen?dsg=unconfirmed");
   }
 
-  const result = await db
-    .update(customer)
-    .set({
-      email: sql`concat('anonymised-', ${customer.id}, '@local.invalid')`,
-      firstName: null,
-      lastName: null,
-      phone: null,
-      passwordHash: "ANONYMISED-NO-LOGIN",
-      anonymisedAt: new Date(),
-    })
+  const [found] = await db
+    .select({ id: customer.id })
+    .from(customer)
     .where(sql`lower(${customer.email}) = ${email}`)
-    .returning({ id: customer.id });
+    .limit(1);
 
-  if (result.length === 0) {
+  if (!found) {
     redirect("/admin/einstellungen?dsg=notfound");
+  }
+
+  const result = await anonymiseCustomer(found.id);
+  if (!result.found) {
+    redirect("/admin/einstellungen?dsg=notfound");
+  }
+
+  // Farewell mail is best-effort. A Resend outage must not undo the
+  // erasure that just committed; fire-and-forget. `snapshot` is null
+  // when the customer was already anonymised — skip the mail there.
+  if (result.snapshot) {
+    await sendAnonymisationEmail(result.snapshot).catch((err) => {
+      console.error(
+        `[anonymise] farewell email dispatch failed for customer ${found.id}:`,
+        err,
+      );
+    });
   }
 
   revalidatePath("/admin/einstellungen");

@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { db } from "@/db/client";
 import { customer } from "@/db/schema/customer";
+import { sendPasswordChangedEmail } from "@/lib/email/send";
 import {
   isCustomerAuthRateLimited,
   recordCustomerAuthFailure,
@@ -109,6 +110,15 @@ export async function changePasswordAction(formData: FormData): Promise<{
     .update(customer)
     .set({ passwordHash: newHash })
     .where(eq(customer.id, customerId));
+
+  // Fire-and-forget confirmation. Same fast "if this wasn't you"
+  // escalation path as the forgot-password flow.
+  await sendPasswordChangedEmail(customerId).catch((err) => {
+    console.error(
+      `[password-change] confirmation email dispatch failed for customer ${customerId}:`,
+      err,
+    );
+  });
 
   revalidatePath("/konto");
   return { ok: true };

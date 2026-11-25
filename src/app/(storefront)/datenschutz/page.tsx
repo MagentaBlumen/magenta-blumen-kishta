@@ -61,7 +61,7 @@ export default function DatenschutzPage() {
           1. Verantwortliche Stelle
         </h2>
         <p>
-          Magenta Blumen
+          Magenta Blumen - Kishta (Geschäftsbezeichnung Magenta Blumen)
           <br />
           Zürcherstrasse 142, 5432 Neuenhof
           <br />
@@ -130,21 +130,38 @@ export default function DatenschutzPage() {
           4. Weitergabe an Dienstleister
         </h2>
         <p>
-          Zur Erbringung unserer Leistungen arbeiten wir mit folgenden
-          Auftragsbearbeitern zusammen:
+          <strong>
+            Ihre Bestelldaten werden nicht in der Schweiz verarbeitet,
+            sondern in Deutschland.
+          </strong>{" "}
+          Server-Hosting und Bestelldatenbank liegen in Nürnberg
+          (Deutschland). Für klar abgegrenzte Teilaufgaben greifen wir
+          auf die folgenden Auftragsbearbeiter zurück; mit jedem
+          bestehen die erforderlichen Auftragsbearbeitungsverträge
+          (AVV) nach revFADP:
         </p>
         <dl className="grid grid-cols-[160px_1fr] gap-y-3 gap-x-4 text-[0.88rem] border border-mist p-4">
           <dt className="text-sage">Hetzner Online GmbH</dt>
           <dd>
             Server-Hosting der Website und der Bestelldatenbank.
-            Standort: Deutschland.
+            Rechenzentrum in Nürnberg, Deutschland. Verarbeitete
+            Daten: alle Bestell- und Kontoangaben.
+          </dd>
+
+          <dt className="text-sage">Cloudflare, Inc. (R2)</dt>
+          <dd>
+            Objekt-Speicherung der Produktbilder. Rechenzentrum in der
+            EU-Region. Verarbeitete Daten: nur Produktbilder, keine
+            personenbezogenen Bestelldaten.
           </dd>
 
           <dt className="text-sage">Stripe Payments Europe Ltd.</dt>
           <dd>
-            Verarbeitung von Karten- und TWINT-Zahlungen. Standort:
-            Irland (EU) mit Datenverarbeitung in den USA.
-            Datenschutzerklärung:{" "}
+            Verarbeitung von Karten- und TWINT-Zahlungen. Sitz in
+            Irland (EU) mit Datenverarbeitung auch in den USA.
+            Verarbeitete Daten: Zahlungsreferenz, Transaktionsbetrag;
+            Kartendaten werden ausschliesslich bei Stripe erfasst und
+            gespeichert, nicht bei uns. Datenschutzerklärung:{" "}
             <a
               href="https://stripe.com/en-ch/privacy"
               rel="noopener noreferrer"
@@ -157,8 +174,9 @@ export default function DatenschutzPage() {
 
           <dt className="text-sage">Resend, Inc.</dt>
           <dd>
-            Versand von Bestellbestätigungen per E-Mail. Standort:
-            USA.
+            Versand transaktionaler E-Mails (Bestellbestätigungen,
+            Statusmeldungen). Sitz in den USA. Verarbeitete Daten:
+            Käufername, E-Mail-Adresse, Bestellnummer, Bestellinhalt.
             Datenschutzerklärung:{" "}
             <a
               href="https://resend.com/legal/privacy-policy"
@@ -170,24 +188,21 @@ export default function DatenschutzPage() {
             </a>
           </dd>
 
-          <dt className="text-sage">Cloudflare, Inc.</dt>
-          <dd>
-            Speicherung der Produktbilder (R2 Object Storage). Standort:
-            EU-Region.
-          </dd>
-
           <dt className="text-sage">Functional Software, Inc. (Sentry)</dt>
           <dd>
-            Fehlerprotokollierung. Standort: Deutschland. Keine
-            Übermittlung personenbezogener Bestelldaten; Sentry erhält
-            technische Fehlerprotokolle ohne Bezug zu einzelnen Kunden.
+            Fehlerprotokollierung. Rechenzentrum in Frankfurt,
+            Deutschland. Verarbeitete Daten: technische
+            Fehlerprotokolle (Stacktraces, Anfrage-Metadaten) ohne
+            personenbezogene Bestelldaten; Sentry ist bei uns mit
+            <code> sendDefaultPii: false</code> konfiguriert.
           </dd>
         </dl>
         <p>
-          Mit allen Dienstleistern bestehen Auftragsbearbeitungsverträge
-          (AVV). Eine Weitergabe an weitere Dritte erfolgt nur, soweit
-          dies zur Vertragserfüllung erforderlich ist oder eine
-          gesetzliche Pflicht besteht.
+          Eine Weitergabe an weitere Dritte erfolgt nur, soweit dies
+          zur Vertragserfüllung erforderlich ist oder eine gesetzliche
+          Pflicht besteht (z. B. Steuerbehörden im Rahmen der
+          Aufbewahrungspflicht). Marketing- oder Werbe-Dienstleister
+          sind keine eingesetzt.
         </p>
 
         <h2 className="font-display font-normal text-bark text-[1.3rem] mt-6">

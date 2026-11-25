@@ -254,3 +254,168 @@ shortcut variable and try again.
 ### Locked out of SSH after a config change
 Hetzner Cloud → server → Rescue → Reset root password → Console tab.
 See session-2 notes for the details.
+
+---
+
+## Rollback
+
+Reverse of an everyday deploy. Use when a `$DC up -d --build` left the
+site broken or wedged, and the fastest way out is "put yesterday back".
+
+Rollback is an app rollback, not a data rollback. Customer orders
+placed since the bad deploy stay in the database. If the bad deploy
+also applied a destructive migration, read the "Migration rollback"
+section below before touching anything.
+
+Assumes the usual shell shortcuts from the first bring-up:
+
+```bash
+DC="docker compose --env-file .env.production -f docker-compose.prod.yml"
+MB=magenta-blumen-postgres
+```
+
+### 1. Identify the previously running image
+
+Each `up -d --build` creates a new image. Older tags are still on the
+box until `docker image prune` runs. Find them:
+
+```bash
+docker image ls magenta-blumen-kishta-app --format \
+  'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}\t{{.Size}}'
+```
+
+The current image (whatever `$DC ps` shows for `app`) is at the top.
+The one directly beneath, with the previous `CreatedAt`, is the
+rollback target. Note its 12-character image ID.
+
+If no older image is listed, the rollback target is the one tagged
+with `<none>`:
+
+```bash
+docker image ls --filter dangling=true \
+  --format 'table {{.ID}}\t{{.CreatedAt}}\t{{.Size}}'
+```
+
+Dangling images still boot — they just lost their tag when the
+newer build replaced them. Pick the most recent one from before the
+bad deploy.
+
+### 2. Confirm which git commit that image was built from
+
+Every image has the commit SHA baked into its labels (via the
+Dockerfile's `ARG GIT_COMMIT`). Read it back:
+
+```bash
+docker image inspect <image-id> \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+```
+
+If the label is empty (older images predate the label addition), fall
+back to `docker image inspect --format '{{.Created}} {{.Id}}'` and
+match the timestamp against `git log --format='%h %ci'`. Write the
+SHA down — you'll want it in the post-mortem and for `git checkout`
+if a full redeploy becomes necessary.
+
+### 3. Bring the previous image back
+
+Retag the rollback image so Compose picks it up on the next `up`:
+
+```bash
+docker tag <rollback-image-id> magenta-blumen-kishta-app:latest
+```
+
+Then start the app service against the retagged image. Do **not**
+pass `--build` — that would rebuild from the current working tree,
+which is exactly what you're trying to avoid:
+
+```bash
+$DC up -d --no-build app
+```
+
+`postgres` and `caddy` stay where they are. The rollback is app-only;
+touching Postgres risks losing in-flight orders, and Caddy's TLS
+state does not need to move.
+
+If the compose file pins an image tag (not `build: .`), skip the
+`docker tag` step and set the tag directly in `.env.production` or
+on the command line:
+
+```bash
+APP_IMAGE_TAG=<image-id> $DC up -d --no-build app
+```
+
+### 4. Verify the rollback took
+
+```bash
+$DC ps app
+$DC logs --tail=50 app
+curl -fsS https://<DOMAIN>/api/health
+```
+
+- `$DC ps app` should show `running`, `Up <N> seconds`.
+- `/api/health` returns `{"ok":true,"db":"ok"}` with HTTP 200.
+- Place a test cart action (add → `/warenkorb`) if the bad deploy
+  touched checkout, or hit a known category page if the regression
+  was in the catalogue.
+- Watch Sentry for one full minute. A fresh error in the first
+  seconds after the swap means rollback didn't stick — the new
+  image somehow still has the broken code.
+
+### 5. Clean up when stable
+
+Once the box has run on the rolled-back image for 15 minutes without
+alarms:
+
+- Tag the bad image so it isn't reused by accident:
+  ```bash
+  docker tag <bad-image-id> magenta-blumen-kishta-app:broken-$(date +%Y%m%d)
+  ```
+- Revert the git commit on `main` (or roll forward with a fix) so the
+  next deploy doesn't resurrect the same binary.
+
+### Migration rollback
+
+The database never rolls back automatically. If the bad deploy
+applied `drizzle/<NNNN>_<name>.sql`, the new columns and indexes are
+now in prod even after the app image reverts.
+
+Decide which case you're in before touching the DB:
+
+1. **The migration is forward-compatible.** Older code ignores new
+   columns / tables; the rolled-back app keeps running against the
+   newer schema. This is the default for additive migrations
+   (`ADD COLUMN ... DEFAULT ...`, `CREATE INDEX`, `CREATE TABLE`).
+   **Do nothing.** Leave the schema ahead; roll the app forward to
+   use it when the fix lands.
+
+2. **The migration dropped or renamed something the old code reads.**
+   The rolled-back app will fail with "column does not exist" on
+   first query. There is no clean automated undo:
+   - Grab a backup from before the migration applied — most recent
+     nightly dump in R2 (`docs/backups.md` has the restore recipe).
+   - Replay it against a scratch database, not prod.
+   - Hand-write the reverse DDL by reading the forward migration
+     file (`drizzle/<NNNN>_<name>.sql`). For an `ADD COLUMN`, that's
+     `ALTER TABLE x DROP COLUMN y`; for a rename, swap the sides.
+     Review it against the scratch DB first.
+   - Apply the reverse SQL on prod with the same `docker cp` + `psql
+     -f` pattern as a forward migration. Wrap it in `BEGIN; ...
+     COMMIT;` so a partial failure is atomic.
+   - Verify order totals haven't moved: `SELECT sum(total_gross)
+     FROM "order" WHERE status <> 'cancelled';` before and after.
+
+3. **The migration ran but the data path never used the new column.**
+   Common for schema hooks that land before the feature that uses
+   them (`giftcard_applied_gross` etc., rule 11). Treat as case 1
+   — leave the schema ahead, no action needed.
+
+Never run `drizzle-kit drop` or `drizzle-kit reset` against prod.
+They are reasonable in local dev; in prod they are destructive.
+
+### If both the app AND the data went bad
+
+That is a backup-restore scenario, not a rollback. Stop here and
+follow `docs/backups.md` — restore procedure, scratch-DB verification,
+then swap into prod. Keep Stripe webhooks and the current
+`.env.production` out of the restore flow; those are not business
+data.

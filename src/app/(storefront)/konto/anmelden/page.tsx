@@ -20,14 +20,18 @@ export const metadata: Metadata = {
 };
 
 type PageProps = {
-  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    error?: string;
+    reset?: string;
+  }>;
 };
 
 export default async function AnmeldenPage({ searchParams }: PageProps) {
   const session = await auth();
   if (session?.user?.role === "customer") redirect("/konto");
 
-  const { callbackUrl = "/konto", error } = await searchParams;
+  const { callbackUrl = "/konto", error, reset } = await searchParams;
 
   async function handleSignIn(formData: FormData) {
     "use server";
@@ -63,6 +67,15 @@ export default async function AnmeldenPage({ searchParams }: PageProps) {
       titleEmphasis="zurück."
       lead="Melden Sie sich an, um Ihre Adressen und Bestellungen griffbereit zu haben."
     >
+      {reset === "ok" && (
+        <p
+          role="status"
+          className="text-[14px] text-bark bg-sage/10 border border-sage/30 px-4 py-3"
+        >
+          Passwort gespeichert. Melden Sie sich jetzt mit dem neuen
+          Passwort an.
+        </p>
+      )}
       <form action={handleSignIn} className="flex flex-col gap-5">
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
 
@@ -91,13 +104,12 @@ export default async function AnmeldenPage({ searchParams }: PageProps) {
             >
               Passwort
             </label>
-            <a
-              href="tel:+41565565609"
+            <Link
+              href="/konto/passwort-vergessen"
               className="text-[14px] font-medium text-rose hover:underline"
-              title="Wir setzen das Passwort telefonisch zurück"
             >
               Passwort vergessen?
-            </a>
+            </Link>
           </div>
           <PasswordInput
             id="password"

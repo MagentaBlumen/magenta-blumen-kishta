@@ -7,6 +7,7 @@ import {
   isCustomerAuthRateLimited,
   recordCustomerAuthFailure,
 } from "@/lib/customer-auth/rate-limit";
+import { sendWelcomeEmail } from "@/lib/email/send";
 
 /**
  * Signup server action. Called from /konto/registrieren form.
@@ -44,6 +45,18 @@ export async function signupAction(formData: FormData): Promise<void> {
     }
     redirect(`/konto/registrieren?error=${result.reason}`);
   }
+
+  // Fire-and-forget welcome + email-verification mail. Never throws
+  // per the sendWelcomeEmail contract; a Resend outage must not
+  // break the signIn redirect that follows. Awaiting it so the
+  // kickoff happens in-process rather than racing signIn's redirect,
+  // but the inner catch swallows any error.
+  await sendWelcomeEmail(result.id).catch((err) => {
+    console.error(
+      `[signup] welcome email dispatch threw for customer ${result.id}:`,
+      err,
+    );
+  });
 
   // Immediate sign-in. Next-auth's signIn redirects on success.
   await signIn("customer", {

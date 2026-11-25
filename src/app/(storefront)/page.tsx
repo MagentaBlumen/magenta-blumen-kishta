@@ -10,13 +10,11 @@ import {
   getHomeOccasionCategories,
 } from "@/lib/cached-storefront";
 
-// Page renders dynamically per request (so Docker build works without a
-// live DB), but the DB queries below live in unstable_cache with a 5-min
-// TTL + tag-based invalidation. Effect: functionally equivalent to ISR
-// - first request per window hits Postgres, subsequent renders in that
-// window are cache hits. Admin edits call revalidateTag('products') to
-// bust the cache immediately. See src/lib/cached-storefront.ts.
-export const dynamic = "force-dynamic";
+// ISR: page shell cached for 5 min, DB reads below also sit behind
+// unstable_cache with the same TTL + tag invalidation. Admin edits call
+// revalidateTag('products') so edits propagate inside the window. See
+// src/lib/cached-storefront.ts.
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   // Root layout has a default title / description; the home page can

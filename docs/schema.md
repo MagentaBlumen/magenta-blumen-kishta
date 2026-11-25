@@ -571,3 +571,39 @@ Enquiry form, or leave it off Phase 1 entirely.
 5. `notify_recipient` has no `'recipient'` value.
 6. Run capacity is checked under `FOR UPDATE`, not with a bare count.
 7. No integer stock columns anywhere. She asked for boolean availability.
+
+---
+
+## Customer anonymisation (revFADP erasure)
+
+A customer may request erasure. Swiss law requires ten-year retention of
+business records, so the row is not deleted — it is anonymised in place and
+the address book (`customer_address`) is dropped. Orders are untouched;
+each order carries its own snapshot of the buyer and delivery fields at
+checkout (rule 1), which is the retention-mandated audit trail.
+
+Call `anonymiseCustomer(customerId)` from `src/lib/customer-auth/anonymise.ts`.
+The helper runs one transaction:
+
+- `UPDATE customer SET email = 'anonymised-<id>@local.invalid', first_name = NULL,
+  last_name = NULL, phone = NULL, password_hash = 'ANONYMISED-NO-LOGIN',
+  anonymised_at = now() WHERE id = <id>`
+- `DELETE FROM customer_address WHERE customer_id = <id>`
+
+Both admin entry-points use this helper:
+- Einstellungen → "Kunde löschen" form (`anonymiseCustomerAction`).
+- Kunden split-pane → "Kundendaten löschen" button (`anonymiseCustomerFromKundenAction`).
+
+The password hash is replaced with a lockout string that can never match a
+real bcrypt comparison, so the row cannot be used to sign in again even if
+`anonymised_at` is later cleared by hand. `src/auth.ts` also refuses to
+issue a session for a row with `anonymised_at IS NOT NULL`.
+
+`tests/anonymise-customer.test.ts` locks in the invariant: after the helper
+runs, customer personal fields are gone, addresses are gone, and the order
+row's `buyer_*` + `delivery_*` + `total_gross` are byte-identical to the
+pre-anonymisation snapshot.
+
+Do NOT hard-delete a customer with orders. The admin UI only exposes the
+anonymisation path for that reason. Rule 10 (CLAUDE.md): every `DELETE FROM
+"order"` should fail loudly; nothing cascades.

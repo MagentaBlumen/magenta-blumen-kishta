@@ -1,8 +1,14 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db as defaultDb } from "@/db/client";
+import { customer } from "@/db/schema/customer";
 import { order, orderLine } from "@/db/schema/order";
 import { payment } from "@/db/schema/payment";
+import {
+  createEmailVerificationToken,
+  createPasswordResetToken,
+} from "@/lib/customer-auth/account-tokens";
+import { createOrderDeepLinkToken } from "@/lib/order-lookup/token";
 import {
   fromAddress,
   isEmailConfigured,
@@ -10,11 +16,21 @@ import {
   shopAddress,
 } from "./resend";
 import {
+  anonymisedEmail,
   buyerConfirmationEmail,
   buyerStatusEmail,
+  contactFormAckEmail,
+  contactFormShopEmail,
+  passwordChangedEmail,
+  passwordResetEmail,
+  paymentFailedEmail,
   shopNotificationEmail,
+  welcomeVerifyEmail,
+  type AccountEmailCustomer,
+  type ContactFormInput,
   type OrderEmailData,
   type OrderEmailLine,
+  type PaymentFailedEmailData,
   type StatusEmailKind,
 } from "./templates";
 
@@ -69,11 +85,15 @@ export async function sendOrderEmails(
 async function sendBuyer(data: OrderEmailData): Promise<"sent" | "failed"> {
   const from = fromAddress();
   if (!resend || !from) return "failed";
-  const tmpl = buyerConfirmationEmail(data);
+  const tmpl = buyerConfirmationEmail(data, orderDeepLinkUrl(data.orderNumber));
+  // replyTo = shop inbox so a buyer's "wait, change the card message"
+  // reply reaches Sandra, not a bounce at the RESEND_FROM_ADDRESS.
+  const replyTo = shopAddress() ?? from;
   try {
     const { error } = await resend.emails.send({
       from,
       to: data.buyerEmail,
+      replyTo,
       subject: tmpl.subject,
       html: tmpl.html,
       text: tmpl.text,
@@ -166,11 +186,13 @@ export async function sendBuyerStatusEmail(
   const from = fromAddress();
   if (!resend || !from) return "failed";
 
-  const tmpl = buyerStatusEmail(data, kind);
+  const tmpl = buyerStatusEmail(data, kind, orderDeepLinkUrl(data.orderNumber));
+  const replyTo = shopAddress() ?? from;
   try {
     const { error } = await resend.emails.send({
       from,
       to: data.buyerEmail,
+      replyTo,
       subject: tmpl.subject,
       html: tmpl.html,
       text: tmpl.text,
@@ -217,6 +239,7 @@ export async function loadOrderEmailData(
         quantity: orderLine.quantity,
         unitPriceGross: orderLine.unitPriceGross,
         lineTotalGross: orderLine.lineTotalGross,
+        taxRate: orderLine.taxRate,
       })
       .from(orderLine)
       .where(eq(orderLine.orderId, orderId)),
@@ -237,6 +260,7 @@ export async function loadOrderEmailData(
     quantity: l.quantity,
     unitPriceGross: l.unitPriceGross,
     lineTotalGross: l.lineTotalGross,
+    taxRate: l.taxRate,
   }));
 
   return {
@@ -265,8 +289,391 @@ export async function loadOrderEmailData(
     familyContactPhone: o.familyContactPhone,
     subtotalGross: o.subtotalGross,
     deliveryFeeGross: o.deliveryFeeGross,
+    deliveryFeeTaxRate: o.deliveryFeeTaxRate,
     totalGross: o.totalGross,
     paymentMethod,
     lines: emailLines,
   };
+}
+
+// ------------------------------------------------------------------
+// Account lifecycle — welcome / password reset
+// ------------------------------------------------------------------
+
+type Outcome = "sent" | "skipped" | "failed";
+
+function siteUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://178-104-239-168.nip.io"
+  );
+}
+
+/**
+ * Build the signed deep-link URL that lands the buyer on their order
+ * status page without any form entry. Embedded in every outbound
+ * order e-mail (confirmation + status + storniert). The click target
+ * verifies the signature, mints a 24 h view-cookie, and redirects to
+ * /bestellung-finden/[orderNumber].
+ */
+export function orderDeepLinkUrl(orderNumber: string): string {
+  const token = createOrderDeepLinkToken(orderNumber);
+  return `${siteUrl()}/bestellung-finden/zugang/${token}`;
+}
+
+/**
+ * Send the welcome + email-verification mail after signup.
+ *
+ * Fire-and-forget. Never throws — a Resend outage or missing config
+ * must not break the signup flow that just ran and the signIn
+ * redirect that is about to follow.
+ */
+export async function sendWelcomeEmail(
+  customerId: number,
+  dbClient: DbClient = defaultDb,
+): Promise<Outcome> {
+  if (!isEmailConfigured()) return "skipped";
+  try {
+    const [row] = await dbClient
+      .select({
+        email: customer.email,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+      })
+      .from(customer)
+      .where(eq(customer.id, customerId))
+      .limit(1);
+    if (!row) return "failed";
+
+    const verifyToken = createEmailVerificationToken(customerId);
+    const verifyUrl = `${siteUrl()}/konto/email-bestaetigen/${verifyToken}`;
+    const tmpl = welcomeVerifyEmail(row, verifyUrl);
+
+    const from = fromAddress();
+    if (!resend || !from) return "failed";
+    const replyTo = shopAddress() ?? from;
+    const { error } = await resend.emails.send({
+      from,
+      to: row.email,
+      replyTo,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(
+        `[email] welcome send failed for customer ${customerId}:`,
+        error,
+      );
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(
+      `[email] sendWelcomeEmail threw for customer ${customerId}:`,
+      err,
+    );
+    return "failed";
+  }
+}
+
+/**
+ * Confirm a successful password change. Fired AFTER the DB commit of
+ * resetPasswordAction or changePasswordAction. Includes a prominent
+ * "if this wasn't you, call us" line — the fastest escalation path
+ * for a compromised account.
+ *
+ * Never throws.
+ */
+export async function sendPasswordChangedEmail(
+  customerId: number,
+  dbClient: DbClient = defaultDb,
+): Promise<Outcome> {
+  if (!isEmailConfigured()) return "skipped";
+  try {
+    const [row] = await dbClient
+      .select({
+        email: customer.email,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        anonymisedAt: customer.anonymisedAt,
+      })
+      .from(customer)
+      .where(eq(customer.id, customerId))
+      .limit(1);
+    if (!row || row.anonymisedAt) return "skipped";
+
+    const tmpl = passwordChangedEmail(row);
+    const from = fromAddress();
+    if (!resend || !from) return "failed";
+    const replyTo = shopAddress() ?? from;
+    const { error } = await resend.emails.send({
+      from,
+      to: row.email,
+      replyTo,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(
+        `[email] password-changed send failed for customer ${customerId}:`,
+        error,
+      );
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(
+      `[email] sendPasswordChangedEmail threw for customer ${customerId}:`,
+      err,
+    );
+    return "failed";
+  }
+}
+
+/**
+ * FADP farewell e-mail. Caller passes the PRE-anonymisation snapshot
+ * — we must have the real email + name before the DB nulls them.
+ * Call this AFTER `anonymiseCustomer` commits.
+ *
+ * Never throws.
+ */
+export async function sendAnonymisationEmail(
+  snapshot: AccountEmailCustomer,
+): Promise<Outcome> {
+  if (!isEmailConfigured()) return "skipped";
+  try {
+    const from = fromAddress();
+    if (!resend || !from) return "failed";
+    const tmpl = anonymisedEmail(snapshot);
+    // No replyTo — the account is gone; a reply landing anywhere
+    // sends a confusing signal. The From address + shop phone in
+    // the template cover the "wait, undo this" edge.
+    const { error } = await resend.emails.send({
+      from,
+      to: snapshot.email,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(`[email] anonymisation farewell send failed:`, error);
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(`[email] sendAnonymisationEmail threw:`, err);
+    return "failed";
+  }
+}
+
+/**
+ * Password reset. Caller passes the typed email verbatim; we look it
+ * up case-insensitively. Returns the same "sent"/"skipped" outcome
+ * regardless of whether the email matched a real row — the action
+ * will always render "wir haben Ihnen eine Mail geschickt" to prevent
+ * user-enumeration.
+ *
+ * Fire-and-forget on the action's side. Never throws.
+ */
+export async function sendPasswordResetEmail(
+  emailRaw: string,
+  dbClient: DbClient = defaultDb,
+): Promise<Outcome> {
+  if (!isEmailConfigured()) return "skipped";
+  const email = emailRaw.trim().toLowerCase();
+  if (!email) return "failed";
+  try {
+    const [row] = await dbClient
+      .select({
+        id: customer.id,
+        email: customer.email,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        passwordHash: customer.passwordHash,
+        anonymisedAt: customer.anonymisedAt,
+      })
+      .from(customer)
+      .where(sql`lower(${customer.email}) = ${email}`)
+      .limit(1);
+
+    // No row, or anonymised row → silently skip. Caller still shows a
+    // success-shaped message so the response doesn't reveal whether
+    // the email is on file.
+    if (!row || row.anonymisedAt) return "skipped";
+
+    const token = createPasswordResetToken(row.id, row.passwordHash);
+    const resetUrl = `${siteUrl()}/konto/passwort-zuruecksetzen/${token}`;
+    const tmpl = passwordResetEmail(row, resetUrl);
+
+    const from = fromAddress();
+    if (!resend || !from) return "failed";
+    const replyTo = shopAddress() ?? from;
+    const { error } = await resend.emails.send({
+      from,
+      to: row.email,
+      replyTo,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(
+        `[email] password-reset send failed for ${row.email}:`,
+        error,
+      );
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(`[email] sendPasswordResetEmail threw:`, err);
+    return "failed";
+  }
+}
+
+// ------------------------------------------------------------------
+// Payment failed (card / TWINT declined)
+// ------------------------------------------------------------------
+
+/**
+ * Called from the Stripe webhook after a `payment_intent.payment_failed`
+ * flipped the payment row to 'failed'. Never throws.
+ */
+export async function sendPaymentFailedEmail(
+  orderId: number,
+  dbClient: DbClient = defaultDb,
+): Promise<Outcome> {
+  if (!isEmailConfigured()) return "skipped";
+  try {
+    const [row] = await dbClient
+      .select({
+        orderNumber: order.orderNumber,
+        buyerName: order.buyerName,
+        buyerEmail: order.buyerEmail,
+        totalGross: order.totalGross,
+      })
+      .from(order)
+      .where(eq(order.id, orderId))
+      .limit(1);
+    if (!row) return "failed";
+
+    const [pay] = await dbClient
+      .select({ method: payment.method })
+      .from(payment)
+      .where(eq(payment.orderId, orderId))
+      .limit(1);
+
+    const method = pay?.method;
+    if (method !== "card" && method !== "twint") {
+      // Payment-failed only makes sense for card / TWINT. Cash and
+      // invoice are actionable at creation; they never go through a
+      // provider failure flow.
+      return "skipped";
+    }
+
+    const data: PaymentFailedEmailData = {
+      orderNumber: row.orderNumber,
+      buyerName: row.buyerName,
+      totalGross: row.totalGross,
+      paymentMethod: method,
+    };
+    const tmpl = paymentFailedEmail(data);
+
+    const from = fromAddress();
+    if (!resend || !from) return "failed";
+    const replyTo = shopAddress() ?? from;
+    const { error } = await resend.emails.send({
+      from,
+      to: row.buyerEmail,
+      replyTo,
+      subject: tmpl.subject,
+      html: tmpl.html,
+      text: tmpl.text,
+    });
+    if (error) {
+      console.error(
+        `[email] payment-failed send failed for ${row.orderNumber}:`,
+        error,
+      );
+      return "failed";
+    }
+    return "sent";
+  } catch (err) {
+    console.error(
+      `[email] sendPaymentFailedEmail threw for order ${orderId}:`,
+      err,
+    );
+    return "failed";
+  }
+}
+
+// ------------------------------------------------------------------
+// Contact form
+// ------------------------------------------------------------------
+
+/**
+ * Deliver a contact-form submission: one email to the shop inbox
+ * (with replyTo pointing at the submitter) + one auto-ack back to the
+ * submitter. Returns both outcomes. Never throws.
+ */
+export async function sendContactFormMessage(
+  input: ContactFormInput,
+): Promise<{ shop: Outcome; ack: Outcome }> {
+  if (!isEmailConfigured()) return { shop: "skipped", ack: "skipped" };
+  const from = fromAddress();
+  const shop = shopAddress() ?? from;
+  if (!resend || !from || !shop) {
+    return { shop: "failed", ack: "failed" };
+  }
+
+  const shopTmpl = contactFormShopEmail(input);
+  const ackTmpl = contactFormAckEmail(input);
+
+  const [shopResult, ackResult] = await Promise.all([
+    resend.emails
+      .send({
+        from,
+        to: shop,
+        replyTo: input.email,
+        subject: shopTmpl.subject,
+        html: shopTmpl.html,
+        text: shopTmpl.text,
+      })
+      .then(
+        ({ error }): Outcome => {
+          if (error) {
+            console.error(`[email] contact-form shop send failed:`, error);
+            return "failed";
+          }
+          return "sent";
+        },
+      )
+      .catch((err): Outcome => {
+        console.error(`[email] contact-form shop send threw:`, err);
+        return "failed";
+      }),
+    resend.emails
+      .send({
+        from,
+        to: input.email,
+        replyTo: shop,
+        subject: ackTmpl.subject,
+        html: ackTmpl.html,
+        text: ackTmpl.text,
+      })
+      .then(
+        ({ error }): Outcome => {
+          if (error) {
+            console.error(`[email] contact-form ack send failed:`, error);
+            return "failed";
+          }
+          return "sent";
+        },
+      )
+      .catch((err): Outcome => {
+        console.error(`[email] contact-form ack send threw:`, err);
+        return "failed";
+      }),
+  ]);
+  return { shop: shopResult, ack: ackResult };
 }

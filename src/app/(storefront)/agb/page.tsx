@@ -42,21 +42,30 @@ export default function AgbPage() {
           <p>
             Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle
             Bestellungen von Blumen, Pflanzen und Zusatzartikeln über
-            magenta-blumen.ch bei Magenta Blumen, Zürcherstrasse 142,
+            magenta-blumen.ch bei Magenta Blumen - Kishta
+            (Geschäftsbezeichnung Magenta Blumen), Zürcherstrasse 142,
             5432 Neuenhof. Mit der Bestellung erklärt sich der Kunde
             mit den AGB einverstanden.
           </p>
         </Clause>
 
-        <Clause n="2" title="Produkte und Darstellung">
+        <Clause n="2" title="Produkte und Darstellung (Substitution)">
           <p>
             Alle Sträusse werden von Hand gebunden. Die abgebildeten
-            Produkte sind beispielhaft und werden saisonal und nach
-            Verfügbarkeit zusammengestellt. Form und Farbgebung
-            orientieren sich an der Abbildung; einzelne Blüten und
-            Grünanteile können abweichen. Diese Substitution ist
-            Bestandteil des handgebundenen Charakters und begründet
-            keinen Reklamationsgrund.
+            Produkte sind <strong>beispielhafte Darstellungen</strong>
+            und werden saisonal und nach Verfügbarkeit zusammengestellt.
+            Form, Grösse und Farbgebung orientieren sich an der Abbildung;
+            einzelne Blüten, Blattwerk und Füllgrün können davon
+            abweichen, wenn eine abgebildete Sorte an einem Tag nicht in
+            der nötigen Qualität verfügbar ist.
+          </p>
+          <p>
+            Diese saisonale Substitution ist Bestandteil des
+            handgebundenen Charakters und begründet keinen
+            Reklamationsgrund, solange der Gesamteindruck — Stil,
+            Farbfamilie, Grössenklasse — dem bestellten Produkt
+            entspricht. Bei einem offensichtlich abweichenden Ergebnis
+            gelten die Reklamationsregeln aus §10.
           </p>
         </Clause>
 
@@ -71,11 +80,14 @@ export default function AgbPage() {
         <Clause n="4" title="Mindestbestellwert">
           <p>
             Der Mindestbestellwert für eine Lieferung beträgt{" "}
-            <strong>CHF 40.00</strong>, berechnet auf den Produkt-Zwischensumme
-            (ohne Karte und ohne Transport). Einzelne Zonen (zum Beispiel
-            Brugg Stadt und Untersiggenthal) haben einen abweichenden
-            Mindestbestellwert von CHF 50.00. Der jeweilige
-            Mindestbestellwert wird im Bestellvorgang angezeigt.
+            <strong>CHF 40.00</strong>, berechnet auf die
+            Produkt-Zwischensumme (ohne Kartentext und ohne
+            Liefergebühr). Einzelne Zonen (zum Beispiel Brugg Stadt)
+            haben einen abweichenden Mindestbestellwert von
+            CHF 50.00. Der für Ihre Adresse geltende Mindestbestellwert
+            wird nach Eingabe der Postleitzahl im Bestellvorgang
+            angezeigt. Für Abholungen im Laden gilt kein
+            Mindestbestellwert.
           </p>
         </Clause>
 
@@ -179,26 +191,67 @@ export default function AgbPage() {
           </ul>
         </Clause>
 
-        <Clause n="10" title="Widerrufsrecht und Rückgabe">
+        <Clause n="10" title="Reklamationen und Rückerstattung">
           <p>
-            Blumen und Pflanzen sind verderbliche Ware. Ein gesetzliches
-            Widerrufsrecht nach schweizerischem Konsumrecht besteht für
-            frisch gelieferte Sträusse und Pflanzen nicht. Reklamationen
-            wegen Transportschäden oder offensichtlicher Mängel sind
-            innerhalb von 24 Stunden nach Lieferung per Telefon oder
-            E-Mail zu melden. Wir prüfen jede Reklamation einzeln und
-            bieten im Einvernehmen Ersatz, Teilerstattung oder
-            Vollerstattung an.
+            Blumen und Pflanzen sind <strong>verderbliche Ware, die auf
+            individuelle Bestellung angefertigt wird</strong>. Ein
+            allgemeines Widerrufsrecht nach schweizerischem Konsumrecht
+            besteht für frisch gelieferte Sträusse und Pflanzen nicht.
+          </p>
+          <p>
+            Reklamationen wegen Transportschäden oder offensichtlicher
+            Mängel sind <strong>innerhalb von 24 Stunden nach Lieferung</strong>{" "}
+            per Telefon (056 556 56 09) oder E-Mail
+            (info@magenta-blumen.ch) zu melden. Hilfreich für die
+            Bearbeitung ist ein Foto des beanstandeten Straussen.
+          </p>
+          <p>
+            Wir prüfen jede Reklamation einzeln und bieten im
+            Einvernehmen eine der folgenden Lösungen an:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Nachlieferung eines Ersatzproduktes</li>
+            <li>
+              Teil- oder Vollerstattung auf die ursprüngliche
+              Zahlungsart (Karte oder TWINT: in der Regel innerhalb von
+              10 Werktagen bei Stripe; Rechnung: Gutschrift auf der
+              offenen Forderung; Barzahlung: Rückzahlung im Laden)
+            </li>
+            <li>Gutschrift für eine spätere Bestellung</li>
+          </ul>
+          <p>
+            Kommt eine Lieferung aus Gründen zustande, die wir zu
+            vertreten haben (z. B. Fahrzeugausfall, Fehler bei der
+            Vorbereitung), erstatten wir den vollen Bestellwert inklusive
+            Liefergebühr.
           </p>
         </Clause>
 
         <Clause n="11" title="Stornierung durch den Kunden">
           <p>
-            Stornierungen sind kostenlos möglich, solange die Bestellung
-            noch nicht in Produktion gegangen ist (in der Regel bis
-            mindestens 3 Stunden vor dem gewählten Zeitfenster, bzw.
-            24 Stunden bei Dienstagslieferungen). Danach ist eine
-            Stornierung nicht mehr möglich.
+            Stornierungen sind <strong>kostenlos möglich, solange die
+            Bestellung noch nicht in Produktion gegangen ist</strong>.
+            In der Praxis bedeutet das:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              bis mindestens <strong>3 Stunden vor dem gewählten
+              Zeitfenster</strong> an Montag, Mittwoch, Donnerstag,
+              Freitag, Samstag und Sonntag;
+            </li>
+            <li>
+              bis mindestens <strong>24 Stunden vor dem Zeitfenster</strong>{" "}
+              für Dienstagslieferungen (an diesem Tag ist der Laden
+              geschlossen).
+            </li>
+          </ul>
+          <p>
+            Rückerstattungen bei fristgerechter Stornierung erfolgen nach
+            den unter §10 genannten Regeln. Nach Produktionsbeginn ist
+            eine Stornierung nicht mehr möglich, da die Blumen bereits
+            bearbeitet wurden; eine Rückerstattung kommt dann nur in
+            Betracht, wenn die Lieferung aus Gründen auf unserer Seite
+            nicht zustande kommt.
           </p>
         </Clause>
 

@@ -313,6 +313,12 @@ function statusEmailKindFor(status: OrderStatus): StatusEmailKind | null {
       return "zugestellt";
     case "delivery_failed":
       return "fehlgeschlagen";
+    case "cancelled":
+      // Idempotency is enforced structurally: `cancelled` is a
+      // terminal node in the state machine (allowedNextStatuses([]))
+      // so the DB flip to this status happens at most once per
+      // order. No `buyerNotifiedCancelledAt` column needed.
+      return "storniert";
     default:
       return null;
   }

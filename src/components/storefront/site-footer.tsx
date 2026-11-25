@@ -55,6 +55,7 @@ export function SiteFooter() {
             Service
           </div>
           <FooterLink href="/konto">Mein Konto</FooterLink>
+          <FooterLink href="/kontakt">Kontakt</FooterLink>
           <FooterLink href="/impressum">Impressum</FooterLink>
           <FooterLink href="/agb">AGB</FooterLink>
           <FooterLink href="/datenschutz">Datenschutz</FooterLink>

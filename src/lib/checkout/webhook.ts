@@ -10,7 +10,7 @@ import { deliveryRun } from "@/db/schema/delivery";
 import { order } from "@/db/schema/order";
 import { payment, stripeEvent } from "@/db/schema/payment";
 import { settings } from "@/db/schema/settings";
-import { sendOrderEmails } from "@/lib/email/send";
+import { sendOrderEmails, sendPaymentFailedEmail } from "@/lib/email/send";
 import { ZONE } from "./time";
 
 /**
@@ -182,9 +182,10 @@ async function processPaymentIntentEvent(
   type TxOutput = {
     result: ProcessResult;
     emailOrderId: number | null;
+    paymentFailedOrderId: number | null;
   };
 
-  const { result, emailOrderId } = await dbClient.transaction<TxOutput>(async (tx) => {
+  const { result, emailOrderId, paymentFailedOrderId } = await dbClient.transaction<TxOutput>(async (tx) => {
     // Re-read inside the tx to get a fresh view of order.status +
     // payment.status. Everything below decides based on this.
     const [freshPayment] = await tx
@@ -204,7 +205,11 @@ async function processPaymentIntentEvent(
         event.id,
         `payment ${row.id} disappeared during processing`,
       );
-      return { result: { kind: "unknown_intent" }, emailOrderId: null };
+      return {
+        result: { kind: "unknown_intent" },
+        emailOrderId: null,
+        paymentFailedOrderId: null,
+      };
     }
 
     const [ord] = await tx
@@ -252,6 +257,7 @@ async function processPaymentIntentEvent(
             reason: `restored order ${ord.id} after reaper race`,
           },
           emailOrderId: ord.id,
+          paymentFailedOrderId: null,
         };
       }
 
@@ -275,6 +281,7 @@ async function processPaymentIntentEvent(
           reason: `manual refund needed for order ${ord.id} - ${outcome.reason}`,
         },
         emailOrderId: null,
+        paymentFailedOrderId: null,
       };
     }
 
@@ -294,17 +301,35 @@ async function processPaymentIntentEvent(
         ? freshPayment.orderId
         : null;
 
-    return { result: { kind: "processed", action }, emailOrderId };
+    // Payment-failed email on the first failed transition only.
+    // Stripe can fire failed then succeeded on 3DS re-attempts — the
+    // state-machine inside applyPaymentTransition already rejects a
+    // failed-after-succeeded flip, so "flipped" here is guaranteed to
+    // be the authoritative first-failure signal.
+    const paymentFailedOrderId =
+      event.type === "payment_intent.payment_failed" &&
+      action.startsWith("flipped")
+        ? freshPayment.orderId
+        : null;
+
+    return {
+      result: { kind: "processed", action },
+      emailOrderId,
+      paymentFailedOrderId,
+    };
   });
 
   // -------- 4. Fire emails AFTER the tx commits ----------------------
   //
-  // sendOrderEmails never throws. A Resend outage logs loudly in
-  // journalctl but the webhook still returns 200 to Stripe. If we were
-  // to await inside the tx, a slow Resend would hold the row locks the
-  // handler was done with.
+  // sendOrderEmails + sendPaymentFailedEmail never throw. A Resend
+  // outage logs loudly in journalctl but the webhook still returns
+  // 200 to Stripe. If we were to await inside the tx, a slow Resend
+  // would hold the row locks the handler was done with.
   if (emailOrderId !== null) {
     await sendOrderEmails(emailOrderId, dbClient);
+  }
+  if (paymentFailedOrderId !== null) {
+    await sendPaymentFailedEmail(paymentFailedOrderId, dbClient);
   }
 
   return result;

@@ -23,6 +23,14 @@ const TTL_SECONDS = 24 * 60 * 60; // 24h - long enough for a lazy phone
                                   // check later in the day, short enough
                                   // that a shared machine times out.
 
+// Deep-link lifetime for the "click from your confirmation email to
+// check the order" magic link. Much longer than the view-cookie TTL
+// because the e-mail itself lives in the inbox for weeks and the
+// customer legitimately re-checks the order the day before delivery.
+// The click just mints a fresh 24 h view-cookie; the deep-link
+// re-usability is intentional.
+const DEEP_LINK_TTL_SECONDS = 90 * 24 * 60 * 60;
+
 function getSecret(): string {
   const s = process.env.AUTH_SECRET;
   if (!s || s.length < 16) {
@@ -80,5 +88,62 @@ export async function verifyOrderViewToken(
     return timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
   } catch {
     return false;
+  }
+}
+
+// ------------------------------------------------------------------
+// Deep-link token — used in outbound e-mails
+// ------------------------------------------------------------------
+
+/**
+ * Signed URL token embedded in the "Status abrufbar unter …" link in
+ * every outbound order e-mail. Encodes `orderNumber.exp.sig`. The
+ * click target (/bestellung-finden/zugang/[token]) verifies the
+ * signature, mints a fresh 24 h view-cookie via writeOrderViewToken,
+ * and redirects to /bestellung-finden/[orderNumber].
+ *
+ * Domain-separated prefix (`order-deep-link:`) so this signature
+ * cannot be substituted for the view-cookie signature even though
+ * they share AUTH_SECRET and address the same order number.
+ */
+
+function signDeepLink(orderNumber: string, exp: number): string {
+  return createHmac("sha256", getSecret())
+    .update(`order-deep-link:${orderNumber}.${exp}`)
+    .digest("hex");
+}
+
+export function createOrderDeepLinkToken(orderNumber: string): string {
+  const exp = Math.floor(Date.now() / 1000) + DEEP_LINK_TTL_SECONDS;
+  const sig = signDeepLink(orderNumber, exp);
+  return `${orderNumber}.${exp}.${sig}`;
+}
+
+export type VerifiedDeepLinkToken =
+  | { ok: true; orderNumber: string }
+  | { ok: false; reason: "shape" | "expired" | "signature" };
+
+export function verifyOrderDeepLinkToken(token: string): VerifiedDeepLinkToken {
+  const parts = token.split(".");
+  if (parts.length !== 3) return { ok: false, reason: "shape" };
+  const [orderNumber, expStr, sig] = parts;
+  if (!orderNumber) return { ok: false, reason: "shape" };
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp)) return { ok: false, reason: "shape" };
+  if (exp < Math.floor(Date.now() / 1000)) {
+    return { ok: false, reason: "expired" };
+  }
+  const expected = signDeepLink(orderNumber, exp);
+  if (sig.length !== expected.length) return { ok: false, reason: "signature" };
+  try {
+    const match = timingSafeEqual(
+      Buffer.from(sig, "hex"),
+      Buffer.from(expected, "hex"),
+    );
+    return match
+      ? { ok: true, orderNumber }
+      : { ok: false, reason: "signature" };
+  } catch {
+    return { ok: false, reason: "signature" };
   }
 }
