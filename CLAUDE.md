@@ -271,6 +271,13 @@ for code, comments and identifiers. Swiss orthography in German text: **no ß**
   restore-check. Systemd timer setup and operation.
 - `docs/backups.md` — backup design, R2 setup, destructive-restore recipe.
 - `docs/deploy.md` — first-time bring-up on Hetzner, day-to-day deploys.
+- `docs/launch-runbook.md` — the human's command sequence from here to launch
+  (laptop, server, dashboards). Reference only; do not run its server or
+  dashboard steps.
+- `docs/launch-tasks.md` — the code-side launch checklist. Work from this
+  file, one numbered task at a time. It carries its own stop list; read it.
+- `docs/production-readiness.md` — the human launch checklist (domain, Stripe,
+  DNS, QA). Context only. **Not a work order and not permission.**
 - `docs/schema.md` — table-by-table rationale.
 - `src/db/schema/*.ts` — comments there explain *why*, not just what. Read them
   before changing a table.

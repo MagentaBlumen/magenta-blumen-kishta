@@ -2,18 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/admin/require-admin";
 import { fetchOrderDetail } from "@/lib/admin/order-detail";
-import {
-  contextLabelDe,
-  nextHappyPathStep,
-  paymentDisplayDe,
-  statusLabelDe,
-} from "@/lib/admin/heute";
+import { nextHappyPathStep, paymentDisplayDe } from "@/lib/admin/heute";
+import { statusLabelDe } from "@/lib/admin/order-status";
 import { formatChf } from "@/lib/money";
 import { MarkPaidButton } from "./_components/mark-paid";
 import { InternalNotesEditor } from "./_components/internal-notes";
 import { StatusButtons } from "./_components/status-buttons";
+import { ContextChip, StatusChip } from "@/components/admin/status-chip";
 import { QuickStepButton } from "@/components/admin/quick-step-button";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +25,7 @@ type PageProps = {
 };
 
 export default async function OrderDetailPage({ params }: PageProps) {
-  await auth();
+  await requireAdmin();
   const { number } = await params;
   const data = await fetchOrderDetail(decodeURIComponent(number));
   if (!data) notFound();
@@ -59,7 +56,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
             href="/admin"
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            ← Heute
+            ← Bestellungen
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight tabular-nums mt-1">
             {o.orderNumber}
@@ -74,8 +71,8 @@ export default async function OrderDetailPage({ params }: PageProps) {
         </div>
         <div className="text-right text-sm">
           <div className="inline-flex items-center gap-2 flex-wrap justify-end">
-            <StatusBadge status={o.status} />
-            <ContextBadge context={o.deliveryContext} />
+            <StatusChip status={o.status} />
+            <ContextChip context={o.deliveryContext} />
           </div>
           <div className="text-xl font-semibold tabular-nums mt-2">
             {formatChf(o.totalGross)}
@@ -450,99 +447,19 @@ function SumRow({
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: ReturnType<typeof fetchOrderDetail> extends Promise<infer T>
-    ? T extends { order: { status: infer S } }
-      ? S
-      : never
-    : never;
-}) {
-  // We can't infer the enum cleanly from the type above in all TS
-  // versions; cast at the boundary.
-  const s = status as
-    | "new"
-    | "confirmed"
-    | "in_production"
-    | "ready"
-    | "out_for_delivery"
-    | "delivered"
-    | "delivery_failed"
-    | "cancelled";
-  const tone =
-    s === "delivered"
-      ? "bg-slate-100 text-slate-700 border-slate-200"
-      : s === "out_for_delivery"
-        ? "bg-sky-100 text-sky-700 border-sky-200"
-        : s === "ready"
-          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-          : s === "in_production"
-            ? "bg-amber-100 text-amber-700 border-amber-200"
-            : s === "delivery_failed"
-              ? "bg-rose-100 text-rose-700 border-rose-200"
-              : s === "cancelled"
-                ? "bg-slate-100 text-slate-500 border-slate-200 line-through"
-                : "bg-stone-100 text-stone-700 border-stone-200";
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium border rounded ${tone}`}
-    >
-      {statusLabelDe(s)}
-    </span>
-  );
-}
 
-function ContextBadge({
-  context,
-}: {
-  context: "residential" | "business" | "hospital" | "funeral";
-}) {
-  if (context === "residential") return null;
-  const tone =
-    context === "funeral"
-      ? "bg-rose-100 text-rose-700 border-rose-200"
-      : context === "hospital"
-        ? "bg-amber-100 text-amber-700 border-amber-200"
-        : "bg-slate-100 text-slate-700 border-slate-200";
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium border rounded ${tone}`}
-    >
-      {contextLabelDe(context)}
-    </span>
-  );
-}
+type OrderDetail = NonNullable<Awaited<ReturnType<typeof fetchOrderDetail>>>;
+type OrderRow = OrderDetail["order"];
+type RunMeta = OrderDetail["run"];
 
-function buildSlotLabel(
-  o: Awaited<ReturnType<typeof fetchOrderDetail>> extends infer T
-    ? T extends { order: infer O }
-      ? O
-      : never
-    : never,
-  run:
-    | {
-        runDate: string;
-        windowStart: string;
-        windowEnd: string;
-      }
-    | null,
-): string {
-  const order = o as {
-    fulfilment: "run" | "timed" | "pickup" | "post";
-    requestedDeliveryAt: Date | null;
-    deliveryDate: string | null;
-    sortTime: string | null;
-  };
-
+function buildSlotLabel(order: OrderRow, run: RunMeta): string {
   if (order.fulfilment === "timed" && order.requestedDeliveryAt) {
-    return (
-      DateTime.fromJSDate(order.requestedDeliveryAt, {
-        zone: "Europe/Zurich",
-      })
-        .setLocale("de-CH")
-        .toFormat("cccc d. LLLL, HH:mm") + " Uhr (Zeremonie)"
-    );
+    const when = DateTime.fromJSDate(order.requestedDeliveryAt, {
+      zone: "Europe/Zurich",
+    })
+      .setLocale("de-CH")
+      .toFormat("cccc d. LLLL, HH:mm");
+    return `${when} Uhr (Zeremonie)`;
   }
   if (order.fulfilment === "run" && run) {
     const d = DateTime.fromISO(run.runDate, { zone: "Europe/Zurich" })

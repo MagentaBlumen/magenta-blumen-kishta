@@ -64,3 +64,39 @@ export function isValidTransition(
 export function allowedNextStatuses(from: OrderStatus): OrderStatus[] {
   return ALLOWED[from] ?? [];
 }
+
+export type DeliveryContext = "residential" | "business" | "hospital" | "funeral";
+
+export function statusLabelDe(s: OrderStatus): string {
+  switch (s) {
+    case "new":
+      return "Neu";
+    case "confirmed":
+      return "Bestätigt";
+    case "in_production":
+      return "In Produktion";
+    case "ready":
+      return "Fertig";
+    case "out_for_delivery":
+      return "Unterwegs";
+    case "delivered":
+      return "Geliefert";
+    case "delivery_failed":
+      return "Lieferung fehlgeschlagen";
+    case "cancelled":
+      return "Storniert";
+  }
+}
+
+export function contextLabelDe(c: DeliveryContext): string {
+  switch (c) {
+    case "residential":
+      return "Privat";
+    case "business":
+      return "Firma";
+    case "hospital":
+      return "Spital";
+    case "funeral":
+      return "Trauer";
+  }
+}

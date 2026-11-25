@@ -401,44 +401,6 @@ export function groupHeuteOrders(
   return groups;
 }
 
-// ------------------------------------------------------------------
-// Display labels
-// ------------------------------------------------------------------
-
-export function statusLabelDe(s: HeuteOrder["status"]): string {
-  switch (s) {
-    case "new":
-      return "Neu";
-    case "confirmed":
-      return "Bestätigt";
-    case "in_production":
-      return "In Produktion";
-    case "ready":
-      return "Fertig";
-    case "out_for_delivery":
-      return "Unterwegs";
-    case "delivered":
-      return "Geliefert";
-    case "delivery_failed":
-      return "Lieferung fehlgeschlagen";
-    case "cancelled":
-      return "Storniert";
-  }
-}
-
-export function contextLabelDe(c: HeuteOrder["deliveryContext"]): string {
-  switch (c) {
-    case "residential":
-      return "Privat";
-    case "business":
-      return "Firma";
-    case "hospital":
-      return "Spital";
-    case "funeral":
-      return "Trauer";
-  }
-}
-
 /**
  * The single "most likely next step" from a given status, for the
  * inline quick-action button on Heute. The full state matrix is

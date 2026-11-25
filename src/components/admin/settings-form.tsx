@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { updateSettings } from "@/app/(admin)/admin/einstellungen/actions";
 
 export type StepperField = {
@@ -41,7 +41,6 @@ export function SettingsForm({
   const [moreOpen, setMoreOpen] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
 
   const dirty = useMemo(() => {
     for (const k of Object.keys(initialValues)) {
@@ -89,7 +88,6 @@ export function SettingsForm({
 
   return (
     <form
-      ref={formRef}
       action={onSubmit}
       id="settings"
       noValidate

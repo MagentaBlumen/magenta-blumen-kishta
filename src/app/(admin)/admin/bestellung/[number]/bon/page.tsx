@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
-import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/admin/require-admin";
 import { fetchOrderDetail } from "@/lib/admin/order-detail";
-import { contextLabelDe, paymentDisplayDe } from "@/lib/admin/heute";
+import { paymentDisplayDe } from "@/lib/admin/heute";
+import { contextLabelDe } from "@/lib/admin/order-status";
 import { formatChf } from "@/lib/money";
 import { AutoPrint } from "./_components/auto-print";
 
@@ -26,7 +27,7 @@ type PageProps = { params: Promise<{ number: string }> };
  * on Heute then reflects the print.
  */
 export default async function BonPrintPage({ params }: PageProps) {
-  await auth();
+  await requireAdmin();
   const { number } = await params;
   const data = await fetchOrderDetail(decodeURIComponent(number));
   if (!data) notFound();

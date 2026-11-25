@@ -36,9 +36,7 @@ export default async function KundenPage({ searchParams }: PageProps) {
   }));
 
   const selectedIdRaw = selected ? Number(selected) : NaN;
-  const selectedId = Number.isFinite(selectedIdRaw)
-    ? selectedIdRaw
-    : customers[0]?.id ?? null;
+  const selectedId = Number.isFinite(selectedIdRaw) ? selectedIdRaw : null;
 
   const detailRow =
     selectedId != null ? await fetchCustomerDetail(selectedId) : null;

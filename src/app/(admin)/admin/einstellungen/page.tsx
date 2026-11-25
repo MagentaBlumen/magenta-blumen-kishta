@@ -257,7 +257,6 @@ type Check = { key: string; label: string; detail: string; ok: boolean };
 function buildChecks(
   health: Awaited<ReturnType<typeof fetchSystemHealth>>,
 ): Check[] {
-  // Fix for 'letzte: Invalid DateTime': guard isValid before formatting.
   const latestDt = health.orders.latestOrderPlacedAt
     ? DateTime.fromJSDate(health.orders.latestOrderPlacedAt, {
         zone: "Europe/Zurich",

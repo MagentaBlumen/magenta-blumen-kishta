@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { anonymiseCustomerFromKundenAction } from "@/app/(admin)/admin/kunden/actions";
 import { formatChf } from "@/lib/money";
 import type { OrderStatus } from "@/lib/admin/order-status";
@@ -35,16 +36,16 @@ export type KundeDetailData = {
   orders: KundeOrder[];
 };
 
-const UI_LABEL: Record<"neu" | "fertig" | "unterwegs" | "geliefert", string> = {
+type UiStage = "neu" | "fertig" | "unterwegs" | "geliefert";
+
+const UI_LABEL: Record<UiStage, string> = {
   neu: "Neu",
   fertig: "Fertig",
   unterwegs: "Unterwegs",
   geliefert: "Geliefert",
 };
 
-function uiStageFor(
-  s: OrderStatus,
-): "neu" | "fertig" | "unterwegs" | "geliefert" {
+function uiStageFor(s: OrderStatus): UiStage {
   switch (s) {
     case "new":
     case "confirmed":
@@ -70,36 +71,15 @@ export function KundenView({
   initialDetail: KundeDetailData | null;
   initialQuery: string;
 }) {
+  const router = useRouter();
   const [q, setQ] = useState(initialQuery);
-  const [view, setView] = useState<"list" | "detail">(
-    initialDetail ? "detail" : "list",
-  );
-  const [selectedId, setSelectedId] = useState<number | null>(
-    initialDetail?.id ?? customers[0]?.id ?? null,
-  );
-  const [confirming, setConfirming] = useState(false);
-  const viaListRef = useRef(false);
 
-  // Hash sync for mobile deep-linking + back button.
-  useEffect(() => {
-    function fromHash() {
-      const m = /^#kunde-(\d+)$/.exec(location.hash);
-      if (m) {
-        const id = Number(m[1]);
-        if (customers.some((c) => c.id === id)) {
-          setSelectedId(id);
-          setView("detail");
-          setConfirming(false);
-          return;
-        }
-      }
-      setView("list");
-      setConfirming(false);
-    }
-    window.addEventListener("hashchange", fromHash);
-    fromHash();
-    return () => window.removeEventListener("hashchange", fromHash);
-  }, [customers]);
+  // Selection is the URL's source of truth: the server resolves `?selected=`
+  // into `initialDetail`, which is what the detail pane renders. Keeping the
+  // hash-only approach left the detail empty for any customer picked after
+  // the first, because replaceState doesn't rerun the server component.
+  const selectedId = initialDetail?.id ?? null;
+  const view: "list" | "detail" = selectedId != null ? "detail" : "list";
 
   const visible = useMemo(() => {
     if (!q) return customers;
@@ -111,48 +91,21 @@ export function KundenView({
     );
   }, [customers, q]);
 
+  function urlFor(id: number | null): string {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (id != null) sp.set("selected", String(id));
+    const qs = sp.toString();
+    return qs ? `/admin/kunden?${qs}` : "/admin/kunden";
+  }
+
   function select(id: number) {
-    viaListRef.current = true;
-    // Setting location.hash is the point — DOM-level navigation that
-    // fires 'hashchange' and participates in browser history, which is
-    // what powers the phone back button. The React Compiler plugin
-    // doesn't like external mutation; this is a legitimate exception.
-    // eslint-disable-next-line react-hooks/immutability
-    window.location.hash = `kunde-${id}`;
+    router.push(urlFor(id), { scroll: false });
   }
 
   function back() {
-    if (viaListRef.current) {
-      viaListRef.current = false;
-      history.back();
-    } else {
-      window.location.hash = "";
-    }
+    router.push(urlFor(null), { scroll: false });
   }
-
-  const detail = useMemo(() => {
-    if (selectedId == null) return null;
-    if (initialDetail && initialDetail.id === selectedId) return initialDetail;
-    return null;
-  }, [selectedId, initialDetail]);
-
-  // No matching detail cached → prompt for the server fetch via URL.
-  // In practice the user picks from the list and we already have
-  // initialDetail for the first customer only. For a new selection,
-  // we push the hash and let Next.js rerender with that selected.
-  useEffect(() => {
-    if (view === "detail" && selectedId != null && detail == null) {
-      const sp = new URLSearchParams();
-      if (q) sp.set("q", q);
-      sp.set("selected", String(selectedId));
-      const url = sp.toString()
-        ? `/admin/kunden?${sp.toString()}#kunde-${selectedId}`
-        : `/admin/kunden#kunde-${selectedId}`;
-      // Keep client state; just update history to let server resolve
-      // on the next full navigation.
-      history.replaceState(null, "", url);
-    }
-  }, [view, selectedId, detail, q]);
 
   return (
     <div className="cust" data-view={view}>
@@ -237,160 +190,170 @@ export function KundenView({
       </div>
 
       <section className="cdetail" aria-live="polite" aria-label="Kunde">
-        {detail == null ? (
+        {initialDetail == null ? (
           <p className="muted">
             {customers.length === 0
               ? "Noch keine Kunden."
               : "Bitte einen Kunden wählen."}
           </p>
         ) : (
-          <>
-            <button
-              type="button"
-              className="cdetail__back"
-              onClick={back}
-            >
-              <svg
-                className="icon"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M15 6l-6 6 6 6" />
-              </svg>
-              Alle Kunden
-            </button>
-            <div className="cdetail__head">
-              <span className="avatar" aria-hidden>
-                {initials(detail.name)}
-              </span>
-              <div>
-                <h2>{detail.name}</h2>
-                <p>Kunde seit {detail.since}</p>
-              </div>
-            </div>
-
-            <div className="contact">
-              {detail.phone && (
-                <Link
-                  className="btn"
-                  href={`tel:${detail.phone.replace(/\s/g, "")}`}
-                >
-                  <svg
-                    className="icon"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z" />
-                  </svg>
-                  <span>{detail.phone}</span>
-                </Link>
-              )}
-              <Link className="btn" href={`mailto:${detail.email}`}>
-                <svg
-                  className="icon"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <rect x="3" y="5" width="18" height="14" />
-                  <path d="M3 7l9 6 9-6" />
-                </svg>
-                <span>{detail.email}</span>
-              </Link>
-            </div>
-
-            {detail.address && (
-              <div>
-                <h3>Adresse</h3>
-                <p className="cdetail__addr">{detail.address}</p>
-              </div>
-            )}
-
-            <div>
-              <h3>Bestellungen</h3>
-              {detail.orders.length === 0 ? (
-                <p className="muted">Noch keine Bestellungen.</p>
-              ) : (
-                <ul className="corders">
-                  {detail.orders.map((o) => {
-                    const stage = uiStageFor(o.status);
-                    return (
-                      <li key={o.id}>
-                        <span className="corders__what">
-                          <b>{o.what}</b>
-                          <span>
-                            {o.placedAt} · {formatChf(o.price)}
-                          </span>
-                        </span>
-                        <span className={`st st--${stage}`}>
-                          {UI_LABEL[stage]}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            {confirming ? (
-              <div className="confirm" role="alertdialog" aria-labelledby="del-q">
-                <p id="del-q">
-                  <strong>Daten von {detail.name} löschen?</strong> Name,
-                  E-Mail, Telefon und Passwort werden gelöscht. Die
-                  Bestellungen bleiben. Das kann man nicht rückgängig
-                  machen.
-                </p>
-                <div>
-                  <form action={anonymiseCustomerFromKundenAction}>
-                    <input type="hidden" name="email" value={detail.email} />
-                    <input type="hidden" name="customerId" value={detail.id} />
-                    <input type="hidden" name="confirm" value="yes" />
-                    <button type="submit" className="btn btn--danger">
-                      Ja, löschen
-                    </button>
-                  </form>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setConfirming(false)}
-                  >
-                    Abbrechen
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="btn-link btn-link--danger"
-                onClick={() => setConfirming(true)}
-              >
-                Kundendaten löschen
-              </button>
-            )}
-          </>
+          // Keying by id remounts the detail panel on switch, so the
+          // "confirming" state can live locally and reset for free.
+          <CustomerDetail
+            key={initialDetail.id}
+            detail={initialDetail}
+            onBack={back}
+          />
         )}
       </section>
     </div>
+  );
+}
+
+function CustomerDetail({
+  detail,
+  onBack,
+}: {
+  detail: KundeDetailData;
+  onBack: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <>
+      <button type="button" className="cdetail__back" onClick={onBack}>
+        <svg
+          className="icon"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+        Alle Kunden
+      </button>
+      <div className="cdetail__head">
+        <span className="avatar" aria-hidden>
+          {initials(detail.name)}
+        </span>
+        <div>
+          <h2>{detail.name}</h2>
+          <p>Kunde seit {detail.since}</p>
+        </div>
+      </div>
+
+      <div className="contact">
+        {detail.phone && (
+          <Link className="btn" href={`tel:${detail.phone.replace(/\s/g, "")}`}>
+            <svg
+              className="icon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z" />
+            </svg>
+            <span>{detail.phone}</span>
+          </Link>
+        )}
+        <Link className="btn" href={`mailto:${detail.email}`}>
+          <svg
+            className="icon"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <rect x="3" y="5" width="18" height="14" />
+            <path d="M3 7l9 6 9-6" />
+          </svg>
+          <span>{detail.email}</span>
+        </Link>
+      </div>
+
+      {detail.address && (
+        <div>
+          <h3>Adresse</h3>
+          <p className="cdetail__addr">{detail.address}</p>
+        </div>
+      )}
+
+      <div>
+        <h3>Bestellungen</h3>
+        {detail.orders.length === 0 ? (
+          <p className="muted">Noch keine Bestellungen.</p>
+        ) : (
+          <ul className="corders">
+            {detail.orders.map((o) => {
+              const stage = uiStageFor(o.status);
+              return (
+                <li key={o.id}>
+                  <span className="corders__what">
+                    <b>{o.what}</b>
+                    <span>
+                      {o.placedAt} · {formatChf(o.price)}
+                    </span>
+                  </span>
+                  <span className={`st st--${stage}`}>{UI_LABEL[stage]}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {confirming ? (
+        <div className="confirm" role="alertdialog" aria-labelledby="del-q">
+          <p id="del-q">
+            <strong>Daten von {detail.name} löschen?</strong> Name, E-Mail,
+            Telefon und Passwort werden gelöscht. Die Bestellungen bleiben.
+            Das kann man nicht rückgängig machen.
+          </p>
+          <div>
+            <form action={anonymiseCustomerFromKundenAction}>
+              <input type="hidden" name="email" value={detail.email} />
+              <input type="hidden" name="customerId" value={detail.id} />
+              <input type="hidden" name="confirm" value="yes" />
+              <button type="submit" className="btn btn--danger">
+                Ja, löschen
+              </button>
+            </form>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setConfirming(false)}
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="btn-link btn-link--danger"
+          onClick={() => setConfirming(true)}
+        >
+          Kundendaten löschen
+        </button>
+      )}
+    </>
   );
 }
 

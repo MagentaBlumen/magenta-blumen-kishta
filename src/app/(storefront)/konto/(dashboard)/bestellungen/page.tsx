@@ -4,7 +4,7 @@ import { DateTime } from "luxon";
 import { auth } from "@/auth";
 import { fetchCustomerOrders } from "@/lib/customer-auth/orders";
 import { formatChf } from "@/lib/money";
-import { statusLabelDe } from "@/lib/admin/heute";
+import { statusLabelDe } from "@/lib/admin/order-status";
 import type { CustomerOrderRow } from "@/lib/customer-auth/orders";
 
 export default async function KontoOrders() {

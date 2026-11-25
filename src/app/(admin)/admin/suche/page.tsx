@@ -3,11 +3,8 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import { auth } from "@/auth";
 import { searchOrders, type SearchResult } from "@/lib/admin/search";
-import {
-  contextLabelDe,
-  paymentDisplayDe,
-  statusLabelDe,
-} from "@/lib/admin/heute";
+import { paymentDisplayDe } from "@/lib/admin/heute";
+import { ContextChip, StatusChip } from "@/components/admin/status-chip";
 import { formatChf } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +43,7 @@ export default async function SearchResultsPage({
           <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
             ←
           </span>
-          Heute
+          Bestellungen
         </Link>
         <h1 className="font-display font-light text-[clamp(1.8rem,3vw,2.4rem)] leading-tight mt-2">
           Bestellungen suchen
@@ -163,10 +160,8 @@ function ResultRow({ result: o }: { result: SearchResult }) {
         <div className="min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="font-medium text-sm">{o.recipientName}</span>
-            {o.deliveryContext !== "residential" && (
-              <ContextChip context={o.deliveryContext} />
-            )}
-            <StatusChip status={o.status} />
+            <ContextChip context={o.deliveryContext} size="sm" />
+            <StatusChip status={o.status} size="sm" />
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {[o.deliveryStreet, o.deliveryPlz, o.deliveryCity]
@@ -233,46 +228,3 @@ function buildShortSlot(o: SearchResult): string | null {
   return null;
 }
 
-function StatusChip({ status }: { status: SearchResult["status"] }) {
-  const tone =
-    status === "delivered"
-      ? "bg-slate-100 text-slate-700 border-slate-200"
-      : status === "out_for_delivery"
-        ? "bg-sky-100 text-sky-700 border-sky-200"
-        : status === "ready"
-          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-          : status === "in_production"
-            ? "bg-amber-100 text-amber-700 border-amber-200"
-            : status === "delivery_failed"
-              ? "bg-rose-100 text-rose-700 border-rose-200"
-              : status === "cancelled"
-                ? "bg-slate-100 text-slate-500 border-slate-200 line-through"
-                : "bg-stone-100 text-stone-700 border-stone-200";
-  return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium border rounded ${tone}`}
-    >
-      {statusLabelDe(status)}
-    </span>
-  );
-}
-
-function ContextChip({
-  context,
-}: {
-  context: SearchResult["deliveryContext"];
-}) {
-  const tone =
-    context === "funeral"
-      ? "bg-rose-100 text-rose-700 border-rose-200"
-      : context === "hospital"
-        ? "bg-amber-100 text-amber-700 border-amber-200"
-        : "bg-slate-100 text-slate-700 border-slate-200";
-  return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium border rounded ${tone}`}
-    >
-      {contextLabelDe(context)}
-    </span>
-  );
-}

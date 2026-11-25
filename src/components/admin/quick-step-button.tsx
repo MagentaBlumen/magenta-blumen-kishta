@@ -4,14 +4,6 @@ import { useState, useTransition } from "react";
 import { updateOrderStatusAction } from "@/app/(admin)/admin/bestellung/[number]/actions";
 import type { OrderStatus } from "@/lib/admin/order-status";
 
-/**
- * Small inline button on each Heute row firing the single most-likely
- * next-status transition. The full state matrix stays on the detail
- * page for exceptional cases; this button covers the happy path.
- *
- * stopPropagation on both click handlers so clicking the button
- * doesn't trigger the parent <Link> navigation to the detail page.
- */
 export function QuickStepButton({
   orderNumber,
   target,
@@ -24,9 +16,7 @@ export function QuickStepButton({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function submit(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  function submit() {
     setError(null);
     startTransition(async () => {
       try {
@@ -38,7 +28,7 @@ export function QuickStepButton({
   }
 
   return (
-    <div className="flex flex-col items-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+    <div className="flex flex-col items-end gap-0.5">
       <button
         type="button"
         onClick={submit}
@@ -47,12 +37,26 @@ export function QuickStepButton({
       >
         {isPending ? "…" : label}
         {!isPending && (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
             <path d="M5 12h14M13 5l7 7-7 7" />
           </svg>
         )}
       </button>
-      {error && <span className="text-[10px] text-rose-600 max-w-[160px] text-right">{error}</span>}
+      {error && (
+        <span className="text-[10px] text-rose-600 max-w-[160px] text-right">
+          {error}
+        </span>
+      )}
     </div>
   );
 }
